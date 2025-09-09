@@ -1,0 +1,67 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  //output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model trade {
+  id                 Int       @id @default(autoincrement())
+  user               user      @relation(fields: [userId], references: [id], onUpdate: NoAction)
+  symbol             String
+  userId             Int
+  entry              Float
+  lot                Float
+  pips               Float
+  execution          String
+  exchangeRate       Float
+  stopLoss           Json
+  takeProfit         Json
+  plainText          String?
+  editorState        String?
+  status             String    @default("open")
+  closedAt           DateTime?
+  closedPrice        Float?
+  closedExchangeRate Float?
+  closedReason       String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+}
+
+model journal {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  symbol      String
+  plainText   String?
+  editorState String?
+  author      user     @relation("UserJournal", fields: [userId], references: [id], onDelete: Cascade)
+  isPinned    Boolean? @default(false)
+  isArchived  Boolean? @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model user {
+  id              Int       @id @default(autoincrement())
+  fname           String
+  lname           String
+  email           String    @unique
+  role            String
+  language        String
+  password        String
+  accountCurrency String
+  rules           Json
+  journalEntries  journal[] @relation("UserJournal")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  trade           trade[]
+}
