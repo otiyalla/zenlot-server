@@ -14,9 +14,9 @@ export class AuthGuard implements CanActivate {
     private reflector: Reflector
   ) {}
 
-  canActivate(
+  async canActivate(
     context: ExecutionContext,
-  ): boolean | Promise<boolean> | Observable<boolean> {
+  ): Promise<boolean> {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),
@@ -29,16 +29,25 @@ export class AuthGuard implements CanActivate {
     const request = context.switchToHttp().getRequest();
     const tokens = this.extractTokenFromHeader(request);
  
-    if (!tokens || !tokens.token) {
-      throw new UnauthorizedException();
+    if (!tokens || (!tokens.token && !tokens.refresh_token)) {
+      throw new UnauthorizedException('No tokens provided');
     }
+    
     const { token, refresh_token } = tokens;
     try {
-      const decoded = this.authService.verify(token, refresh_token);
-      if (!decoded) {
+      const result = await this.authService.verify(token, refresh_token);
+      if (!result) {
         throw new UnauthorizedException('Invalid token');
       }
-      request.user = decoded;
+      
+      // If new tokens were generated (refresh token was used), set them in response headers
+      if ((result as any).access_token && (result as any).refresh_token && (result as any).access_token !== token) {
+        const response = context.switchToHttp().getResponse();
+        response.setHeader('new-access-token', (result as any).access_token);
+        response.setHeader('new-refresh-token', (result as any).refresh_token);
+      }
+      
+      request.user = result;
       return true;
     } catch (error) {
       throw new UnauthorizedException('Invalid token');

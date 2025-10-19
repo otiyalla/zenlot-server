@@ -59,9 +59,23 @@ model user {
   language        String
   password        String
   accountCurrency String
+  theme           String    @default("system")
   rules           Json
   journalEntries  journal[] @relation("UserJournal")
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   trade           trade[]
+  timezone        String    @default("UTC")
+  togglePipValue  Boolean   @default(false)
+  refreshTokens   RefreshToken[]
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    Int
+  user      user     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  isRevoked Boolean  @default(false)
 }
