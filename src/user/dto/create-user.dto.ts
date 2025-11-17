@@ -1,3 +1,4 @@
+import { ApiProperty } from '@nestjs/swagger';
 import { IsEmail, IsBoolean, IsNumber, IsObject, IsOptional, IsArray, IsString, MinLength } from 'class-validator';
 
 class ForexRuleDto {
@@ -57,4 +58,9 @@ export class CreateUserDto {
     @IsBoolean()
     @IsOptional()
     togglePipValue: boolean;
+
+    @IsArray()  
+    @IsOptional()
+    @ApiProperty({ description: 'The user tags'})
+    tags: string[];
 }

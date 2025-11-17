@@ -1,10 +1,12 @@
-import { IsString, IsNumber, IsBoolean, IsDate, IsJSON  } from 'class-validator';
+import { IsString, IsArray, IsNumber, IsBoolean, IsDate, IsJSON, IsOptional  } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateJournalDto {
-   /* @IsString()
-    @ApiProperty({ description: 'The unique identifier for the journal entry' })
-    id: string; */
+   
+    @IsArray()
+    @IsOptional()
+    @ApiProperty({ description: 'The user tags'})
+    tags: string[]
 
     @IsNumber()
     @ApiProperty({ description: 'The unique identifier for the journal entry' })

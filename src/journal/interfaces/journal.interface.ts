@@ -5,6 +5,7 @@ export interface IJournal {
     plainText?: string;
     editorState?: string;
     author: object;
+    tags: string[];
     createdAt: Date;
     updatedAt: Date;
     isPinned: boolean;

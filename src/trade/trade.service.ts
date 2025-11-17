@@ -117,10 +117,14 @@ export class TradeService {
   }
  
   async update(id: number, updateTradeDto: UpdateTradeDto) {
-    const data = { 
-      ...updateTradeDto, 
-      stopLoss: updateTradeDto.stopLoss as unknown as Prisma.InputJsonValue,
-      takeProfit: updateTradeDto.takeProfit as unknown as Prisma.InputJsonValue,
+    // Remove read-only fields that shouldn't be updated
+    const { id: _, createdAt, updatedAt, userId, ...updateData } = updateTradeDto;
+    
+    // Build the data object, only including defined (non-undefined) fields
+    const data: Prisma.tradeUpdateInput = {
+      ...updateData,
+      stopLoss: updateData.stopLoss as unknown as Prisma.InputJsonValue,
+      takeProfit: updateData.takeProfit as unknown as Prisma.InputJsonValue,
     };
     return this.prisma.trade.update({ where: { id }, data });
   }
