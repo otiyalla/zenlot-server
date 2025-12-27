@@ -28,6 +28,20 @@ export class AuthController {
         return this.authService.verify(token, refresh_token);
     }
 
+    @Post('refresh')
+    @Public()
+    async refresh(@Body() body: { refresh_token: string }) {
+        const { refresh_token } = body;
+        return this.authService.refreshTokens(refresh_token);
+    }
+
+    @Post('signout')
+    @Public()
+    async signout(@Body() body: { userId: number }) {
+        const { userId } = body;
+        return this.authService.signout(userId);
+    }
+
     @Post('signup')
     @Public()
     async signup(@Body() body: any) {
@@ -36,7 +50,8 @@ export class AuthController {
 
     @Post('resetpassword')
     @Public()
-    async resetPassword(@Body() email: string ) {
+    async resetPassword(@Body() body: {email: string} ) {
+        const { email } = body;
         console.log('reset password fpr email:', email)
         return this.authService.resetPassword(email);
     }

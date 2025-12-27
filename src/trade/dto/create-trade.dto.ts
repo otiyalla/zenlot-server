@@ -1,4 +1,5 @@
-import { IsString, IsNumber, IsDate, IsJSON, IsOptional, IsObject  } from 'class-validator';
+import { IsArray, IsString, IsNumber, IsDate, IsJSON, IsOptional, IsObject, ValidateNested  } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 
 class ExitValue {
@@ -10,11 +11,11 @@ class ExitValue {
 };
 
 export class CreateTradeDto {
-
+/*
     @IsNumber()
     @ApiProperty({ description: 'The unique identifier for the trade' })
     //id: number;
-
+*/
     @IsNumber()
     @ApiProperty({ description: 'The trade user id' })
     userId: number;
@@ -39,16 +40,22 @@ export class CreateTradeDto {
     @ApiProperty({ description: 'The trade execution, if it is a buy or sell' })
     execution: string;
 
+    @IsString()
+    @ApiProperty({ description: 'The trade account currency' })
+    accountCurrency: string;
+
     @IsNumber()
     @ApiProperty({ description: 'The trade exchange rate' })
     exchangeRate: number;
 
-    @IsObject()
-    @ApiProperty({ description: 'The trade stop loss value' })
+    @ValidateNested()
+    @Type(() => ExitValue)
+    @ApiProperty({ type: ExitValue, description: 'The trade stop loss value' })
     stopLoss: ExitValue;
 
-    @IsObject()
-    @ApiProperty({ description: 'The trade take profit value' })
+    @ValidateNested()
+    @Type(() => ExitValue)
+    @ApiProperty({ type: ExitValue, description: 'The trade take profit value' })
     takeProfit: ExitValue;
 
     @IsString()
@@ -64,6 +71,26 @@ export class CreateTradeDto {
     @IsString()
     @ApiProperty({ description: 'The trade status' })
     status: string;
+
+    @IsNumber()
+    @IsOptional()
+    @ApiProperty({ description: 'Risk reward ratio'})
+    rr: number
+
+    @IsNumber()
+    @IsOptional()
+    @ApiProperty({ description: 'The trade risk'})
+    risk: number
+
+    @IsNumber()
+    @IsOptional()
+    @ApiProperty({ description: 'The trade reward'})
+    reward: number
+
+    @IsArray()
+    @IsOptional()
+    @ApiProperty({ description: 'The trade tags'})
+    tags: string[]
 /* 
     @IsDate()
     @ApiProperty({ type: Date, description: 'The date of the journal entry' })

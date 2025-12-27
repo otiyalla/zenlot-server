@@ -107,8 +107,21 @@ export class UserService {
     return user;
   }
 
+  async verifyEmailUpdate(id: number, email: string) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) throw new NotFoundException('User not found');
+    if (user.email === email) return true;
+    const userFound = await this.prisma.user.findUnique({ where: { email } });
+    if (userFound) throw new NotFoundException('Email already in use');
+    return true;
+  }
+
+  //TODO: Test email update
   async update(id: number, dto: UpdateUserDto) {
     delete dto.id;
+    if (dto.email) {
+      await this.verifyEmailUpdate(id, dto.email);
+    }
     const data: any = { ...dto, updatedAt: new Date()};
     const update = await this.prisma.user.update({ where: { id }, data });
     this.userGateway.server.emit('updated-user', { ...update, password: undefined });

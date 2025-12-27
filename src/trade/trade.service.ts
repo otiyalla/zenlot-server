@@ -31,6 +31,27 @@ export class TradeService {
     );
   }
 
+  async findAllWithJournal(query: { userId: number}) {
+    const { userId } = query;
+    return this.prisma.trade.findMany({
+      where: {
+        userId,
+        plainText: { not: null}
+      },
+      orderBy: { createdAt: 'desc'},
+      select: {
+        id: true,
+        userId: true,
+        symbol: true,
+        plainText: true,
+        editorState: true,
+        tags: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    });
+  }
+
   async findOne(id: number) {
     const trade = this.prisma.trade.findUnique({ 
       where: {
@@ -117,10 +138,14 @@ export class TradeService {
   }
  
   async update(id: number, updateTradeDto: UpdateTradeDto) {
-    const data = { 
-      ...updateTradeDto, 
-      stopLoss: updateTradeDto.stopLoss as unknown as Prisma.InputJsonValue,
-      takeProfit: updateTradeDto.takeProfit as unknown as Prisma.InputJsonValue,
+    // Remove read-only fields that shouldn't be updated
+    const { id: _, createdAt, updatedAt, userId, ...updateData } = updateTradeDto;
+    
+    // Build the data object, only including defined (non-undefined) fields
+    const data: Prisma.tradeUpdateInput = {
+      ...updateData,
+      stopLoss: updateData.stopLoss as unknown as Prisma.InputJsonValue,
+      takeProfit: updateData.takeProfit as unknown as Prisma.InputJsonValue,
     };
     return this.prisma.trade.update({ where: { id }, data });
   }

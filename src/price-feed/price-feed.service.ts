@@ -1,5 +1,4 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
-//import { Injectable } from '@nestjs/common';
 import { CreatePriceFeedDto } from './dto/create-price-feed.dto';
 import { UpdatePriceFeedDto } from './dto/update-price-feed.dto';
 import { InjectQueue } from '@nestjs/bullmq';
@@ -7,7 +6,8 @@ import { Queue } from 'bullmq';
 import Redis from 'ioredis';
 import { config } from 'src/config/config.constant';
 import { PriceFeedGateway } from './price-feed.gateway';
-import { QuoteGateway } from 'src/quote/quote.gateway';
+import { QuoteService } from 'src/quote/quote.service';
+
 
 @Injectable()
 export class PriceFeedService {
@@ -20,7 +20,7 @@ export class PriceFeedService {
   });
   constructor(
     private readonly gateway: PriceFeedGateway,
-    private readonly quotegateway: QuoteGateway,
+    private readonly quoteService: QuoteService,
     @InjectQueue('price-feed') private readonly priceFeedQueue: Queue,
   ){}
 
@@ -29,6 +29,10 @@ export class PriceFeedService {
     const job = await this.priceFeedQueue.add('price-feed', symbol);
     console.log('PriceFeedService: Added job to queue:', job.id);
     return job;
+  }
+
+  async getFX(symbol: string) {
+    return this.quoteService.quote(symbol);
   }
 
   async onModuleInit() {
@@ -41,7 +45,6 @@ export class PriceFeedService {
         console.log('Received price feed data:', data);
         // Emit the data to the WebSocket server
         this.gateway.server.emit('price-feed-update', data);
-        this.quotegateway.server.emit('quote-update', data);
       }
     });
   }

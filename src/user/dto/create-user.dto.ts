@@ -1,4 +1,5 @@
-import { IsEmail, IsObject, IsOptional, IsArray, IsString, MinLength } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
+import { IsEmail, IsBoolean, IsNumber, IsObject, IsOptional, IsArray, IsString, MinLength } from 'class-validator';
 
 class ForexRuleDto {
     @IsArray()
@@ -10,6 +11,9 @@ class ForexRuleDto {
     stopLoss: {
         pips: number;
     }[];
+    @IsOptional()
+    @IsNumber()
+    lotSize?: number;
 }
 
 export class RulesDto {
@@ -36,6 +40,10 @@ export class CreateUserDto {
     @IsString()
     accountCurrency: string;
 
+    @IsString()
+    @IsOptional()
+    theme: string;
+
     @IsObject()
     rules: RulesDto;
 
@@ -43,4 +51,16 @@ export class CreateUserDto {
     @MinLength(8)
     password: string;
 
+    @IsString()
+    @IsOptional()
+    timezone: string;
+
+    @IsBoolean()
+    @IsOptional()
+    togglePipValue: boolean;
+
+    @IsArray()  
+    @IsOptional()
+    @ApiProperty({ description: 'The user tags'})
+    tags: string[];
 }

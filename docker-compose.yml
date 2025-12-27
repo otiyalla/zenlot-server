@@ -1,7 +1,8 @@
-version: '3.9'
+
 services:
   db:
     image: postgres:16
+    container_name: zenlot-db
     restart: always
     environment:
       POSTGRES_PASSWORD: zenlot
@@ -13,8 +14,9 @@ services:
       - db-data:/var/lib/postgresql/data
 
   redis:
-    image: redis:7
+    image: redis:alpine
     command: [ "redis-server", "--appendonly", "yes" ]
+    container_name: zenlot-redis
     ports:
       - "6379:6379"
     volumes:

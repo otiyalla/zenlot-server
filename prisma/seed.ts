@@ -23,7 +23,8 @@ const prisma = new PrismaClient();
             takeProfit: [{ pips: 40 }, { pips: 50 }, { pips: 60 }],
             stopLoss: [{ pips: 40 }, { pips: 50 }, { pips: 60 }],
         }
-      }
+      },
+      //togglePipValue: false,
     },
     update: {},
   });

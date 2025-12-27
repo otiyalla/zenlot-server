@@ -4,9 +4,11 @@ export interface IJournal {
     symbol: string;
     plainText?: string;
     editorState?: string;
-    author: object;
+    author?: object;
+    tradeId?: number;
+    tags: string[];
     createdAt: Date;
     updatedAt: Date;
-    isPinned: boolean;
-    isArchived: boolean;
+    isPinned?: boolean;
+    isArchived?: boolean;
 }

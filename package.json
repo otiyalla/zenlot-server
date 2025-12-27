@@ -25,7 +25,8 @@
     "db:dev:start": "yarn db:dev && yarn start:dev",
     "db:studio": "prisma studio",
     "db:format": "prisma format",
-    "db:reset": "prisma migrate reset --force --skip-seed --skip-generate"
+    "db:reset": "prisma migrate reset --force --skip-seed --skip-generate",
+    "db:docker:rebuild": "docker-compose down && docker-compose up -d && docker exec zenlot-db psql -U zenlot -d zenlot -c \"DO $$ DECLARE r RECORD; BEGIN FOR r IN SELECT tablename FROM pg_tables WHERE schemaname = 'public' LOOP EXECUTE 'ALTER TABLE ' || quote_ident(r.tablename) || ' COLLATE DEFAULT'; END LOOP; END $$;\" && docker exec zenlot-db psql -U zenlot -d template1 -c \"ALTER DATABASE template1 REFRESH COLLATION VERSION;\" && yarn db:migrate"
   },
   "dependencies": {
     "@fastify/helmet": "^13.0.1",
