@@ -40,6 +40,10 @@ export class CreateTradeDto {
     @ApiProperty({ description: 'The trade execution, if it is a buy or sell' })
     execution: string;
 
+    @IsString()
+    @ApiProperty({ description: 'The trade account currency' })
+    accountCurrency: string;
+
     @IsNumber()
     @ApiProperty({ description: 'The trade exchange rate' })
     exchangeRate: number;

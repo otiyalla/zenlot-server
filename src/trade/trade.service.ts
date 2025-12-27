@@ -31,6 +31,27 @@ export class TradeService {
     );
   }
 
+  async findAllWithJournal(query: { userId: number}) {
+    const { userId } = query;
+    return this.prisma.trade.findMany({
+      where: {
+        userId,
+        plainText: { not: null}
+      },
+      orderBy: { createdAt: 'desc'},
+      select: {
+        id: true,
+        userId: true,
+        symbol: true,
+        plainText: true,
+        editorState: true,
+        tags: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    });
+  }
+
   async findOne(id: number) {
     const trade = this.prisma.trade.findUnique({ 
       where: {

@@ -10,9 +10,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-  shadowDatabaseUrl      = env("SHADOW_DATABASE_URL")
+  provider          = "postgresql"
+  url               = env("LOCAL_DB_URL")
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
 model trade {
@@ -24,6 +24,7 @@ model trade {
   lot                Float
   pips               Float
   execution          String
+  accountCurrency    String
   exchangeRate       Float
   rr                 Float
   risk               Float
@@ -40,13 +41,17 @@ model trade {
   closedReason       String?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
+  journal            journal[]
 }
 
 model journal {
   id          Int      @id @default(autoincrement())
   userId      Int
   symbol      String
+  title       String?
+  tradeId     Int?
   plainText   String?
+  trade       trade?   @relation(fields: [tradeId], references: [id], onDelete: Cascade)
   editorState String?
   tags        String[]
   author      user     @relation("UserJournal", fields: [userId], references: [id], onDelete: Cascade)
@@ -57,23 +62,23 @@ model journal {
 }
 
 model user {
-  id              Int       @id @default(autoincrement())
+  id              Int            @id @default(autoincrement())
   fname           String
   lname           String
-  email           String    @unique
+  email           String         @unique
   role            String
   tags            String[]
   language        String
   password        String
   accountCurrency String
-  theme           String    @default("system")
+  theme           String         @default("system")
   rules           Json
-  journalEntries  journal[] @relation("UserJournal")
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  journalEntries  journal[]      @relation("UserJournal")
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
   trade           trade[]
-  timezone        String    @default("UTC")
-  togglePipValue  Boolean   @default(false)
+  timezone        String         @default("UTC")
+  togglePipValue  Boolean        @default(false)
   refreshTokens   RefreshToken[]
 }
 

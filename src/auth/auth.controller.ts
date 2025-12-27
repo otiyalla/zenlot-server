@@ -50,7 +50,8 @@ export class AuthController {
 
     @Post('resetpassword')
     @Public()
-    async resetPassword(@Body() email: string ) {
+    async resetPassword(@Body() body: {email: string} ) {
+        const { email } = body;
         console.log('reset password fpr email:', email)
         return this.authService.resetPassword(email);
     }
