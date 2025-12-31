@@ -1,10 +1,10 @@
-import { IsOptional, IsISO8601, IsString, IsNumber, IsDate, IsJSON  } from 'class-validator';
+import { IsOptional, IsISO8601, IsString, IsNumber, IsDate, IsJSON, IsUUID  } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
     
 export class MultiTradeDto {
-  @IsNumber()
+  @IsUUID()
   @ApiProperty({ description: 'The trade user id' })
-  userId: number;
+  userId: string;
 
   @IsString()
   @IsOptional()

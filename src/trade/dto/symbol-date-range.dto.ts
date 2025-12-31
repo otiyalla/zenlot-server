@@ -1,10 +1,10 @@
-import { IsISO8601, IsString, IsNumber } from 'class-validator';
+import { IsISO8601, IsString, IsUUID } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class SymbolDateRangeDto {
-  @IsNumber()
+  @IsUUID()
   @ApiProperty({ description: 'The trade owner id' })
-  userId: number;
+  userId: string;
   
   @IsString()
   symbol: string;

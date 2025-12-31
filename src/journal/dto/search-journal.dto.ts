@@ -1,11 +1,11 @@
-import { IsOptional, IsISO8601, IsString, IsNumber, IsBoolean, IsArray } from 'class-validator';
+import { IsOptional, IsISO8601, IsString, IsNumber, IsBoolean, IsArray, IsUUID } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class SearchJournalDto {
-  @IsNumber()
+  @IsUUID()
   @IsOptional()
   @ApiProperty({ description: 'The user id to filter journals', required: false })
-  userId?: number;
+  userId?: string;
 
   @IsString()
   @IsOptional()

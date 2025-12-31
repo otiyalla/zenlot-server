@@ -16,12 +16,16 @@ export class UserService {
   ) {}
 
   async create(user: CreateUserDto) {
-    const {email, fname, lname, role, language, accountCurrency, rules} = user;
+    const {email, fname, lname, role, language, accountCurrency, rules, tags} = user;
     const userFound = await this.prisma.user.findUnique({ where: { email } });
     if (userFound) throw new NotFoundException('User already exists with this email');
     const salt = await bcrypt.genSalt(10)
     const hashed = await bcrypt.hash(user.password, salt);
-     const data = {
+    
+    const defaultRules = { forex: { take_profit: [], stop_loss: [] } };
+    const rulesData = user.rules ? user.rules : defaultRules;
+    
+     const data: Prisma.userCreateInput = {
       fname: fname,
       lname: lname,
       email: email,
@@ -29,9 +33,10 @@ export class UserService {
       language: language,
       password: hashed,
       accountCurrency: accountCurrency,
-      rules: user.rules ? JSON.parse(JSON.stringify(rules)) : undefined,
+      tags: tags || [],
+      rules: rulesData as Prisma.InputJsonValue,
     };
-    const result = this.prisma.user.create({ data });
+    const result = await this.prisma.user.create({ data });
     return {
       ...result,
       password: undefined
@@ -84,7 +89,7 @@ export class UserService {
     return !!success;
   }
 
-  async resetPassword(id: number, newPassword: string) {
+  async resetPassword(id: string, newPassword: string) {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(newPassword, salt);
     return this.prisma.user.update({
@@ -101,13 +106,13 @@ export class UserService {
     return this.prisma.user.findMany();
   }
 
-  async findOne(id: number): Promise< any | null> {
+  async findOne(id: string): Promise< any | null> {
     const user = await this.prisma.user.findUnique({ where: { id } });
     if (!user) throw new NotFoundException('User not found');
     return user;
   }
 
-  async verifyEmailUpdate(id: number, email: string) {
+  async verifyEmailUpdate(id: string, email: string) {
     const user = await this.prisma.user.findUnique({ where: { id } });
     if (!user) throw new NotFoundException('User not found');
     if (user.email === email) return true;
@@ -117,7 +122,7 @@ export class UserService {
   }
 
   //TODO: Test email update
-  async update(id: number, dto: UpdateUserDto) {
+  async update(id: string, dto: UpdateUserDto) {
     delete dto.id;
     if (dto.email) {
       await this.verifyEmailUpdate(id, dto.email);
@@ -127,7 +132,7 @@ export class UserService {
     this.userGateway.server.emit('updated-user', { ...update, password: undefined });
   }
   
-  async remove(id: number) {
+  async remove(id: string) {
     return this.prisma.user.delete({ where: { id } });
   }
 }

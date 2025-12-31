@@ -1,11 +1,11 @@
 export interface IJournal {
-    id: number;
-    userId: number;
+    id: string;
+    userId: string;
     symbol: string;
     plainText?: string;
     editorState?: string;
     author?: object;
-    tradeId?: number;
+    tradeId?: string;
     tags: string[];
     createdAt: Date;
     updatedAt: Date;

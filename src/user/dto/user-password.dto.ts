@@ -1,8 +1,8 @@
-import { IsNumber, IsString, MinLength, IsOptional } from "class-validator";
+import { IsNumber, IsString, MinLength, IsOptional, IsUUID } from "class-validator";
 
 export class UserPasswordDto {
-    @IsNumber()
-    userId: number;
+    @IsUUID()
+    userId: string;
     
     @IsString()
     @MinLength(8)

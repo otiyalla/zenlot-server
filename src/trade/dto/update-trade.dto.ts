@@ -1,13 +1,13 @@
 import { PartialType } from '@nestjs/swagger';
 import { CreateTradeDto } from './create-trade.dto';
-import { IsArray, IsString, IsNumber, IsDate, IsJSON, IsOptional, IsObject  } from 'class-validator';
+import { IsArray, IsString, IsNumber, IsDate, IsJSON, IsOptional, IsObject, IsUUID  } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
 export class UpdateTradeDto extends PartialType(CreateTradeDto) {
-    @IsNumber()
+    @IsUUID()
     @ApiProperty({ description: 'The unique identifier for the trade' })
-    id: number;
+    id: string;
 
     @IsNumber()
     @IsOptional()

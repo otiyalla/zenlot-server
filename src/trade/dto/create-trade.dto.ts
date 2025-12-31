@@ -1,4 +1,4 @@
-import { IsArray, IsString, IsNumber, IsDate, IsJSON, IsOptional, IsObject, ValidateNested  } from 'class-validator';
+import { IsArray, IsString, IsNumber, IsDate, IsJSON, IsOptional, IsObject, ValidateNested, IsUUID  } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 
@@ -16,9 +16,9 @@ export class CreateTradeDto {
     @ApiProperty({ description: 'The unique identifier for the trade' })
     //id: number;
 */
-    @IsNumber()
+    @IsUUID()
     @ApiProperty({ description: 'The trade user id' })
-    userId: number;
+    userId: string;
 
     @IsString()
     @ApiProperty({ description: 'The instrument/currency of the trade entered' })

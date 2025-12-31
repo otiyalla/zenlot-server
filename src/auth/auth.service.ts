@@ -59,7 +59,7 @@ export class AuthService {
         }
     }
 
-    async createRefreshToken(payload: { email: string, sub: number }){
+    async createRefreshToken(payload: { email: string, sub: string }){
         
         const token = randomBytes(32).toString('hex');
         const publicRefreshToken = this.jwtService.sign({token}, {
@@ -196,13 +196,13 @@ export class AuthService {
         return { message: 'Password reset link sent to your email' };
     }
 
-    async signout(userId: number) {
+    async signout(userId: string) {
         this.revokeAllRefreshTokens(userId);
     }
 
     // Helper methods
     
-    private async revokeAllRefreshTokens(userId: number): Promise<void> {
+    private async revokeAllRefreshTokens(userId: string): Promise<void> {
         try {
             await (this.prisma as any).refreshToken.updateMany({
                 where: {
