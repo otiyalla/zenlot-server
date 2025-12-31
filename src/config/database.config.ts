@@ -15,7 +15,6 @@ function getEnvironment(): 'local' | 'dev' | 'prod' {
     return 'prod';
   }
   
-  // Default to local if NODE_ENV is not set
   return 'local';
 }
 
@@ -28,8 +27,6 @@ export function mapDatabaseUrl(): void {
   let databaseUrl: string | undefined;
   let shadowDatabaseUrl: string | undefined;
   
-  // If DATABASE_URL is already set, log it but still allow mapping from env-specific vars
-  // This allows override if needed, but maps if DATABASE_URL is not set
   if (process.env.DATABASE_URL) {
     console.log(`DATABASE_URL is already set, skipping auto-mapping. Environment: ${env}`);
     return;

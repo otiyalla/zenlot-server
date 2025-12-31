@@ -17,7 +17,6 @@ import { QuoteModule } from './quote/quote.module';
 import { QuoteService } from './quote/quote.service';
 import { mapDatabaseUrl } from './config/database.config';
 
-// Determine which .env file to load based on NODE_ENV
 function getEnvFilePath(): string[] {
   const nodeEnv = process.env.NODE_ENV?.toLowerCase();
   const envFiles: string[] = [];
@@ -30,12 +29,10 @@ function getEnvFilePath(): string[] {
     envFiles.push('.env.prod');
   }
   
-  // Always include .env as fallback
   envFiles.push('.env');
   
   return envFiles;
 }
-console.log('the env files are: ', getEnvFilePath());
 
 @Module({
   imports: [
