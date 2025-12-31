@@ -32,14 +32,14 @@ export class TradeController {
   }
 
   @Get()
-  async findAll(@Query() query: { userId: number}) {
+  async findAll(@Query() query: { userId: string}) {
     return this.tradeService.findAll(query);
   }
 
   @Get(':id')
   async findOne(@Param('id') id: string) {
     console.log("Finding trade with id: ", id);
-    return this.tradeService.findOne(+id);
+    return this.tradeService.findOne(id);
   }
 
   //http://localhost:3000/trade/range?start=2025-07-01&end=2025-07-12
@@ -82,7 +82,7 @@ export class TradeController {
   }
 
  @Get('symbols')
-  async findSymbols(@Query() dto: {symbols: string[], userId: number}) {  
+  async findSymbols(@Query() dto: {symbols: string[], userId: string}) {  
     return this.tradeService.findByMultipleSymbols(dto);
   }
 
@@ -93,11 +93,11 @@ export class TradeController {
 
   @Put(':id')
   async update(@Param('id') id: string, @Body() updateTradeDto: UpdateTradeDto) {
-    return this.tradeService.update(+id, updateTradeDto);
+    return this.tradeService.update(id, updateTradeDto);
   }
 
   @Delete(':id')
-  async remove(@Param('id') id: number) {
-    return this.tradeService.remove(+id);
+  async remove(@Param('id') id: string) {
+    return this.tradeService.remove(id);
   }
 }

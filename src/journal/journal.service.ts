@@ -36,7 +36,7 @@ export class JournalService {
     }) as unknown as IJournal[];
   }
 
-  async findByUserId(userId: number): Promise<IJournal[]> {
+  async findByUserId(userId: string): Promise<IJournal[]> {
 
     const tradeJournals = await this.prisma.trade.findMany({
       where: {
@@ -78,7 +78,7 @@ export class JournalService {
     return [...journals, ...mappedTradeJournals].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   }
 
-  async findOne(id: number) {
+  async findOne(id: string) {
     const entry = await this.prisma.journal.findUnique({ 
       where: { id }, 
       include: { author: true } 
@@ -150,7 +150,7 @@ export class JournalService {
     }) as unknown as IJournal[];
   }
 
-  update(id: number, journalUpdate: UpdateJournalDto) {
+  update(id: string, journalUpdate: UpdateJournalDto) {
     const data: Prisma.journalUpdateInput = { };
 
 
@@ -167,7 +167,7 @@ export class JournalService {
     else return this.prisma.journal.update({ where: { id }, data, include: { author: true} });
   }
 
-  remove(id: number) {
+  remove(id: string) {
     return this.prisma.journal.delete({ where: { id } });
   }
 }

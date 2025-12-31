@@ -39,7 +39,7 @@ export class JournalController {
   @Get('user/:userId')
   async findByUserId(@Param('userId') userId: string): Promise<IJournal[]> {
     try {
-      return await this.journalService.findByUserId(+userId);
+      return await this.journalService.findByUserId(userId);
     }
     catch (error) {
       console.error('Error fetching user journal entries:', error);
@@ -49,12 +49,12 @@ export class JournalController {
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.journalService.findOne(+id);
+    return this.journalService.findOne(id);
   }
 
   @Put(':id')
   update(@Param('id') id: string, @Body() updateJournalDto: UpdateJournalDto) {
-    return this.journalService.update(+id, updateJournalDto);
+    return this.journalService.update(id, updateJournalDto);
   }
 
   /*
@@ -65,6 +65,6 @@ export class JournalController {
 
   @Delete(':id')
   remove(@Param('id') id: string) {
-    return this.journalService.remove(+id);
+    return this.journalService.remove(id);
   }
 }

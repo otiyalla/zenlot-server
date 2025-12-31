@@ -21,8 +21,8 @@ export class TradeService {
     return this.prisma.trade.create({data});
   }
 
-  async findAll(query: { userId: number}) {
-    const userId: number = +query.userId;
+  async findAll(query: { userId: string}) {
+    const userId: string = query.userId;
     return this.prisma.trade.findMany(
       {
         where: {userId},
@@ -31,7 +31,7 @@ export class TradeService {
     );
   }
 
-  async findAllWithJournal(query: { userId: number}) {
+  async findAllWithJournal(query: { userId: string}) {
     const { userId } = query;
     return this.prisma.trade.findMany({
       where: {
@@ -52,7 +52,7 @@ export class TradeService {
     });
   }
 
-  async findOne(id: number) {
+  async findOne(id: string) {
     const trade = this.prisma.trade.findUnique({ 
       where: {
         id 
@@ -67,7 +67,7 @@ export class TradeService {
     const userId = dto.userId;
     return this.prisma.trade.findMany({
       where: {
-        userId: +userId,
+        userId: userId,
         createdAt: {
           gte: startDate,
           lte: endDate,
@@ -83,7 +83,7 @@ export class TradeService {
     const userId = dto.userId;
     return this.prisma.trade.findMany({
       where: {
-        userId: +userId,
+        userId: userId,
         symbol,
         createdAt: {
           gte: startDate,
@@ -93,21 +93,21 @@ export class TradeService {
     })
   }
 
-  async findBySymbol(dto: {symbol: string, userId: number}) {
+  async findBySymbol(dto: {symbol: string, userId: string}) {
     const { symbol, userId} = dto;
     return this.prisma.trade.findMany({
       where: {
-        userId: +userId,
+        userId: userId,
         symbol
       }
     })
   }
 
-  async findByMultipleSymbols(dto: {symbols: string[], userId: number}){
+  async findByMultipleSymbols(dto: {symbols: string[], userId: string}){
     const { symbols, userId } = dto;
     return this.prisma.trade.findMany({
       where: {
-        userId: +userId,
+        userId: userId,
         symbol: {
           in: symbols
         }
@@ -117,7 +117,7 @@ export class TradeService {
 
   async findByMultipleProperties(dto: MultiTradeDto) {
     const { userId, symbol, lot, pips, execution, status, start, end } = dto;
-    const where: Prisma.tradeWhereInput = { userId: +userId };
+    const where: Prisma.tradeWhereInput = { userId: userId };
 
     if (symbol) where.symbol = symbol;
     if (lot) where.lot = lot;
@@ -137,7 +137,7 @@ export class TradeService {
 
   }
  
-  async update(id: number, updateTradeDto: UpdateTradeDto) {
+  async update(id: string, updateTradeDto: UpdateTradeDto) {
     // Remove read-only fields that shouldn't be updated
     const { id: _, createdAt, updatedAt, userId, ...updateData } = updateTradeDto;
     
@@ -150,7 +150,7 @@ export class TradeService {
     return this.prisma.trade.update({ where: { id }, data });
   }
 
-  async remove(id: number) {
+  async remove(id: string) {
     return this.prisma.trade.delete({ where: { id } });
   }
 }

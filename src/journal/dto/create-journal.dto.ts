@@ -1,4 +1,4 @@
-import { IsString, IsArray, IsNumber, IsBoolean, IsDate, IsJSON, IsOptional  } from 'class-validator';
+import { IsString, IsArray, IsNumber, IsBoolean, IsDate, IsJSON, IsOptional, IsUUID  } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateJournalDto {
@@ -8,9 +8,9 @@ export class CreateJournalDto {
     @ApiProperty({ description: 'The user tags'})
     tags: string[]
 
-    @IsNumber()
+    @IsUUID()
     @ApiProperty({ description: 'The unique identifier for the journal entry' })
-    userId: number;
+    userId: string;
 
     @IsString()
     @ApiProperty({ description: 'The instrument/currency of the journal entry' })
@@ -21,10 +21,10 @@ export class CreateJournalDto {
     @ApiProperty({ description: 'The journal title' })
     title: string;
 
-    @IsNumber()
+    @IsUUID()
     @IsOptional()
     @ApiProperty({ description: 'The trade identifier for the journal entry' })
-    tradeId: number;
+    tradeId?: string;
 
     @IsString()
     @ApiProperty({ description: 'The journal content in plain text' })

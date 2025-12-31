@@ -37,7 +37,7 @@ export class AuthController {
 
     @Post('signout')
     @Public()
-    async signout(@Body() body: { userId: number }) {
+    async signout(@Body() body: { userId: string }) {
         const { userId } = body;
         return this.authService.signout(userId);
     }

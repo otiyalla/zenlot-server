@@ -6,20 +6,20 @@
 
 generator client {
   provider = "prisma-client-js"
-  //output   = "../generated/prisma"
+  output   = "../generated/prisma"
 }
 
 datasource db {
   provider          = "postgresql"
-  url               = env("LOCAL_DB_URL")
+  url               = env("DATABASE_URL")
   shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
 model trade {
-  id                 Int       @id @default(autoincrement())
+  id                 String    @id @default(uuid())
   user               user      @relation(fields: [userId], references: [id], onUpdate: NoAction)
   symbol             String
-  userId             Int
+  userId             String
   entry              Float
   lot                Float
   pips               Float
@@ -45,11 +45,11 @@ model trade {
 }
 
 model journal {
-  id          Int      @id @default(autoincrement())
-  userId      Int
+  id          String      @id @default(uuid())
+  userId      String
   symbol      String
   title       String?
-  tradeId     Int?
+  tradeId     String?
   plainText   String?
   trade       trade?   @relation(fields: [tradeId], references: [id], onDelete: Cascade)
   editorState String?
@@ -62,10 +62,10 @@ model journal {
 }
 
 model user {
-  id              Int            @id @default(autoincrement())
-  fname           String
-  lname           String
-  email           String         @unique
+  id              String            @id @default(uuid())
+  fname           String         @db.VarChar(256)
+  lname           String         @db.VarChar(256)
+  email           String         @unique @db.VarChar(256)
   role            String
   tags            String[]
   language        String
@@ -85,7 +85,7 @@ model user {
 model RefreshToken {
   id        String   @id @default(cuid())
   token     String   @unique
-  userId    Int
+  userId    String
   user      user     @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
   createdAt DateTime @default(now())
