@@ -4,7 +4,7 @@ import { CreateJournalDto } from './dto/create-journal.dto';
 import { UpdateJournalDto } from './dto/update-journal.dto';
 import { SearchJournalDto } from './dto/search-journal.dto';
 import { IJournal } from './interfaces/journal.interface';
-import { Prisma } from '@prisma/client';
+import { Prisma } from '../../generated/prisma/client';
 //import { TradeService } from 'src/trade/trade.service';
 
 @Injectable()
