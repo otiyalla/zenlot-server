@@ -1,7 +1,10 @@
-import { PrismaClient } from '../generated/prisma/client';
+import { PrismaClient, Prisma } from './generated/prisma/client';
+import { Subset } from './generated/prisma/internal/prismaNamespace';
 //import { PrismaClient } from '../generated/prisma';
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  log: ['query', 'info', 'warn', 'error'],
+} as Subset<Prisma.PrismaClientOptions, Prisma.PrismaClientOptions>);
   
 (async () => {
   // You must provide a unique 'id' for the where clause as required by your generated Prisma types.

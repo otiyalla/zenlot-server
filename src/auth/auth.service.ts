@@ -1,7 +1,8 @@
 import { Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { UserService } from '../user/user.service';
-import { jwtConstants } from './auth.constants';
+import { defaultExpiresIn, defaultRefreshExpiresIn, resolveExpiration } from './auth.constants';
 import { PrismaService } from '../prisma/prisma.service';
 import { randomBytes } from 'crypto';
 
@@ -10,8 +11,28 @@ export class AuthService {
     constructor(
         private readonly jwtService: JwtService, 
         private userService: UserService,
-        private prisma: PrismaService
+        private prisma: PrismaService,
+        private readonly config: ConfigService
     ) {}
+
+    private getAccessSecret(): string | undefined {
+        return this.config.get<string>('JWT_SECRET');
+    }
+
+    private getRefreshSecret(): string | undefined {
+        return this.config.get<string>('JWT_REFRESH_SECRET');
+    }
+
+    private getAccessExpiresIn() {
+        return resolveExpiration(this.config.get<string>('JWT_EXPIRES'), defaultExpiresIn);
+    }
+
+    private getRefreshExpiresIn() {
+        return resolveExpiration(
+            this.config.get<string>('JWT_REFRESH_EXPIRES'),
+            defaultRefreshExpiresIn,
+        );
+    }
 
     async signin(email: string, password: string) {
         const user = await this.userService.validateUser(email, password);
@@ -24,11 +45,12 @@ export class AuthService {
         try {
             await this.revokeAllRefreshTokens(user.id);
             const refreshTokenValue = await this.createRefreshToken(payload);
+            const options = {
+                secret: this.getAccessSecret(),
+                expiresIn: this.getAccessExpiresIn(),
+            };
             return {
-                access_token: this.jwtService.sign(payload, {
-                    secret: jwtConstants.secret,
-                    expiresIn: jwtConstants.expiresIn,
-                }),
+                access_token: this.jwtService.sign(payload, options),
                 refresh_token: refreshTokenValue,
                 user: {
                     ...user,
@@ -43,7 +65,7 @@ export class AuthService {
 
     async verifyToken(token: string){
         try {
-            const decoded = this.jwtService.verify(token, { secret: jwtConstants.secret });
+            const decoded = this.jwtService.verify(token, { secret: this.getAccessSecret() });
             const user = await this.userService.findByEmail(decoded.email);
             if (!user) {
                 throw new NotFoundException('User not found');
@@ -63,12 +85,14 @@ export class AuthService {
         
         const token = randomBytes(32).toString('hex');
         const publicRefreshToken = this.jwtService.sign({token}, {
-            secret: jwtConstants.refreshSecret,
-            expiresIn: jwtConstants.refreshTokenExpiresIn,
+            secret: this.getRefreshSecret(),
+            expiresIn: this.getRefreshExpiresIn(),
         });
 
         const refreshTokenExpiry = new Date();
-        refreshTokenExpiry.setSeconds(refreshTokenExpiry.getSeconds() + this.parseExpiration(jwtConstants.refreshTokenExpiresIn));
+        refreshTokenExpiry.setSeconds(
+            refreshTokenExpiry.getSeconds() + this.parseExpiration(this.getRefreshExpiresIn()),
+        );
 
         try {
             await (this.prisma as any).refreshToken.create({
@@ -90,7 +114,7 @@ export class AuthService {
 
     async verifyRefreshToken(token: string){
         try {
-            const decoded = this.jwtService.verify(token , { secret: jwtConstants.refreshSecret });
+            const decoded = this.jwtService.verify(token , { secret: this.getRefreshSecret() });
             const refreshTokenRecord = await (this.prisma as any).refreshToken.findFirst({
                 where: {
                     token: decoded.token,
@@ -124,7 +148,6 @@ export class AuthService {
             let payload = await this.verifyToken(access_token);
             if (!payload && refresh_token) {
                 const {user, token}  = await this.verifyRefreshToken(refresh_token);
-                if (!payload) throw new UnauthorizedException('Invalid refresh token');
                 
                 // Generate new tokens
                 const newPayload = { email: user.email, sub: user.id };
@@ -134,8 +157,8 @@ export class AuthService {
                 return {
                     ...user,
                     access_token: this.jwtService.sign(newPayload, {
-                        secret: jwtConstants.secret,
-                        expiresIn: jwtConstants.expiresIn,
+                        secret: this.getAccessSecret(),
+                        expiresIn: this.getAccessExpiresIn(),
                     }),
                     refresh_token: newRefreshTokenValue,
                 };
@@ -159,8 +182,8 @@ export class AuthService {
        
         return {
             access_token: this.jwtService.sign(payload, {
-                secret: jwtConstants.secret,
-                expiresIn: jwtConstants.expiresIn,
+                secret: this.getAccessSecret(),
+                expiresIn: this.getAccessExpiresIn(),
             }),
             refresh_token: refreshTokenValue,
             user: {
@@ -260,8 +283,8 @@ export class AuthService {
             await this.revokeRefreshToken(token);
             return {
                 access_token: this.jwtService.sign(payload, {
-                    secret: jwtConstants.secret,
-                    expiresIn: jwtConstants.expiresIn,
+                    secret: this.getAccessSecret(),
+                    expiresIn: this.getAccessExpiresIn(),
                 }),
                 refresh_token: newRefreshTokenValue,
                 user: {

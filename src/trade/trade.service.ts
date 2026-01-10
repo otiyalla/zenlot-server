@@ -5,7 +5,7 @@ import { DateRangeDto } from './dto/date-range.dto';
 import { SymbolDateRangeDto } from './dto/symbol-date-range.dto';
 import { MultiTradeDto } from './dto/multiple-properties.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { Prisma } from '../../generated/prisma/client';
+import { Prisma } from '../../prisma/generated/prisma/client';
 
 
 @Injectable()

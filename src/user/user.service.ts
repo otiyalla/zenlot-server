@@ -3,7 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import * as bcrypt from 'bcryptjs';
-import { Prisma } from '../../generated/prisma/client';
+import { Prisma } from '../../prisma/generated/prisma/client';
 import { AuthenticatedUser } from './interfaces/authenticated-user.interface';
 import { UserGateway } from './user.gateway';
 import { UserPasswordDto } from './dto/user-password.dto';
