@@ -1,6 +1,7 @@
 //import { Process, Processor } from '@nestjs/bull';
 
 import { Processor, WorkerHost, OnQueueEvent } from '@nestjs/bullmq';
+import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
 import axios from 'axios';
 import { Job } from 'bullmq';
@@ -9,13 +10,31 @@ import { fmp } from "financialmodelingprep";
 
 @Processor('price-feed')
 export class PriceFeedProcessor extends WorkerHost {
-    private publisher = new Redis({
-        port: Number(config.redis_port),
-        host: config.redis_host,
-        keepAlive: 1000, // Optional: keep the connection alive
-        lazyConnect: true,
-        commandTimeout: 10000, // Set a command timeout if needed
-    });
+    private publisher: Redis;
+
+    constructor(private readonly configService: ConfigService) {
+        super();
+        const host = this.configService.get<string>('REDIS_HOST');
+        const port = Number(this.configService.get<string>('REDIS_PORT') ?? 6379);
+        const username = this.configService.get('REDIS_USERNAME');
+        const password = this.configService.get<string>('REDIS_PASSWORD');
+        const tlsEnabled = ['1', 'true', 'yes'].includes(
+            (this.configService.get<string>('REDIS_TLS') ?? '').toLowerCase(),
+        );
+        const rejectUnauthorized =
+            (this.configService.get<string>('REDIS_TLS_REJECT_UNAUTHORIZED') ?? 'true').toLowerCase() !== 'false';
+
+        this.publisher = new Redis({
+            host,
+            port,
+            username,
+            password,
+            ...(tlsEnabled ? { tls: { servername: host, rejectUnauthorized } } : {}),
+            keepAlive: 1000,
+            lazyConnect: true,
+            commandTimeout: 10000,
+        });
+    }
 
     
     async process(job: Job): Promise<any> {
