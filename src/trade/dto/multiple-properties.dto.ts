@@ -1,6 +1,14 @@
-import { IsOptional, IsISO8601, IsString, IsNumber, IsDate, IsJSON, IsUUID  } from 'class-validator';
+import {
+  IsOptional,
+  IsISO8601,
+  IsString,
+  IsNumber,
+  IsDate,
+  IsJSON,
+  IsUUID,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-    
+
 export class MultiTradeDto {
   @IsUUID()
   @ApiProperty({ description: 'The trade user id' })
@@ -30,13 +38,15 @@ export class MultiTradeDto {
   @IsOptional()
   @ApiProperty({ description: 'The trade status' })
   status?: string;
-  
+
   @IsISO8601()
   @ApiProperty({ type: Date, description: 'The date of the journal entry' })
   start?: string;
 
   @IsISO8601()
-  @ApiProperty({ type: Date, description: 'The last updated date of the journal entry' })
+  @ApiProperty({
+    type: Date,
+    description: 'The last updated date of the journal entry',
+  })
   end?: string;
-
 }

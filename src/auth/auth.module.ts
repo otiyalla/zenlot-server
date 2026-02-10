@@ -7,18 +7,27 @@ import { defaultExpiresIn, resolveExpiration } from './auth.constants';
 import { UserModule } from 'src/user/user.module';
 import { APP_GUARD } from '@nestjs/core';
 import { AuthGuard } from './auth.guard';
+import { EmailModule } from '../email/email.module';
+import { AnalyticsModule } from '../analytics/analytics.module';
+import { AuditModule } from '../audit/audit.module';
 
 @Module({
   imports: [
     UserModule,
     ConfigModule,
+    EmailModule,
+    AnalyticsModule,
+    AuditModule,
     JwtModule.registerAsync({
       global: true,
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
         secret: config.get<string>('JWT_SECRET'),
         signOptions: {
-          expiresIn: resolveExpiration(config.get<string>('JWT_EXPIRES'), defaultExpiresIn),
+          expiresIn: resolveExpiration(
+            config.get<string>('JWT_EXPIRES'),
+            defaultExpiresIn,
+          ),
         },
       }),
     }),
@@ -28,7 +37,7 @@ import { AuthGuard } from './auth.guard';
     {
       provide: APP_GUARD,
       useClass: AuthGuard,
-    }
+    },
   ],
   controllers: [AuthController],
   exports: [AuthService],

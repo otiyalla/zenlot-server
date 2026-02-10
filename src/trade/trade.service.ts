@@ -7,38 +7,35 @@ import { MultiTradeDto } from './dto/multiple-properties.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { Prisma } from '../../prisma/generated/prisma/client';
 
-
 @Injectable()
 export class TradeService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(createTradeDto: CreateTradeDto) {
-    const data = { 
+    const data = {
       ...createTradeDto,
       stopLoss: JSON.parse(JSON.stringify(createTradeDto.stopLoss)),
-      takeProfit: JSON.parse(JSON.stringify(createTradeDto.takeProfit))
+      takeProfit: JSON.parse(JSON.stringify(createTradeDto.takeProfit)),
     };
-    return this.prisma.trade.create({data});
+    return this.prisma.trade.create({ data });
   }
 
-  async findAll(query: { userId: string}) {
+  async findAll(query: { userId: string }) {
     const userId: string = query.userId;
-    return this.prisma.trade.findMany(
-      {
-        where: {userId},
-        orderBy: { createdAt: 'desc'}
-      }
-    );
+    return this.prisma.trade.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
-  async findAllWithJournal(query: { userId: string}) {
+  async findAllWithJournal(query: { userId: string }) {
     const { userId } = query;
     return this.prisma.trade.findMany({
       where: {
         userId,
-        plainText: { not: null}
+        plainText: { not: null },
       },
-      orderBy: { createdAt: 'desc'},
+      orderBy: { createdAt: 'desc' },
       select: {
         id: true,
         userId: true,
@@ -47,16 +44,16 @@ export class TradeService {
         editorState: true,
         tags: true,
         createdAt: true,
-        updatedAt: true
-      }
+        updatedAt: true,
+      },
     });
   }
 
   async findOne(id: string) {
-    const trade = this.prisma.trade.findUnique({ 
+    const trade = this.prisma.trade.findUnique({
       where: {
-        id 
-      }
+        id,
+      },
     });
     return trade;
   }
@@ -76,9 +73,9 @@ export class TradeService {
     });
   }
 
-  async findByDateRangeBySymbol(dto: SymbolDateRangeDto){
+  async findByDateRangeBySymbol(dto: SymbolDateRangeDto) {
     const startDate = new Date(dto.start);
-    const endDate = !!dto.end ? new Date(dto.end) : new Date();
+    const endDate = dto.end ? new Date(dto.end) : new Date();
     const symbol = dto.symbol;
     const userId = dto.userId;
     return this.prisma.trade.findMany({
@@ -87,33 +84,33 @@ export class TradeService {
         symbol,
         createdAt: {
           gte: startDate,
-          lte: endDate
-        }
-      }
-    })
+          lte: endDate,
+        },
+      },
+    });
   }
 
-  async findBySymbol(dto: {symbol: string, userId: string}) {
-    const { symbol, userId} = dto;
+  async findBySymbol(dto: { symbol: string; userId: string }) {
+    const { symbol, userId } = dto;
     return this.prisma.trade.findMany({
       where: {
         userId: userId,
-        symbol
-      }
-    })
+        symbol,
+      },
+    });
   }
 
-  async findByMultipleSymbols(dto: {symbols: string[], userId: string}){
+  async findByMultipleSymbols(dto: { symbols: string[]; userId: string }) {
     const { symbols, userId } = dto;
     return this.prisma.trade.findMany({
       where: {
         userId: userId,
         symbol: {
-          in: symbols
-        }
-      }
-    })
-  };
+          in: symbols,
+        },
+      },
+    });
+  }
 
   async findByMultipleProperties(dto: MultiTradeDto) {
     const { userId, symbol, lot, pips, execution, status, start, end } = dto;
@@ -134,13 +131,18 @@ export class TradeService {
       }
     }
     return this.prisma.trade.findMany({ where });
-
   }
- 
+
   async update(id: string, updateTradeDto: UpdateTradeDto) {
     // Remove read-only fields that shouldn't be updated
-    const { id: _, createdAt, updatedAt, userId, ...updateData } = updateTradeDto;
-    
+    const {
+      id: _,
+      createdAt,
+      updatedAt,
+      userId,
+      ...updateData
+    } = updateTradeDto;
+
     // Build the data object, only including defined (non-undefined) fields
     const data: Prisma.tradeUpdateInput = {
       ...updateData,

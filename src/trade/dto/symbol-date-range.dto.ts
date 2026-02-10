@@ -5,7 +5,7 @@ export class SymbolDateRangeDto {
   @IsUUID()
   @ApiProperty({ description: 'The trade owner id' })
   userId: string;
-  
+
   @IsString()
   symbol: string;
 

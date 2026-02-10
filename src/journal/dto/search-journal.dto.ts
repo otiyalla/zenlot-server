@@ -1,15 +1,29 @@
-import { IsOptional, IsISO8601, IsString, IsNumber, IsBoolean, IsArray, IsUUID } from 'class-validator';
+import {
+  IsOptional,
+  IsISO8601,
+  IsString,
+  IsNumber,
+  IsBoolean,
+  IsArray,
+  IsUUID,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class SearchJournalDto {
   @IsUUID()
   @IsOptional()
-  @ApiProperty({ description: 'The user id to filter journals', required: false })
+  @ApiProperty({
+    description: 'The user id to filter journals',
+    required: false,
+  })
   userId?: string;
 
   @IsString()
   @IsOptional()
-  @ApiProperty({ description: 'Text search query for plainText, title, tags, or symbol', required: false })
+  @ApiProperty({
+    description: 'Text search query for plainText, title, tags, or symbol',
+    required: false,
+  })
   query?: string;
 
   @IsString()
@@ -19,17 +33,27 @@ export class SearchJournalDto {
 
   @IsArray()
   @IsOptional()
-  @ApiProperty({ description: 'Filter by tags array', required: false, type: [String] })
+  @ApiProperty({
+    description: 'Filter by tags array',
+    required: false,
+    type: [String],
+  })
   tags?: string[];
 
   @IsISO8601()
   @IsOptional()
-  @ApiProperty({ description: 'Start date for date range filter', required: false })
+  @ApiProperty({
+    description: 'Start date for date range filter',
+    required: false,
+  })
   start?: string;
 
   @IsISO8601()
   @IsOptional()
-  @ApiProperty({ description: 'End date for date range filter', required: false })
+  @ApiProperty({
+    description: 'End date for date range filter',
+    required: false,
+  })
   end?: string;
 
   @IsBoolean()
@@ -42,4 +66,3 @@ export class SearchJournalDto {
   @ApiProperty({ description: 'Filter by archived status', required: false })
   isArchived?: boolean;
 }
-

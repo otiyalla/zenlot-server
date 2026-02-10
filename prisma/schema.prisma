@@ -15,7 +15,7 @@ datasource db {
 
 model trade {
   id                 String    @id @default(uuid())
-  user               user      @relation(fields: [userId], references: [id], onUpdate: NoAction)
+  user               user      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   symbol             String
   userId             String
   entry              Float
@@ -40,6 +40,8 @@ model trade {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
   journal            journal[]
+
+  @@index([userId])
 }
 
 model journal {
@@ -57,27 +59,36 @@ model journal {
   isArchived  Boolean? @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+  @@index([tradeId])
 }
 
 model user {
-  id              String            @id @default(uuid())
-  fname           String         @db.VarChar(256)
-  lname           String         @db.VarChar(256)
-  email           String         @unique @db.VarChar(256)
-  role            String
-  tags            String[]
-  language        String
-  password        String
-  accountCurrency String
-  theme           String         @default("system")
-  rules           Json
-  journalEntries  journal[]      @relation("UserJournal")
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
-  trade           trade[]
-  timezone        String         @default("UTC")
-  togglePipValue  Boolean        @default(false)
-  refreshTokens   RefreshToken[]
+  id                    String         @id @default(uuid())
+  fname                 String         @db.VarChar(256)
+  lname                 String         @db.VarChar(256)
+  email                 String         @unique @db.VarChar(256)
+  role                  String
+  tags                  String[]
+  language              String
+  password              String
+  accountCurrency       String
+  theme                 String         @default("system")
+  rules                 Json
+  journalEntries        journal[]      @relation("UserJournal")
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+  trade                 trade[]
+  timezone              String         @default("UTC")
+  togglePipValue        Boolean        @default(false)
+  refreshTokens         RefreshToken[]
+  auditLogs             auditLog[]
+  deletedAt             DateTime?
+  deleteScheduledFor    DateTime?
+  emailVerified         Boolean        @default(false)
+  emailVerificationToken String?
+  emailVerificationTokenExpiry DateTime?
 }
 
 model RefreshToken {
@@ -88,4 +99,38 @@ model RefreshToken {
   expiresAt DateTime
   createdAt DateTime @default(now())
   isRevoked Boolean  @default(false)
+
+  @@index([userId])
+}
+
+model auditLog {
+  id          String   @id @default(uuid())
+  userId      String?
+  user        user?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action      String
+  resource    String
+  resourceId  String?
+  changes     Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model feedback {
+  id        String   @id @default(uuid())
+  userId    String?
+  email     String
+  subject   String
+  message   String
+  type      String
+  status    String   @default("open")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
 }

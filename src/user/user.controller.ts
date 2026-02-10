@@ -1,40 +1,116 @@
-import { Controller, Get, Post, Body, Param, Patch, Delete, Put } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Patch,
+  Delete,
+  Put,
+  Request,
+} from '@nestjs/common';
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UserPasswordDto } from './dto/user-password.dto';
+import {
+  ApiOperation,
+  ApiParam,
+  ApiResponse,
+  ApiSecurity,
+  ApiTags,
+} from '@nestjs/swagger';
 
+@ApiTags('User')
+@ApiSecurity('access-token')
 @Controller('user')
 export class UserController {
   constructor(private readonly userService: UserService) {}
 
   @Post()
-  create(@Body() dto: CreateUserDto) {
-    return this.userService.create(dto);
+  @ApiOperation({ summary: 'Create a user' })
+  @ApiResponse({ status: 201, description: 'User created successfully.' })
+  create(@Body() dto: CreateUserDto, @Request() req: any) {
+    return this.userService.create(dto, req.ip, req.headers['user-agent']);
   }
 
   @Post('change-password')
-  changePassword(@Body() dto: UserPasswordDto) {
-    return this.userService.changePassword(dto);
+  @ApiOperation({ summary: 'Change user password' })
+  @ApiResponse({ status: 200, description: 'Password changed successfully.' })
+  changePassword(@Body() dto: UserPasswordDto, @Request() req: any) {
+    return this.userService.changePassword(
+      dto,
+      req.ip,
+      req.headers['user-agent'],
+    );
   }
 
   @Get()
+  @ApiOperation({ summary: 'Get all users' })
+  @ApiResponse({ status: 200, description: 'Users fetched successfully.' })
   findAll() {
     return this.userService.findAll();
   }
 
+  @Get('deletion-status')
+  @ApiOperation({ summary: 'Get account deletion status' })
+  @ApiResponse({
+    status: 200,
+    description: 'Deletion status fetched successfully.',
+  })
+  async getDeletionStatus(@Request() req: any) {
+    return this.userService.getDeletionStatus(req.user.id);
+  }
+
   @Get(':id')
+  @ApiOperation({ summary: 'Get a user by id' })
+  @ApiParam({ name: 'id', required: true, description: 'User id' })
+  @ApiResponse({ status: 200, description: 'User fetched successfully.' })
   findOne(@Param('id') id: string) {
-    return this.userService.findOne(id); 
+    return this.userService.findOne(id);
   }
 
   @Put(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateUserDto) {
-    return this.userService.update(id, dto);
+  @ApiOperation({ summary: 'Update a user by id' })
+  @ApiParam({ name: 'id', required: true, description: 'User id' })
+  @ApiResponse({ status: 200, description: 'User updated successfully.' })
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateUserDto,
+    @Request() req: any,
+  ) {
+    return this.userService.update(id, dto, req.ip, req.headers['user-agent']);
+  }
+
+  @Delete(':id/initiate')
+  @ApiOperation({ summary: 'Initiate account deletion' })
+  @ApiParam({ name: 'id', required: true, description: 'User id' })
+  @ApiResponse({ status: 200, description: 'Account deletion initiated.' })
+  initiateAccountDeletion(@Param('id') id: string, @Request() req: any) {
+    return this.userService.initiateAccountDeletion(
+      id,
+      req.ip,
+      req.headers['user-agent'],
+    );
+  }
+
+  @Post(':id/cancel-deletion')
+  @ApiOperation({ summary: 'Cancel account deletion' })
+  @ApiParam({ name: 'id', required: true, description: 'User id' })
+  @ApiResponse({ status: 200, description: 'Account deletion canceled.' })
+  cancelAccountDeletion(@Param('id') id: string, @Request() req: any) {
+    return this.userService.cancelAccountDeletion(
+      id,
+      req.ip,
+      req.headers['user-agent'],
+    );
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.userService.remove(id);
+  @ApiOperation({ summary: 'Delete a user by id' })
+  @ApiParam({ name: 'id', required: true, description: 'User id' })
+  @ApiResponse({ status: 200, description: 'User deleted successfully.' })
+  remove(@Param('id') id: string, @Request() req: any) {
+    return this.userService.remove(id, req.ip, req.headers['user-agent']);
   }
 }

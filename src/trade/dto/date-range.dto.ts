@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsISO8601, IsUUID } from 'class-validator';
-    
+
 export class DateRangeDto {
   @IsUUID()
   @ApiProperty({ description: 'The trade owner id' })
@@ -12,7 +12,7 @@ export class DateRangeDto {
   @IsISO8601()
   end: string;
 }
- 
+
 /*
 import { IsInt, IsISO8601, IsString } from 'class-validator';
 import { Type } from 'class-transformer';
