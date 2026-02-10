@@ -11,15 +11,18 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JobsModule } from './jobs/jobs.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { TradeModule } from './trade/trade.module';
-import { QuoteGateway } from './quote/quote.gateway';
 import { QuoteModule } from './quote/quote.module';
-import { QuoteService } from './quote/quote.service';
 import { mapDatabaseUrl } from './config/database.config';
+import { FeedbackModule } from './feedback/feedback.module';
+import { AuditModule } from './audit/audit.module';
+import { EmailModule } from './email/email.module';
+import { SentryModule, SentryGlobalFilter } from '@sentry/nestjs/setup';
+import { APP_FILTER } from '@nestjs/core';
 
 function getEnvFilePath(): string[] {
   const nodeEnv = process.env.NODE_ENV?.toLowerCase();
   const envFiles: string[] = [];
-  
+
   if (nodeEnv === 'local') {
     envFiles.push('.env.local');
   } else if (nodeEnv === 'dev' || nodeEnv === 'development') {
@@ -27,9 +30,9 @@ function getEnvFilePath(): string[] {
   } else if (nodeEnv === 'production' || nodeEnv === 'prod') {
     envFiles.push('.env.prod');
   }
-  
+
   envFiles.push('.env');
-  
+
   return envFiles;
 }
 
@@ -46,14 +49,18 @@ function getEnvFilePath(): string[] {
         },
       ],
     }),
-    UserModule, 
-    HistoryModule, 
-    AuthModule, 
-    JournalModule, 
-    PriceFeedModule, 
-    JobsModule, 
-    PrismaModule, 
+    UserModule,
+    HistoryModule,
+    AuthModule,
+    JournalModule,
+    PriceFeedModule,
+    JobsModule,
+    PrismaModule,
     TradeModule,
+    FeedbackModule,
+    AuditModule,
+    EmailModule,
+    SentryModule.forRoot(),
     BullModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
@@ -65,15 +72,18 @@ function getEnvFilePath(): string[] {
           (config.get<string>('REDIS_TLS') ?? '').toLowerCase(),
         );
         const rejectUnauthorized =
-          (config.get<string>('REDIS_TLS_REJECT_UNAUTHORIZED') ?? 'true').toLowerCase() !== 'false';
+          (
+            config.get<string>('REDIS_TLS_REJECT_UNAUTHORIZED') ?? 'true'
+          ).toLowerCase() !== 'false';
 
         return {
           connection: {
             host,
             port,
-            password,
-            username,
-            ...(tlsEnabled ? { tls: { servername: host, rejectUnauthorized } } : {}),
+            ...{ password, username },
+            ...(tlsEnabled
+              ? { tls: { servername: host, rejectUnauthorized } }
+              : {}),
           },
           defaultJobOptions: {
             attempts: 3,
@@ -87,9 +97,18 @@ function getEnvFilePath(): string[] {
       name: 'price-feed',
       //defaultJobOptions: {}
     }),
-    QuoteModule
+    BullModule.registerQueue({
+      name: 'deletion',
+    }),
+    QuoteModule,
   ],
   controllers: [AppController],
-  providers: [AppService, QuoteGateway, QuoteService ],
+  providers: [
+    AppService,
+    {
+      provide: APP_FILTER,
+      useClass: SentryGlobalFilter,
+    },
+  ],
 })
 export class AppModule {}
