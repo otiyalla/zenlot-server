@@ -1,78 +1,150 @@
-import { WebSocketServer, WebSocketGateway, SubscribeMessage, MessageBody, ConnectedSocket } from '@nestjs/websockets';
+import { Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  WebSocketServer,
+  WebSocketGateway,
+  SubscribeMessage,
+  MessageBody,
+  ConnectedSocket,
+} from '@nestjs/websockets';
+import * as Sentry from '@sentry/nestjs';
 import { QuoteService } from './quote.service';
-import { Server, Socket } from 'socket.io';
-import { ListQuotesDto } from './dto/quote-list.dto';
-import { OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Namespace, Server, Socket } from 'socket.io';
+import { getCorsOrigins } from '../config/cors.config';
+import { AuthService } from '../auth/auth.service';
 
 @WebSocketGateway({
   cors: {
-    origin: ['http://localhost:8081', 'https://zenlot.com'],
+    origin: getCorsOrigins(),
     methods: ['GET', 'POST'],
     credentials: true,
   },
   namespace: 'quote',
 })
 export class QuoteGateway implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(QuoteGateway.name);
+
   @WebSocketServer()
-  server: Server;
+  server: Server | Namespace;
 
   private connectedSockets: Set<string> = new Set();
-  
-  constructor(private readonly quoteService: QuoteService) {}
 
- 
+  constructor(
+    private readonly quoteService: QuoteService,
+    private readonly authService: AuthService,
+  ) {}
 
   onModuleInit() {
     // Handle client connections
     this.server.setMaxListeners(20);
 
-    this.server.on('connection', (socket: Socket) => {
-      console.log(`Client connected: ${socket.id} - Total connected: ${this.getConnectedClientsCount()}`);
+    this.server.on('connection', async (socket: Socket) => {
+      const accessToken = this.extractAccessToken(socket);
+      if (!accessToken) {
+        this.logger.warn(`Socket missing access token: ${socket.id}`);
+        socket.disconnect(true);
+        return;
+      }
+
+      const user = await this.authService.verifyToken(accessToken);
+      if (!user) {
+        this.logger.warn(`Socket auth failed: ${socket.id}`);
+        socket.disconnect(true);
+        return;
+      }
+
+      (socket as any).user = user;
+      this.logger.log(
+        `Client connected: ${socket.id} - Total connected: ${this.getConnectedClientsCount()}`,
+      );
       this.connectedSockets.add(socket.id);
-      
+
       // Join user to their personal room
       socket.join(`user_${socket.id}`);
 
       socket.on('disconnect', () => {
-        console.log(`Client disconnected: ${socket.id} - Total connected: ${this.getConnectedClientsCount()}`);
+        this.logger.log(
+          `Client disconnected: ${socket.id} - Total connected: ${this.getConnectedClientsCount()}`,
+        );
         this.clearSockets(socket);
-      }); 
+      });
 
       socket.on('error', (error) => {
-        console.error('Socket error:', error);
+        this.logger.error('Socket error', error);
+        Sentry.captureException(error, {
+          extra: { socketId: socket.id, context: 'QuoteGateway.socketError' },
+        });
         this.clearSockets(socket);
       });
     });
   }
 
-  private clearSockets(socket: Socket) {
+  private extractAccessToken(socket: Socket): string | undefined {
+    const authToken = (socket.handshake?.auth as any)?.access_token;
+    if (typeof authToken === 'string' && authToken.trim()) {
+      return authToken.trim();
+    }
+
+    const headerToken = socket.handshake?.headers?.['access_token'];
+    if (typeof headerToken === 'string' && headerToken.trim()) {
+      return headerToken.trim();
+    }
+
+    const authorization = socket.handshake?.headers?.authorization;
+    if (typeof authorization === 'string') {
+      const match = authorization.match(/^Bearer\\s+(.+)$/i);
+      if (match?.[1]) {
+        return match[1].trim();
+      }
+    }
+
+    return undefined;
+  }
+
+  private clearSockets(socket: Socket, shutdown?: boolean) {
     try {
       this.connectedSockets.delete(socket.id);
       socket.leave(`user_${socket.id}`);
-      socket.removeAllListeners();
-      socket.disconnect(true);
+      //socket.disconnect(true);
+      if (shutdown) socket.removeAllListeners();
     } catch (error) {
-      console.error('Error clearing sockets:', error);
+      this.logger.error('Error clearing sockets', error);
+      Sentry.captureException(error, {
+        extra: { socketId: socket.id, context: 'QuoteGateway.clearSockets' },
+      });
     }
   }
 
   onModuleDestroy() {
-    console.log('QuoteGateway: Cleaning up all connections...');
+    this.logger.log('QuoteGateway: Cleaning up all connections...');
     this.disconnectAllClients();
   }
 
   private disconnectAllClients() {
     try {
-      this.server.removeAllListeners(); // Remove all server listeners
-      this.server.sockets.sockets.forEach((socket) => {
+      const socketsMap =
+        this.server.sockets instanceof Map
+          ? this.server.sockets
+          : this.server.sockets.sockets;
+
+      for (const [id, socket] of socketsMap) {
+        this.logger.debug(`Disconnecting socket: ${id}`);
         this.clearSockets(socket);
-      });
-      this.connectedSockets.clear();
-      this.server.close(() => {
-        console.log('QuoteGateway: Server closed successfully');
+      }
+
+      // Namespace instances don't have `close()`, but expose parent server via `.server`.
+      const closeTarget =
+        typeof (this.server as Server).close === 'function'
+          ? (this.server as Server)
+          : (this.server as Namespace).server;
+
+      closeTarget?.close?.(() => {
+        this.logger.log('QuoteGateway: Server closed successfully');
       });
     } catch (error) {
-      console.error('Error disconnecting all clients:', error);
+      this.logger.error('Error disconnecting all clients', error);
+      Sentry.captureException(error, {
+        extra: { context: 'QuoteGateway.disconnectAllClients' },
+      });
     }
   }
 
@@ -83,14 +155,20 @@ export class QuoteGateway implements OnModuleInit, OnModuleDestroy {
   }
 
   @SubscribeMessage('get-quote')
-  async handleGetQuote(@MessageBody() symbol: string, @ConnectedSocket() client: Socket): Promise<void> {
-    const quote = await this.quoteService.quote(symbol);
+  async handleGetQuote(
+    @MessageBody() symbol: { base: string; quote: string },
+    @ConnectedSocket() client: Socket,
+  ): Promise<void> {
+    const quote = await this.quoteService.fxRate(symbol);
     client.emit('quote-update', quote);
   }
 
   @SubscribeMessage('get-exchange-rate')
-  async handleRate(@MessageBody() symbol: string, @ConnectedSocket() client: Socket): Promise<void> {
-    const quote = await this.quoteService.quote(symbol);
+  async handleRate(
+    @MessageBody() symbol: { base: string; quote: string },
+    @ConnectedSocket() client: Socket,
+  ): Promise<void> {
+    const quote = await this.quoteService.fxRate(symbol);
     client.emit('exchange-rate-update', quote);
   }
 

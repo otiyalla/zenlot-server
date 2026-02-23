@@ -25,7 +25,7 @@ import { SendGridEmailTransport } from './providers/sendgrid-email.transport';
         const provider = (
           configService.get<string>('EMAIL_PROVIDER') || 'nodemailer'
         ).toLowerCase();
-        
+
         const emailFrom = configService.get<string>('EMAIL_FROM');
 
         if (!emailFrom) {

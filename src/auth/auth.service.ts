@@ -311,7 +311,7 @@ export class AuthService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
-    
+
     try {
       const tempPassword = Math.random().toString(36).slice(-9);
       const newPassword = `tPass${tempPassword}`;
@@ -328,6 +328,7 @@ export class AuthService {
         email,
         newPassword,
         user.fname,
+        user.language,
       );
       this.auditService.log({
         userId: user.id,
@@ -339,7 +340,7 @@ export class AuthService {
       });
       return emailSent;
     } catch (error) {
-      throw error    
+      throw error;
     }
   }
 

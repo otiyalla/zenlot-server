@@ -86,7 +86,7 @@ export class FeedbackService {
       feedback.id,
       dto.type,
       dto.userId,
-      );
+    );
 
     // Send email notification to admin
     const emailSent = await this.emailService.sendFeedbackEmail(

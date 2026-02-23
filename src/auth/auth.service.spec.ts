@@ -12,8 +12,6 @@ describe('AuthService', () => {
   let emailService: any;
   let analytics: any;
   let auditService: any;
-  
-  
 
   const user = {
     id: 'user-1',
@@ -47,6 +45,9 @@ describe('AuthService', () => {
       create: jest.fn(),
       resetPassword: jest.fn(),
     };
+    emailService = {
+      sendPasswordResentEmail: jest.fn(),
+    };
     configService = {
       get: jest.fn((key: string) => {
         if (key in configMock)
@@ -63,20 +64,20 @@ describe('AuthService', () => {
       trackPasswordReset: jest.fn(),
       trackPasswordResetRequested: jest.fn(),
       trackUserSignedOut: jest.fn(),
-    }
+    };
 
     auditService = {
-      log: jest.fn()
-    }
+      log: jest.fn(),
+    };
 
     service = new AuthService(
-      jwtService, 
-      userService, 
-      emailService, 
-      prisma, 
+      jwtService,
+      userService,
+      emailService,
+      prisma,
       configService,
       analytics,
-      auditService
+      auditService,
     );
   });
 
@@ -211,6 +212,27 @@ describe('AuthService', () => {
         access_token: 'new-access-token',
         refresh_token: 'new-refresh-token',
       }),
+    );
+  });
+
+  it('resetPassword passes user language to sendPasswordResentEmail', async () => {
+    userService.findByEmail.mockResolvedValue({
+      id: user.id,
+      email: user.email,
+      fname: 'Jane',
+      language: 'fr',
+    });
+    userService.resetPassword.mockResolvedValue({ id: user.id });
+    emailService.sendPasswordResentEmail.mockResolvedValue(true);
+
+    const result = await service.resetPassword(user.email);
+
+    expect(result).toBe(true);
+    expect(emailService.sendPasswordResentEmail).toHaveBeenCalledWith(
+      user.email,
+      expect.stringMatching(/^tPass/),
+      'Jane',
+      'fr',
     );
   });
 });

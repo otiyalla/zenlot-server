@@ -74,7 +74,7 @@ export class JournalService {
       include: { author: true, trade: true },
       orderBy: { createdAt: 'desc' },
     })) as unknown as IJournal[];
-    
+
     return [...journals, ...mappedTradeJournals].sort(
       (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
     );

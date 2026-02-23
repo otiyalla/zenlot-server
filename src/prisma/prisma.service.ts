@@ -14,8 +14,10 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
   private readonly logger = new Logger(PrismaService.name);
 
   constructor() {
+
+    const env = process.env.NODE_ENV?.toLowerCase();
     const options = {
-      log: ['query', 'info', 'warn', 'error'],
+      log: (env === "local") ? ['query', 'info', 'warn', 'error'] : [],
     } as Prisma.PrismaClientOptions;
 
     const connectionString = process.env.DATABASE_URL;
@@ -23,7 +25,6 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
       throw new Error('DATABASE_URL is not set');
     }
     const adapter = new PrismaPg({ connectionString });
-    const env = process.env.NODE_ENV?.toLowerCase();
     if (env === 'local') {
       options.adapter = adapter;
     } else {

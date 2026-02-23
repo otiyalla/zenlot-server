@@ -22,7 +22,7 @@ import { AnalyticsService } from '../analytics/analytics.service';
 @Injectable()
 export class UserService {
   private readonly logger = new Logger(UserService.name);
-  private readonly GRACE_PERIOD_DAYS = 1; // 30 days grace period
+  private readonly GRACE_PERIOD_DAYS = 30; // 30 days grace period
   private readonly DATA_RETENTION_DAYS = 210; // 210 days retention after deletion
 
   constructor(
@@ -78,7 +78,7 @@ export class UserService {
     });
     this.analytics.identifyUser(result);
     this.analytics.trackAccountCreated(result.id, 'email');
-    await this.emailService.sendWelcomeEmail(email, fname, lname);
+    await this.emailService.sendWelcomeEmail(email, fname, lname, language);
 
     return {
       ...result,
@@ -335,6 +335,7 @@ export class UserService {
     await this.emailService.sendAccountDeletionNotice(
       user.email,
       `${user.fname} ${user.lname}`,
+      user.language,
       this.GRACE_PERIOD_DAYS,
       user.timezone,
     );
@@ -391,6 +392,7 @@ export class UserService {
     await this.emailService.sendAccountDeletionCancelledNotice(
       user.email,
       `${user.fname} ${user.lname}`,
+      user.language,
       user.timezone,
     );
 

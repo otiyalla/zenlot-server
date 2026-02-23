@@ -3,7 +3,7 @@
  * Used by HTTP server (main.ts) and WebSocket gateways.
  * Defaults allow local Expo and production app.
  */
-const DEFAULT_ORIGINS = ['http://localhost:8081', 'https://zenlot.net'];
+const DEFAULT_ORIGINS = ['http://localhost:8081', 'https://api.zenlot.net'];
 
 export function getCorsOrigins(originEnv?: string): string[] {
   const raw = originEnv ?? process.env.CORS_ORIGIN;

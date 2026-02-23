@@ -65,8 +65,8 @@ export class AuthController {
   @Post('signout')
   @ApiOperation({ summary: 'Sign out and revoke tokens' })
   @ApiResponse({ status: 200, description: 'Signed out successfully.' })
-  async signout(@Body() body: { userId: string }, @Request() req: any) {
-    const { userId } = body;
+  async signout(@Request() req: any) {
+    const userId = req.user.id;
     return this.authService.signout(userId, req.ip, req.headers['user-agent']);
   }
 
@@ -83,7 +83,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Reset password with email' })
   @ApiResponse({ status: 200, description: 'Password reset initiated.' })
   async resetPassword(@Body() body: { email: string }, @Request() req: any) {
-    const email  = body.email;
+    const email = body.email;
     return this.authService.resetPassword(
       email,
       req.ip,
