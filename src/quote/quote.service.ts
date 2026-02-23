@@ -35,7 +35,7 @@ export class QuoteService {
       });
       return data;
     } catch (error) {
-      console.log("error: ", error)
+      console.log('error: ', error);
       this.logger.error('Error fetching available forex', error);
       Sentry.captureException(error, { extra: { context: 'getFMPList' } });
       throw new Error('Failed to fetch available forex');
@@ -84,7 +84,7 @@ export class QuoteService {
 
   async quote(symbol: string) {
     try {
-      const data  = await this.getAvailableForex();
+      const data = await this.getAvailableForex();
       return data;
     } catch (error) {
       this.logger.error(`Error fetching price for ${symbol}`, error);

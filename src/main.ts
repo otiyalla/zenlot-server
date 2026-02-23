@@ -7,7 +7,7 @@ import {
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
-import { getCorsOrigins } from './config/cors.config';
+import { getCorsMethods, getCorsOrigins } from './config/cors.config';
 import { PrismaService } from './prisma/prisma.service';
 import './instrument';
 // import rateLimit dynamically inside bootstrap for compatibility
@@ -30,7 +30,7 @@ async function bootstrap() {
   const origins = getCorsOrigins(configService.get<string>('CORS_ORIGIN'));
   app.enableCors({
     origin: origins,
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    methods: getCorsMethods(),
     credentials: true,
   });
 

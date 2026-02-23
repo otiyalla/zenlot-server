@@ -14,10 +14,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
   private readonly logger = new Logger(PrismaService.name);
 
   constructor() {
-
     const env = process.env.NODE_ENV?.toLowerCase();
     const options = {
-      log: (env === "local") ? ['query', 'info', 'warn', 'error'] : [],
+      log: env === 'local' ? ['query', 'info', 'warn', 'error'] : [],
     } as Prisma.PrismaClientOptions;
 
     const connectionString = process.env.DATABASE_URL;

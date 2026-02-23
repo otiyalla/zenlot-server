@@ -4,6 +4,14 @@
  * Defaults allow local Expo and production app.
  */
 const DEFAULT_ORIGINS = ['http://localhost:8081', 'https://api.zenlot.net'];
+const DEFAULT_CORS_METHODS = [
+  'GET',
+  'POST',
+  'PUT',
+  'PATCH',
+  'DELETE',
+  'OPTIONS',
+];
 
 export function getCorsOrigins(originEnv?: string): string[] {
   const raw = originEnv ?? process.env.CORS_ORIGIN;
@@ -14,4 +22,8 @@ export function getCorsOrigins(originEnv?: string): string[] {
       .filter(Boolean);
   }
   return DEFAULT_ORIGINS;
+}
+
+export function getCorsMethods(): string[] {
+  return [...DEFAULT_CORS_METHODS];
 }

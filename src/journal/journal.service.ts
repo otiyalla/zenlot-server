@@ -89,6 +89,15 @@ export class JournalService {
     return entry;
   }
 
+  async findOneByUser(id: string, userId: string) {
+    const entry = await this.prisma.journal.findFirst({
+      where: { id, userId },
+      include: { author: true },
+    });
+    if (!entry) throw new NotFoundException('Journal not found');
+    return entry;
+  }
+
   async search(searchDto: SearchJournalDto): Promise<IJournal[]> {
     const where: Prisma.journalWhereInput = {};
 
@@ -182,7 +191,57 @@ export class JournalService {
       });
   }
 
+  async updateByUser(
+    id: string,
+    userId: string,
+    journalUpdate: UpdateJournalDto,
+  ) {
+    const data: Prisma.journalUpdateInput = {};
+
+    if (journalUpdate.symbol !== undefined) data.symbol = journalUpdate.symbol;
+    if (journalUpdate.title !== undefined) data.title = journalUpdate.title;
+    if (journalUpdate.tags !== undefined) data.tags = journalUpdate.tags;
+    if (journalUpdate.plainText !== undefined)
+      data.plainText = journalUpdate.plainText;
+    if (journalUpdate.editorState !== undefined)
+      data.editorState = journalUpdate.editorState;
+    if (journalUpdate.isPinned !== undefined)
+      data.isPinned = journalUpdate.isPinned;
+    if (journalUpdate.isArchived !== undefined)
+      data.isArchived = journalUpdate.isArchived;
+
+    if (journalUpdate.tradeId) {
+      const trade = await this.prisma.trade.findFirst({
+        where: { id: journalUpdate.tradeId, userId },
+      });
+      if (!trade) {
+        throw new NotFoundException('Journal not found');
+      }
+      return this.prisma.trade.update({
+        where: { id: journalUpdate.tradeId },
+        data,
+      });
+    }
+
+    await this.findOneByUser(id, userId);
+    return this.prisma.journal.update({
+      where: { id },
+      data,
+      include: { author: true },
+    });
+  }
+
   remove(id: string) {
     return this.prisma.journal.delete({ where: { id } });
+  }
+
+  async removeByUser(id: string, userId: string) {
+    const { count } = await this.prisma.journal.deleteMany({
+      where: { id, userId },
+    });
+    if (count === 0) {
+      throw new NotFoundException('Journal not found');
+    }
+    return { deleted: true };
   }
 }

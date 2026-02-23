@@ -1,10 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreateTradeDto } from './dto/create-trade.dto';
 import { UpdateTradeDto } from './dto/update-trade.dto';
 import { DateRangeDto } from './dto/date-range.dto';
 import { SymbolDateRangeDto } from './dto/symbol-date-range.dto';
 import { MultiTradeDto } from './dto/multiple-properties.dto';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '../../prisma/generated/prisma/client';
 
 @Injectable()
@@ -55,6 +55,19 @@ export class TradeService {
         id,
       },
     });
+    return trade;
+  }
+
+  async findOneForUser(id: string, userId: string) {
+    const trade = await this.prisma.trade.findFirst({
+      where: {
+        id,
+        userId,
+      },
+    });
+    if (!trade) {
+      throw new NotFoundException('Trade not found');
+    }
     return trade;
   }
 
@@ -152,7 +165,26 @@ export class TradeService {
     return this.prisma.trade.update({ where: { id }, data });
   }
 
+  async updateForUser(
+    id: string,
+    userId: string,
+    updateTradeDto: UpdateTradeDto,
+  ) {
+    await this.findOneForUser(id, userId);
+    return this.update(id, updateTradeDto);
+  }
+
   async remove(id: string) {
     return this.prisma.trade.delete({ where: { id } });
+  }
+
+  async removeForUser(id: string, userId: string) {
+    const { count } = await this.prisma.trade.deleteMany({
+      where: { id, userId },
+    });
+    if (count === 0) {
+      throw new NotFoundException('Trade not found');
+    }
+    return { deleted: true };
   }
 }

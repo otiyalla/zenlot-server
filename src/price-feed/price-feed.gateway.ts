@@ -20,6 +20,10 @@ export class PriceFeedGateway implements OnModuleInit {
 
   constructor(private readonly authService: AuthService) {}
 
+  private getUserRoom(userId: string): string {
+    return `user_${userId}`;
+  }
+
   onModuleInit() {
     // Handle client connections
     this.server.on('connection', async (socket: Socket) => {
@@ -41,7 +45,7 @@ export class PriceFeedGateway implements OnModuleInit {
 
       (socket as any).user = user;
       this.logger.log(`Price Feed Client connected: ${socket.id}`);
-      socket.join(`user_${socket.id}`);
+      socket.join(this.getUserRoom(user.id));
       socket.on('disconnect', () => {
         this.logger.log(`Price Feed Client disconnected: ${socket.id}`);
       });

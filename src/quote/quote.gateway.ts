@@ -33,6 +33,10 @@ export class QuoteGateway implements OnModuleInit, OnModuleDestroy {
     private readonly authService: AuthService,
   ) {}
 
+  private getUserRoom(userId: string): string {
+    return `user_${userId}`;
+  }
+
   onModuleInit() {
     // Handle client connections
     this.server.setMaxListeners(20);
@@ -59,7 +63,9 @@ export class QuoteGateway implements OnModuleInit, OnModuleDestroy {
       this.connectedSockets.add(socket.id);
 
       // Join user to their personal room
-      socket.join(`user_${socket.id}`);
+      const userRoom = this.getUserRoom(user.id);
+      (socket as any).userRoom = userRoom;
+      socket.join(userRoom);
 
       socket.on('disconnect', () => {
         this.logger.log(
@@ -102,8 +108,15 @@ export class QuoteGateway implements OnModuleInit, OnModuleDestroy {
 
   private clearSockets(socket: Socket, shutdown?: boolean) {
     try {
+      const userRoom =
+        (socket as any).userRoom ??
+        ((socket as any).user?.id
+          ? this.getUserRoom((socket as any).user.id)
+          : undefined);
       this.connectedSockets.delete(socket.id);
-      socket.leave(`user_${socket.id}`);
+      if (userRoom) {
+        socket.leave(userRoom);
+      }
       //socket.disconnect(true);
       if (shutdown) socket.removeAllListeners();
     } catch (error) {
@@ -170,16 +183,6 @@ export class QuoteGateway implements OnModuleInit, OnModuleDestroy {
   ): Promise<void> {
     const quote = await this.quoteService.fxRate(symbol);
     client.emit('exchange-rate-update', quote);
-  }
-
-  // Method to send updates to specific user
-  sendToUser(userId: string, event: string, data: any) {
-    this.server.to(`user_${userId}`).emit(event, data);
-  }
-
-  // Method to send updates to all users (if needed)
-  sendToAll(event: string, data: any) {
-    this.server.emit(event, data);
   }
 
   getConnectedClientsCount(): number {

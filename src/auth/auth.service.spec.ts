@@ -1,6 +1,7 @@
 import { AuthService } from './auth.service';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { UnauthorizedException } from '@nestjs/common';
 import * as crypto from 'crypto';
 
 describe('AuthService', () => {
@@ -151,6 +152,24 @@ describe('AuthService', () => {
     randomSpy.mockRestore();
   });
 
+  it('throws when refresh token cannot be persisted', async () => {
+    const randomSpy = jest
+      .spyOn(crypto, 'randomBytes')
+      .mockImplementation(
+        () => Buffer.from('b'.repeat(32)) as unknown as Buffer,
+      );
+    (jwtService.sign as jest.Mock).mockReturnValue('public-refresh-token');
+    prisma.refreshToken.create.mockRejectedValue(new Error('db unavailable'));
+
+    await expect(
+      service.createRefreshToken({
+        email: user.email,
+        sub: user.id,
+      }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    randomSpy.mockRestore();
+  });
+
   it('verifies refresh token and returns user payload', async () => {
     (jwtService.verify as jest.Mock).mockReturnValue({
       token: 'db-refresh-token',
@@ -165,10 +184,37 @@ describe('AuthService', () => {
     expect(jwtService.verify).toHaveBeenCalledWith('public-refresh-token', {
       secret: configMock.JWT_REFRESH_SECRET,
     });
+    expect(prisma.refreshToken.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          token: 'db-refresh-token',
+          isRevoked: false,
+        }),
+      }),
+    );
     expect(result).toEqual({
       user: { ...user, password: undefined, isAuthenticated: true },
       token: 'db-refresh-token',
     });
+  });
+
+  it('rejects revoked refresh tokens', async () => {
+    (jwtService.verify as jest.Mock).mockReturnValue({
+      token: 'revoked-token',
+    });
+    prisma.refreshToken.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.verifyRefreshToken('public-refresh-token'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(prisma.refreshToken.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          token: 'revoked-token',
+          isRevoked: false,
+        }),
+      }),
+    );
   });
 
   it('returns the verified payload when the access token is valid', async () => {

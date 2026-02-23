@@ -8,6 +8,8 @@ import {
   Param,
   Delete,
   Query,
+  Request,
+  ForbiddenException,
 } from '@nestjs/common';
 import * as Sentry from '@sentry/nestjs';
 import { JournalService } from './journal.service';
@@ -38,7 +40,8 @@ export class JournalController {
     status: 201,
     description: 'Journal entry created successfully.',
   })
-  create(@Body() createJournalDto: CreateJournalDto) {
+  create(@Body() createJournalDto: CreateJournalDto, @Request() req: any) {
+    createJournalDto.userId = req.user.id;
     return this.journalService.create(createJournalDto);
   }
 
@@ -48,9 +51,9 @@ export class JournalController {
     status: 200,
     description: 'Journal entries fetched successfully.',
   })
-  async findAll(): Promise<IJournal[]> {
+  async findAll(@Request() req: any): Promise<IJournal[]> {
     try {
-      return await this.journalService.findAll();
+      return await this.journalService.findByUserId(req.user.id);
     } catch (error) {
       this.logger.error('Error fetching journal entries', error);
       Sentry.captureException(error, { extra: { context: 'findAll' } });
@@ -93,8 +96,12 @@ export class JournalController {
     status: 200,
     description: 'Journal entries fetched successfully.',
   })
-  async search(@Query() searchDto: SearchJournalDto): Promise<IJournal[]> {
+  async search(
+    @Query() searchDto: SearchJournalDto,
+    @Request() req: any,
+  ): Promise<IJournal[]> {
     try {
+      searchDto.userId = req.user.id;
       return await this.journalService.search(searchDto);
     } catch (error) {
       this.logger.error('Error searching journal entries', error);
@@ -112,8 +119,14 @@ export class JournalController {
     status: 200,
     description: 'Journal entries fetched successfully.',
   })
-  async findByUserId(@Param('userId') userId: string): Promise<IJournal[]> {
+  async findByUserId(
+    @Param('userId') userId: string,
+    @Request() req: any,
+  ): Promise<IJournal[]> {
     try {
+      if (req.user.id !== userId && req.user.role !== 'admin') {
+        throw new ForbiddenException('Cannot access another user journals');
+      }
       return await this.journalService.findByUserId(userId);
     } catch (error) {
       this.logger.error('Error fetching user journal entries', error);
@@ -131,8 +144,8 @@ export class JournalController {
     status: 200,
     description: 'Journal entry fetched successfully.',
   })
-  findOne(@Param('id') id: string) {
-    return this.journalService.findOne(id);
+  findOne(@Param('id') id: string, @Request() req: any) {
+    return this.journalService.findOneByUser(id, req.user.id);
   }
 
   @Put(':id')
@@ -142,8 +155,12 @@ export class JournalController {
     status: 200,
     description: 'Journal entry updated successfully.',
   })
-  update(@Param('id') id: string, @Body() updateJournalDto: UpdateJournalDto) {
-    return this.journalService.update(id, updateJournalDto);
+  update(
+    @Param('id') id: string,
+    @Body() updateJournalDto: UpdateJournalDto,
+    @Request() req: any,
+  ) {
+    return this.journalService.updateByUser(id, req.user.id, updateJournalDto);
   }
 
   @Delete(':id')
@@ -153,7 +170,7 @@ export class JournalController {
     status: 200,
     description: 'Journal entry deleted successfully.',
   })
-  remove(@Param('id') id: string) {
-    return this.journalService.remove(id);
+  remove(@Param('id') id: string, @Request() req: any) {
+    return this.journalService.removeByUser(id, req.user.id);
   }
 }

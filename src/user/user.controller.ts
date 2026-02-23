@@ -4,7 +4,6 @@ import {
   Post,
   Body,
   Param,
-  Patch,
   Delete,
   Put,
   Request,
@@ -38,6 +37,7 @@ export class UserController {
   @ApiOperation({ summary: 'Change user password' })
   @ApiResponse({ status: 200, description: 'Password changed successfully.' })
   changePassword(@Body() dto: UserPasswordDto, @Request() req: any) {
+    dto.userId = req.user.id;
     return this.userService.changePassword(
       dto,
       req.ip,

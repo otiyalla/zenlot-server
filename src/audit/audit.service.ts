@@ -23,10 +23,10 @@ export class AuditService {
     try {
       await this.prisma.auditLog.create({
         data: {
-          userId: input.userId ?? 'Unavailable',
+          userId: input.userId ?? null,
           action: input.action,
           resource: input.resource,
-          resourceId: input.resourceId ?? 'unknown',
+          resourceId: input.resourceId ?? null,
           changes: input.changes as Prisma.InputJsonValue,
           ipAddress: input.ipAddress ?? 'Unavailable',
           userAgent: input.userAgent ?? 'Unknown',

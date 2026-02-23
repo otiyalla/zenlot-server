@@ -34,6 +34,13 @@ export class UserService {
     @InjectQueue('deletion') private deletionQueue: Queue,
   ) {}
 
+  private stripPassword<T extends { password?: string | null }>(
+    user: T,
+  ): Omit<T, 'password'> {
+    const { password, ...safeUser } = user;
+    return safeUser;
+  }
+
   async create(user: CreateUserDto, ipAddress?: string, userAgent?: string) {
     const {
       email,
@@ -80,10 +87,7 @@ export class UserService {
     this.analytics.trackAccountCreated(result.id, 'email');
     await this.emailService.sendWelcomeEmail(email, fname, lname, language);
 
-    return {
-      ...result,
-      password: undefined,
-    };
+    return this.stripPassword(result);
   }
 
   async validateUser(
@@ -101,7 +105,7 @@ export class UserService {
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return null;
 
-    const newUser = { ...user, password: undefined };
+    const newUser = this.stripPassword(user);
 
     return {
       ...newUser,
@@ -132,8 +136,7 @@ export class UserService {
       if (!isMatch)
         throw new NotFoundException('User information is incorrect');
       const newUser = {
-        ...userFound,
-        password: undefined,
+        ...this.stripPassword(userFound),
         rules: userFound.rules,
       };
       await this.auditService.log({
@@ -194,9 +197,11 @@ export class UserService {
   }
 
   findAll() {
-    return this.prisma.user.findMany({
-      where: { deletedAt: null },
-    });
+    return this.prisma.user
+      .findMany({
+        where: { deletedAt: null },
+      })
+      .then((users) => users.map((user) => this.stripPassword(user)));
   }
 
   async findOne(id: string): Promise<any | null> {
@@ -208,7 +213,7 @@ export class UserService {
       throw new NotFoundException('User account is scheduled for deletion');
     }
 
-    return user;
+    return this.stripPassword(user);
   }
 
   async verifyEmailUpdate(id: string, email: string) {

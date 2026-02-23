@@ -79,7 +79,6 @@ export class AuthController {
   }
 
   @Post('resetpassword')
-  @Public()
   @ApiOperation({ summary: 'Reset password with email' })
   @ApiResponse({ status: 200, description: 'Password reset initiated.' })
   async resetPassword(@Body() body: { email: string }, @Request() req: any) {
