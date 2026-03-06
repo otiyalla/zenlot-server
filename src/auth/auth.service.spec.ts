@@ -108,8 +108,8 @@ describe('AuthService', () => {
     );
     expect(result).toEqual(
       expect.objectContaining({
-        access_token: 'access-token',
-        refresh_token: 'refresh-token',
+        accessToken: 'access-token',
+        refreshToken: 'refresh-token',
         user: expect.objectContaining({
           email: user.email,
           isAuthenticated: true,
@@ -255,8 +255,8 @@ describe('AuthService', () => {
       expect.objectContaining({
         id: 'user-1',
         email: 'user@example.com',
-        access_token: 'new-access-token',
-        refresh_token: 'new-refresh-token',
+        accessToken: 'new-access-token',
+        refreshToken: 'new-refresh-token',
       }),
     );
   });

@@ -29,26 +29,26 @@ export class AuthGuard implements CanActivate {
     const request = context.switchToHttp().getRequest();
     const tokens = this.extractTokenFromHeader(request);
 
-    if (!tokens || (!tokens.token && !tokens.refresh_token)) {
+    if (!tokens || (!tokens.token && !tokens.refreshToken)) {
       throw new UnauthorizedException('No tokens provided');
     }
 
-    const { token, refresh_token } = tokens;
+    const { token, refreshToken } = tokens;
     try {
-      const result = await this.authService.verify(token, refresh_token);
+      const result = await this.authService.verify(token, refreshToken);
       if (!result) {
         throw new UnauthorizedException('Invalid token');
       }
 
       // If new tokens were generated (refresh token was used), set them in response headers
       if (
-        result.access_token &&
-        result.refresh_token &&
-        result.access_token !== token
+        result.accessToken &&
+        result.refreshToken &&
+        result.accessToken !== token
       ) {
         const response = context.switchToHttp().getResponse();
-        response.setHeader('new-access-token', result.access_token);
-        response.setHeader('new-refresh-token', result.refresh_token);
+        response.setHeader('new-access-token', result.accessToken);
+        response.setHeader('new-refresh-token', result.refreshToken);
       }
 
       request.user = result;
@@ -63,12 +63,12 @@ export class AuthGuard implements CanActivate {
 
   private extractTokenFromHeader(
     request: any,
-  ): { token: string; refresh_token: string } | undefined {
-    const token = request.headers['access_token'];
-    const refresh_token = request.headers['refresh_access_token'];
-    if (!token && !refresh_token) {
+  ): { token: string; refreshToken: string } | undefined {
+    const token = request.headers['accessToken'];
+    const refreshToken = request.headers['refreshToken'];
+    if (!token && !refreshToken) {
       return undefined;
     }
-    return { token, refresh_token };
+    return { token, refreshToken };
   }
 }

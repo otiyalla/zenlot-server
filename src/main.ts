@@ -89,7 +89,7 @@ async function bootstrap() {
       .addApiKey(
         {
           type: 'apiKey',
-          name: 'access_token',
+          name: 'accessToken',
           in: 'header',
         },
         'access-token',

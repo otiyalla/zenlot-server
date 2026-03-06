@@ -30,7 +30,7 @@ describe('QuoteGateway room mapping', () => {
 
     const socket = {
       id: 'socket-1',
-      handshake: { auth: { access_token: 'token' }, headers: {} },
+      handshake: { auth: { accessToken: 'token' }, headers: {} },
       disconnect: jest.fn(),
       join: jest.fn(),
       leave: jest.fn(),

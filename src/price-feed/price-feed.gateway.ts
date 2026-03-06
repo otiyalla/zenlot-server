@@ -53,12 +53,12 @@ export class PriceFeedGateway implements OnModuleInit {
   }
 
   private extractAccessToken(socket: Socket): string | undefined {
-    const authToken = (socket.handshake?.auth as any)?.access_token;
+    const authToken = (socket.handshake?.auth as any)?.accessToken;
     if (typeof authToken === 'string' && authToken.trim()) {
       return authToken.trim();
     }
 
-    const headerToken = socket.handshake?.headers?.['access_token'];
+    const headerToken = socket.handshake?.headers?.['accessToken'];
     if (typeof headerToken === 'string' && headerToken.trim()) {
       return headerToken.trim();
     }

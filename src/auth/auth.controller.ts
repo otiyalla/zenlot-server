@@ -37,13 +37,13 @@ export class AuthController {
   @ApiOperation({ summary: 'Verify access and refresh tokens' })
   @ApiResponse({ status: 200, description: 'Token verification successful.' })
   async verify(
-    @Body() body: { token: string; refresh_token: string },
+    @Body() body: { token: string; refreshToken: string },
     @Request() req: any,
   ) {
-    const { token, refresh_token } = body;
+    const { token, refreshToken } = body;
     return this.authService.verify(
       token,
-      refresh_token,
+      refreshToken,
       req.ip,
       req.headers['user-agent'],
     );
@@ -53,10 +53,10 @@ export class AuthController {
   @Public()
   @ApiOperation({ summary: 'Refresh access token' })
   @ApiResponse({ status: 200, description: 'Token refreshed successfully.' })
-  async refresh(@Body() body: { refresh_token: string }, @Request() req: any) {
-    const { refresh_token } = body;
+  async refresh(@Body() body: { refreshToken: string }, @Request() req: any) {
+    const { refreshToken } = body;
     return this.authService.refreshTokens(
-      refresh_token,
+      refreshToken,
       req.ip,
       req.headers['user-agent'],
     );

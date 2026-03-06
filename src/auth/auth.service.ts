@@ -101,8 +101,8 @@ export class AuthService {
         userAgent,
       });
       return {
-        access_token: this.jwtService.sign(payload, options),
-        refresh_token: refreshTokenValue,
+        accessToken: this.jwtService.sign(payload, options),
+        refreshToken: refreshTokenValue,
         user: {
           ...user,
           isAuthenticated: true,
@@ -219,15 +219,15 @@ export class AuthService {
   }
 
   async verify(
-    access_token: string,
-    refresh_token?: string,
+    accessToken: string,
+    refreshToken?: string,
     ipAddress?: string,
     userAgent?: string,
   ) {
     try {
-      const payload = await this.verifyToken(access_token);
-      if (!payload && refresh_token) {
-        const { user, token } = await this.verifyRefreshToken(refresh_token);
+      const payload = await this.verifyToken(accessToken);
+      if (!payload && refreshToken) {
+        const { user, token } = await this.verifyRefreshToken(refreshToken);
 
         // Generate new tokens
         const newPayload = { email: user.email, sub: user.id };
@@ -247,11 +247,11 @@ export class AuthService {
 
         return {
           ...user,
-          access_token: this.jwtService.sign(newPayload, {
+          accessToken: this.jwtService.sign(newPayload, {
             secret: this.getAccessSecret(),
             expiresIn: this.getAccessExpiresIn(),
           }),
-          refresh_token: newRefreshTokenValue,
+          refreshToken: newRefreshTokenValue,
         };
       }
       if (payload?.id) {
@@ -294,11 +294,11 @@ export class AuthService {
     const refreshTokenValue = await this.createRefreshToken(payload);
 
     return {
-      access_token: this.jwtService.sign(payload, {
+      accessToken: this.jwtService.sign(payload, {
         secret: this.getAccessSecret(),
         expiresIn: this.getAccessExpiresIn(),
       }),
-      refresh_token: refreshTokenValue,
+      refreshToken: refreshTokenValue,
       user: {
         ...newUser,
         isAuthenticated: true,
@@ -469,11 +469,11 @@ export class AuthService {
         userAgent,
       });
       return {
-        access_token: this.jwtService.sign(payload, {
+        accessToken: this.jwtService.sign(payload, {
           secret: this.getAccessSecret(),
           expiresIn: this.getAccessExpiresIn(),
         }),
-        refresh_token: newRefreshTokenValue,
+        refreshToken: newRefreshTokenValue,
         user: {
           ...user,
           isAuthenticated: true,
