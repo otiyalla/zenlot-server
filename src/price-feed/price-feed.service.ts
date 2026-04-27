@@ -54,8 +54,8 @@ export class PriceFeedService {
     return job;
   }
 
-  async getFX(symbol: string) {
-    return this.quoteService.quote(symbol);
+  async getFX(symbol: { base: string; quote: string }) {
+    return this.quoteService.fxRate(symbol);
   }
 
   async onModuleInit() {

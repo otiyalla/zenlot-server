@@ -1,7 +1,5 @@
-import { Controller } from '@nestjs/common';
+import { Query, Controller, Get } from '@nestjs/common';
 import { PriceFeedService } from './price-feed.service';
-import { Get } from '@nestjs/common';
-import { Query, Param } from '@nestjs/common';
 import {
   ApiOperation,
   ApiParam,
@@ -36,7 +34,7 @@ export class PriceFeedController {
     return this.priceFeedService.addPriceFeedJob(symbol);
   }
 
-  @Get('exchangeRate/:symbol')
+  @Get('exchangeRate')
   @ApiOperation({ summary: 'Get exchange rate for a symbol' })
   @ApiParam({
     name: 'symbol',
@@ -47,7 +45,7 @@ export class PriceFeedController {
     status: 200,
     description: 'Exchange rate fetched successfully.',
   })
-  async getFX(@Param('symbol') symbol: string) {
-    return this.priceFeedService.getFX(symbol);
+  async getFX(@Query('base') base: string, @Query('quote') quote: string) {
+    return this.priceFeedService.getFX({ base, quote });
   }
 }

@@ -70,6 +70,30 @@ $ mau deploy
 
 With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
 
+## Container image
+
+This service now includes a production `Dockerfile`.
+
+```bash
+docker build -t zenlot-server .
+docker run --rm -p 3000:3000 \
+  -e NODE_ENV=production \
+  -e DATABASE_URL=postgresql://... \
+  -e JWT_SECRET=... \
+  -e JWT_REFRESH_SECRET=... \
+  zenlot-server
+```
+
+Set `RUN_DB_MIGRATIONS=true` if you want the container entrypoint to run `prisma migrate deploy` before booting the app.
+
+The production package build command is:
+
+```bash
+yarn build:with:package
+```
+
+The current host mapping outside the container is `localhost:3000` behind Nginx, exposed publicly as `https://api.zenlot.net`.
+
 ## Resources
 
 Check out a few resources that may come in handy when working with NestJS:
