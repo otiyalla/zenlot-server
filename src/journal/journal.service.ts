@@ -100,15 +100,20 @@ export class JournalService {
 
   async search(searchDto: SearchJournalDto): Promise<IJournal[]> {
     const where: Prisma.journalWhereInput = {};
+    const tradeWhere: Prisma.tradeWhereInput = {
+      plainText: { not: null },
+    };
 
     // User filter
     if (searchDto.userId !== undefined) {
       where.userId = searchDto.userId;
+      tradeWhere.userId = searchDto.userId;
     }
 
     // Symbol filter
     if (searchDto.symbol) {
       where.symbol = searchDto.symbol;
+      tradeWhere.symbol = searchDto.symbol;
     }
 
     // Tags filter - array contains
@@ -116,16 +121,22 @@ export class JournalService {
       where.tags = {
         hasSome: searchDto.tags,
       };
+      tradeWhere.tags = {
+        hasSome: searchDto.tags,
+      };
     }
 
     // Date range filter
     if (searchDto.start || searchDto.end) {
       where.createdAt = {};
+      tradeWhere.createdAt = {};
       if (searchDto.start) {
         where.createdAt.gte = new Date(searchDto.start);
+        tradeWhere.createdAt.gte = new Date(searchDto.start);
       }
       if (searchDto.end) {
         where.createdAt.lte = new Date(searchDto.end);
+        tradeWhere.createdAt.lte = new Date(searchDto.end);
       }
     }
 
@@ -148,19 +159,56 @@ export class JournalService {
         { title: { contains: query, mode: 'insensitive' } },
         { tags: { hasSome: [query] } },
       ];
-      // Add title search if title field exists
-      if (where.OR) {
-        where.OR.push({
-          title: { contains: query, mode: 'insensitive' } as any,
-        });
-      }
+      tradeWhere.OR = [
+        { plainText: { contains: query, mode: 'insensitive' } },
+        { symbol: { contains: query, mode: 'insensitive' } },
+        { tags: { hasSome: [query] } },
+      ];
     }
 
-    return this.prisma.journal.findMany({
+    const journals = (await this.prisma.journal.findMany({
       where,
       include: { author: true },
       orderBy: { createdAt: 'desc' },
-    }) as unknown as IJournal[];
+    })) as unknown as IJournal[];
+
+    const shouldIncludeTradeJournals =
+      searchDto.isPinned === undefined && searchDto.isArchived === undefined;
+
+    if (!shouldIncludeTradeJournals) {
+      return journals;
+    }
+
+    const tradeJournals = await this.prisma.trade.findMany({
+      where: tradeWhere,
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        userId: true,
+        symbol: true,
+        plainText: true,
+        editorState: true,
+        tags: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    const mappedTradeJournals: IJournal[] = tradeJournals.map((trade) => ({
+      id: trade.id,
+      tradeId: trade.id,
+      userId: trade.userId,
+      symbol: trade.symbol,
+      plainText: trade.plainText ?? undefined,
+      editorState: trade.editorState ?? undefined,
+      tags: trade.tags,
+      createdAt: trade.createdAt,
+      updatedAt: trade.updatedAt,
+    }));
+
+    return [...journals, ...mappedTradeJournals].sort(
+      (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+    );
   }
 
   update(id: string, journalUpdate: UpdateJournalDto) {

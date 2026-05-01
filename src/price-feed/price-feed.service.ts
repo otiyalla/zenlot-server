@@ -58,6 +58,10 @@ export class PriceFeedService {
     return this.quoteService.fxRate(symbol);
   }
 
+  async search(query: string) {
+    return this.quoteService.search(query);
+  }
+
   async onModuleInit() {
     await this.subscriber.subscribe('price-feed');
     this.subscriber.on('message', (channel, message) => {

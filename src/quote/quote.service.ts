@@ -11,6 +11,8 @@ const forex_url = 'https://financialmodelingprep.com/stable';
 @Injectable()
 export class QuoteService {
   private readonly logger = new Logger(QuoteService.name);
+  private availableForexCache: AvailableSymbols[] | null = null;
+  private availableForexRequest: Promise<AvailableSymbols[]> | null = null;
 
   server: Server;
 
@@ -25,9 +27,9 @@ export class QuoteService {
       baseURL: forex_url,
     });
     const fmpApiKey = this.configService.get<string>('FMP_API_KEY');
-    if (!fmpApiKey) throw 'FMP API key is required';
+    if (!fmpApiKey) throw new Error('FMP API key is required');
     try {
-      const { data } = await fmpClient({
+      const { data } = await fmpClient.request<fmpList[]>({
         url: '/forex-list',
         params: {
           apikey: fmpApiKey,
@@ -45,31 +47,59 @@ export class QuoteService {
   // This service can be expanded to include methods for fetching quotes, processing data, etc.
   // For now, it serves as a placeholder for future functionality related to quotes.
   async getAvailableForex(): Promise<AvailableSymbols[]> {
-    let data: AvailableSymbols[] = [];
+    if (this.availableForexCache) {
+      return this.availableForexCache;
+    }
 
-    try {
-      const available = await this.getFMPList();
-      if (available.length) {
-        data = available.map((data) => {
-          return {
+    if (!this.availableForexRequest) {
+      this.availableForexRequest = (async () => {
+        try {
+          const available = await this.getFMPList();
+          const data = available.map((data) => ({
             symbol: data.symbol,
             currency: data.toCurrency,
-          };
-        });
-      }
-      return data;
+          }));
+
+          this.availableForexCache = data;
+          return data;
+        } catch (error) {
+          if (this.availableForexCache) {
+            return this.availableForexCache;
+          }
+
+          this.logger.error('Error fetching available forex', error);
+          Sentry.captureException(error, {
+            extra: { context: 'getAvailableForex' },
+          });
+          throw new Error('Failed to fetch available forex');
+        } finally {
+          this.availableForexRequest = null;
+        }
+      })();
+    }
+
+    return this.availableForexRequest;
+  }
+
+  clearAvailableForexCache() {
+    this.availableForexCache = null;
+  }
+
+  async refreshAvailableForex(): Promise<AvailableSymbols[]> {
+    this.clearAvailableForexCache();
+
+    try {
+      return await this.getAvailableForex();
     } catch (error) {
-      if (error) {
-        data = [];
-      }
-      if (!data.length) {
+      if (!this.availableForexCache) {
         this.logger.error('Error fetching available forex', error);
         Sentry.captureException(error, {
-          extra: { context: 'getAvailableForex' },
+          extra: { context: 'refreshAvailableForex' },
         });
         throw new Error('Failed to fetch available forex');
       }
-      return data;
+
+      return this.availableForexCache;
     }
   }
 
@@ -95,7 +125,7 @@ export class QuoteService {
 
   async fxRate(symbol: { base: string; quote: string }) {
     try {
-      const mapCurrency = {
+      const mapCurrency: Record<string, number> = {
         JPY: 3,
         XAG: 3,
         XAU: 2,
@@ -109,7 +139,10 @@ export class QuoteService {
         );
       return { price: Number(cleanPrice) };
     } catch (error) {
-      this.logger.error(`Error fetching price for ${symbol}`, error);
+      this.logger.error(
+        `Error fetching price for ${symbol.base}/${symbol.quote}`,
+        error,
+      );
       Sentry.captureException(error, { extra: { symbol, context: 'fx rate' } });
       throw error;
     }
