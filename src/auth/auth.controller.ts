@@ -78,6 +78,7 @@ export class AuthController {
     return this.authService.signup(body, req.ip, req.headers['user-agent']);
   }
 
+  @Public()
   @Post('resetpassword')
   @ApiOperation({ summary: 'Reset password with email' })
   @ApiResponse({ status: 200, description: 'Password reset initiated.' })
