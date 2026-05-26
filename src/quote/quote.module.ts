@@ -3,54 +3,77 @@ import { QuoteService } from './quote.service';
 import { QuoteGateway } from './quote.gateway';
 import { AuthModule } from '../auth/auth.module';
 import { UniRateClient } from './provider/unirate.provider';
-import { FinageClient } from './provider/finage.provider';
-import { Currencies, FX_QUOTE, FxQuote } from './interface/quote.interface';
+import { MarketFxClient } from './provider/market-fx.provider';
+import {
+  Currencies,
+  FX_MARKET_QUOTE,
+  FX_QUOTE,
+  FxMarketQuote,
+  FxQuote,
+} from './interface/quote.interface';
 import { ConfigService } from '@nestjs/config';
 
 @Module({
   imports: [AuthModule],
   providers: [
     UniRateClient,
-    FinageClient,
+    MarketFxClient,
     {
       provide: FX_QUOTE,
-      inject: [ConfigService, UniRateClient, FinageClient],
+      inject: [ConfigService, MarketFxClient, UniRateClient],
       useFactory: (
         configService: ConfigService,
+        marketFxClient: MarketFxClient,
         uniRateClient: UniRateClient,
-        finageClient: FinageClient,
       ): FxQuote => {
+        const hasMarketFx = !!configService.get<string>('TWELVEDATA_API_KEY');
         const hasUniRate = !!configService.get<string>('UNIRATE_API_KEY');
-        const hasFinage = !!configService.get<string>('FINAGE_API_KEY');
         const logger = new Logger('FxQuoteProvider');
 
         return {
           async fxRate(symbols: Currencies) {
-            if (hasUniRate) {
+            if (hasMarketFx) {
               try {
-                return await uniRateClient.fxRate(symbols);
+                return await marketFxClient.fxRate(symbols);
               } catch (error) {
-                if (!hasFinage) {
+                if (!hasUniRate) {
                   throw error;
                 }
 
                 logger.warn(
-                  'UniRate failed. Falling back to Finage for fx quote.',
+                  'Market FX failed. Falling back to UniRate for fx quote.',
                 );
               }
             }
 
-            if (hasFinage) {
-              try {
-                return finageClient.fxRate(symbols);
-              } catch (error) {
-                logger.warn('Finage error: ', error);
-                throw error;
-              }
+            if (hasUniRate) {
+              return uniRateClient.fxRate(symbols);
             }
 
             throw new Error(
-              'No fx quote provider configured. Set UNIRATE_API_KEY or FINAGE_API_KEY.',
+              'No fx quote provider configured. Set TWELVEDATA_API_KEY or UNIRATE_API_KEY.',
+            );
+          },
+        };
+      },
+    },
+    {
+      provide: FX_MARKET_QUOTE,
+      inject: [ConfigService, MarketFxClient],
+      useFactory: (
+        configService: ConfigService,
+        marketFxClient: MarketFxClient,
+      ): FxMarketQuote => {
+        const hasMarketFx = !!configService.get<string>('TWELVEDATA_API_KEY');
+
+        if (hasMarketFx) {
+          return marketFxClient;
+        }
+
+        return {
+          getMarketQuote() {
+            throw new Error(
+              'Market quote provider is not configured. Set TWELVEDATA_API_KEY.',
             );
           },
         };
@@ -59,6 +82,6 @@ import { ConfigService } from '@nestjs/config';
     QuoteGateway,
     QuoteService,
   ],
-  exports: [QuoteService],
+  exports: [QuoteService, QuoteGateway],
 })
 export class QuoteModule {}

@@ -22,7 +22,8 @@ export const buildWelcomeTemplate = ({
   const copyByLanguage = {
     en: {
       subject: `You're in! Here's what you can do next with Zenlot ${fname}`,
-      heroAnimationUrl: 'https://pub-61217234bef24505baffb476955a8686.r2.dev/zenlot_welcome_hero.gif',
+      heroAnimationUrl:
+        'https://pub-61217234bef24505baffb476955a8686.r2.dev/zenlot_welcome_hero.gif',
       heroAlt: 'Track your growth over time',
       heading: `👋 Welcome to Zenlot, ${fname}!`,
       intro:
@@ -41,7 +42,8 @@ export const buildWelcomeTemplate = ({
     },
     fr: {
       subject: `Bienvenue sur Zenlot : prochaines etapes pour ${fname}`,
-      heroAnimationUrl: 'https://pub-61217234bef24505baffb476955a8686.r2.dev/zenlot_welcome_hero.gif',
+      heroAnimationUrl:
+        'https://pub-61217234bef24505baffb476955a8686.r2.dev/zenlot_welcome_hero.gif',
       heroAlt: 'Suivez votre progression au fil du temps',
       heading: `👋 Bienvenue sur Zenlot, ${fname}!`,
       intro:

@@ -12,6 +12,19 @@ import { Namespace, Server, Socket } from 'socket.io';
 import { getCorsOrigins } from '../config/cors.config';
 import { AuthService } from '../auth/auth.service';
 
+interface AuthUser {
+  id: string;
+}
+
+interface AuthenticatedSocket extends Socket {
+  user?: AuthUser;
+  userRoom?: string;
+}
+
+interface SocketHandshakeAuth {
+  accessToken?: unknown;
+}
+
 @WebSocketGateway({
   cors: {
     origin: getCorsOrigins(),
@@ -37,6 +50,10 @@ export class QuoteGateway implements OnModuleInit, OnModuleDestroy {
     return `user_${userId}`;
   }
 
+  emitTradeClosed(userId: string, trade: unknown): void {
+    this.server.to(this.getUserRoom(userId)).emit('trade-closed', trade);
+  }
+
   onModuleInit() {
     // Handle client connections
     this.server.setMaxListeners(20);
@@ -49,14 +66,17 @@ export class QuoteGateway implements OnModuleInit, OnModuleDestroy {
         return;
       }
 
-      const user = await this.authService.verifyToken(accessToken);
-      if (!user) {
+      const user = (await this.authService.verifyToken(
+        accessToken,
+      )) as AuthUser | null;
+      if (!user?.id) {
         this.logger.warn(`Socket auth failed: ${socket.id}`);
         socket.disconnect(true);
         return;
       }
 
-      (socket as any).user = user;
+      const authenticatedSocket = socket as AuthenticatedSocket;
+      authenticatedSocket.user = user;
       this.logger.log(
         `Client connected: ${socket.id} - Total connected: ${this.getConnectedClientsCount()}`,
       );
@@ -64,8 +84,8 @@ export class QuoteGateway implements OnModuleInit, OnModuleDestroy {
 
       // Join user to their personal room
       const userRoom = this.getUserRoom(user.id);
-      (socket as any).userRoom = userRoom;
-      socket.join(userRoom);
+      authenticatedSocket.userRoom = userRoom;
+      void socket.join(userRoom);
 
       socket.on('disconnect', () => {
         this.logger.log(
@@ -85,7 +105,8 @@ export class QuoteGateway implements OnModuleInit, OnModuleDestroy {
   }
 
   private extractAccessToken(socket: Socket): string | undefined {
-    const authToken = (socket.handshake?.auth as any)?.accessToken;
+    const authToken = (socket.handshake.auth as SocketHandshakeAuth)
+      .accessToken;
     if (typeof authToken === 'string' && authToken.trim()) {
       return authToken.trim();
     }
@@ -97,7 +118,7 @@ export class QuoteGateway implements OnModuleInit, OnModuleDestroy {
 
     const authorization = socket.handshake?.headers?.authorization;
     if (typeof authorization === 'string') {
-      const match = authorization.match(/^Bearer\\s+(.+)$/i);
+      const match = authorization.match(/^Bearer\s+(.+)$/i);
       if (match?.[1]) {
         return match[1].trim();
       }
@@ -108,14 +129,15 @@ export class QuoteGateway implements OnModuleInit, OnModuleDestroy {
 
   private clearSockets(socket: Socket, shutdown?: boolean) {
     try {
+      const authenticatedSocket = socket as AuthenticatedSocket;
       const userRoom =
-        (socket as any).userRoom ??
-        ((socket as any).user?.id
-          ? this.getUserRoom((socket as any).user.id)
+        authenticatedSocket.userRoom ??
+        (authenticatedSocket.user?.id
+          ? this.getUserRoom(authenticatedSocket.user.id)
           : undefined);
       this.connectedSockets.delete(socket.id);
       if (userRoom) {
-        socket.leave(userRoom);
+        void socket.leave(userRoom);
       }
       //socket.disconnect(true);
       if (shutdown) socket.removeAllListeners();
@@ -150,7 +172,7 @@ export class QuoteGateway implements OnModuleInit, OnModuleDestroy {
           ? (this.server as Server)
           : (this.server as Namespace).server;
 
-      closeTarget?.close?.(() => {
+      void closeTarget?.close?.(() => {
         this.logger.log('QuoteGateway: Server closed successfully');
       });
     } catch (error) {
