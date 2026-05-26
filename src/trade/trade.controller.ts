@@ -8,6 +8,7 @@ import {
   Param,
   Delete,
   Request,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { TradeService } from './trade.service';
 import { CreateTradeDto } from './dto/create-trade.dto';
@@ -15,6 +16,8 @@ import { UpdateTradeDto } from './dto/update-trade.dto';
 import { DateRangeDto } from './dto/date-range.dto';
 import { SymbolDateRangeDto } from './dto/symbol-date-range.dto';
 import { MultiTradeDto } from './dto/multiple-properties.dto';
+import { MultipleSymbolsDto } from './dto/multiple-symbols.dto';
+import { TradeOwnerDto } from './dto/trade-owner.dto';
 import {
   ApiOperation,
   ApiParam,
@@ -53,7 +56,7 @@ export class TradeController {
   @ApiOperation({ summary: 'Get all trades for a user' })
   @ApiQuery({ name: 'userId', required: true, description: 'Trade owner id' })
   @ApiResponse({ status: 200, description: 'Trades fetched successfully.' })
-  async findAll(@Query() query: { userId: string }, @Request() req: any) {
+  async findAll(@Query() query: TradeOwnerDto, @Request() req: any) {
     query.userId = req.user.id;
     return this.tradeService.findAll(query);
   }
@@ -62,7 +65,7 @@ export class TradeController {
   @ApiOperation({ summary: 'Get a trade by id' })
   @ApiParam({ name: 'id', required: true, description: 'Trade id' })
   @ApiResponse({ status: 200, description: 'Trade fetched successfully.' })
-  async findOne(@Param('id') id: string, @Request() req: any) {
+  async findOne(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
     return this.tradeService.findOneForUser(id, req.user.id);
   }
 
@@ -170,10 +173,7 @@ export class TradeController {
     description: 'Instrument symbols',
   })
   @ApiResponse({ status: 200, description: 'Trades fetched successfully.' })
-  async findSymbols(
-    @Query() dto: { symbols: string[]; userId: string },
-    @Request() req: any,
-  ) {
+  async findSymbols(@Query() dto: MultipleSymbolsDto, @Request() req: any) {
     dto.userId = req.user.id;
     return this.tradeService.findByMultipleSymbols(dto);
   }
@@ -215,7 +215,7 @@ export class TradeController {
   @ApiParam({ name: 'id', required: true, description: 'Trade id' })
   @ApiResponse({ status: 200, description: 'Trade updated successfully.' })
   async update(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() updateTradeDto: UpdateTradeDto,
     @Request() req: any,
   ) {
@@ -226,7 +226,7 @@ export class TradeController {
   @ApiOperation({ summary: 'Delete a trade by id' })
   @ApiParam({ name: 'id', required: true, description: 'Trade id' })
   @ApiResponse({ status: 200, description: 'Trade deleted successfully.' })
-  async remove(@Param('id') id: string, @Request() req: any) {
+  async remove(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
     return this.tradeService.removeForUser(id, req.user.id);
   }
 }

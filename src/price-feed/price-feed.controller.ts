@@ -1,6 +1,10 @@
 import { Query, Controller, Get } from '@nestjs/common';
 import { PriceFeedService } from './price-feed.service';
 import {
+  CreatePriceFeedDto,
+  ExchangeRateDto,
+} from './dto/create-price-feed.dto';
+import {
   ApiOperation,
   ApiParam,
   ApiQuery,
@@ -26,12 +30,12 @@ export class PriceFeedController {
     status: 200,
     description: 'Price feed job queued successfully.',
   })
-  async getPriceFeed(@Query() symbol: string) {
+  async getPriceFeed(@Query() query: CreatePriceFeedDto) {
     console.log(
       'PriceFeedController: getPriceFeed called with symbol:',
-      symbol,
+      query.symbol,
     );
-    return this.priceFeedService.addPriceFeedJob(symbol);
+    return this.priceFeedService.addPriceFeedJob(query.symbol);
   }
 
   @Get('exchangeRate')
@@ -45,7 +49,7 @@ export class PriceFeedController {
     status: 200,
     description: 'Exchange rate fetched successfully.',
   })
-  async getFX(@Query('base') base: string, @Query('quote') quote: string) {
-    return this.priceFeedService.getFX({ base, quote });
+  async getFX(@Query() query: ExchangeRateDto) {
+    return this.priceFeedService.getFX(query);
   }
 }

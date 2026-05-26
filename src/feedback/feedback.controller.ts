@@ -6,9 +6,11 @@ import {
   Param,
   Patch,
   Request,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { FeedbackService } from './feedback.service';
 import { CreateFeedbackDto } from './dto/create-feedback.dto';
+import { UpdateFeedbackStatusDto } from './dto/update-feedback-status.dto';
 import { Public } from '../custom_decorator/public.decorator';
 import {
   ApiOperation,
@@ -49,8 +51,8 @@ export class FeedbackController {
     description: 'Feedback status updated successfully.',
   })
   async updateFeedbackStatus(
-    @Param('id') feedbackId: string,
-    @Body() body: { status: string },
+    @Param('id', ParseUUIDPipe) feedbackId: string,
+    @Body() body: UpdateFeedbackStatusDto,
   ) {
     return this.feedbackService.updateFeedbackStatus(feedbackId, body.status);
   }

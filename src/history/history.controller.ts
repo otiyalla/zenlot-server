@@ -6,6 +6,7 @@ import {
   Patch,
   Param,
   Delete,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { HistoryService } from './history.service';
 import { CreateHistoryDto } from './dto/create-history.dto';
@@ -51,7 +52,7 @@ export class HistoryController {
     status: 200,
     description: 'History entry fetched successfully.',
   })
-  findOne(@Param('id') id: string) {
+  findOne(@Param('id', ParseIntPipe) id: string) {
     return this.historyService.findOne(+id);
   }
 
@@ -62,7 +63,10 @@ export class HistoryController {
     status: 200,
     description: 'History entry updated successfully.',
   })
-  update(@Param('id') id: string, @Body() updateHistoryDto: UpdateHistoryDto) {
+  update(
+    @Param('id', ParseIntPipe) id: string,
+    @Body() updateHistoryDto: UpdateHistoryDto,
+  ) {
     return this.historyService.update(+id, updateHistoryDto);
   }
 
@@ -73,7 +77,7 @@ export class HistoryController {
     status: 200,
     description: 'History entry deleted successfully.',
   })
-  remove(@Param('id') id: string) {
+  remove(@Param('id', ParseIntPipe) id: string) {
     return this.historyService.remove(+id);
   }
 }

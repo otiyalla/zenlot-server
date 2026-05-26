@@ -1,14 +1,6 @@
 import { PartialType } from '@nestjs/mapped-types';
 import { CreateJournalDto } from './create-journal.dto';
-import {
-  IsString,
-  IsOptional,
-  IsNumber,
-  IsBoolean,
-  IsDate,
-  IsJSON,
-  IsArray,
-} from 'class-validator';
+import { IsString, IsOptional, IsBoolean, IsArray } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class UpdateJournalDto extends PartialType(CreateJournalDto) {
@@ -19,6 +11,7 @@ export class UpdateJournalDto extends PartialType(CreateJournalDto) {
 
   @IsOptional()
   @IsArray()
+  @IsString({ each: true })
   @ApiProperty({ description: 'The user tags' })
   tags?: string[];
 

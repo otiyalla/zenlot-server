@@ -1,7 +1,6 @@
 import { PartialType } from '@nestjs/mapped-types';
 import { CreateUserDto } from './create-user.dto';
 import {
-  IsNumber,
   IsBoolean,
   IsDate,
   IsOptional,
@@ -15,9 +14,11 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
   id?: string;
 
   @IsDate()
+  @IsOptional()
   createdAt: Date;
 
   @IsDate()
+  @IsOptional()
   updatedAt: Date;
 
   @IsDate()
@@ -29,7 +30,8 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
   deleteScheduledFor?: Date;
 
   @IsBoolean()
-  emailVerified: boolean;
+  @IsOptional()
+  emailVerified?: boolean;
 
   @IsString()
   @IsOptional()

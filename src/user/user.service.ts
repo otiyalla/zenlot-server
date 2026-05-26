@@ -232,14 +232,28 @@ export class UserService {
     ipAddress?: string,
     userAgent?: string,
   ) {
-    delete dto.id;
-    const updatedFields = Object.entries(dto)
+    const editableData = {
+      fname: dto.fname,
+      lname: dto.lname,
+      email: dto.email,
+      language: dto.language,
+      accountCurrency: dto.accountCurrency,
+      theme: dto.theme,
+      rules: dto.rules,
+      timezone: dto.timezone,
+      togglePipValue: dto.togglePipValue,
+      tags: dto.tags,
+    };
+    const updatedFields = Object.entries(editableData)
       .filter(([, value]) => value !== undefined)
       .map(([key]) => key);
     if (dto.email) {
       await this.verifyEmailUpdate(id, dto.email);
     }
-    const data: any = { ...dto, updatedAt: new Date() };
+    const data: any = Object.fromEntries(
+      Object.entries(editableData).filter(([, value]) => value !== undefined),
+    );
+    data.updatedAt = new Date();
     const update = await this.prisma.user.update({ where: { id }, data });
 
     // Log user update
@@ -253,13 +267,6 @@ export class UserService {
       userAgent,
     });
     this.analytics.trackUserUpdated(id, updatedFields);
-    if (dto.emailVerified === true) {
-      this.analytics.trackEmailVerified(id);
-    }
-    if (dto.emailVerificationToken && dto.emailVerified !== true) {
-      this.analytics.trackEmailVerificationRequested(id);
-    }
-
     this.userGateway.server.emit('updated-user', {
       ...update,
       password: undefined,
