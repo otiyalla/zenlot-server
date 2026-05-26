@@ -42,10 +42,11 @@ model trade {
   journal            journal[]
 
   @@index([userId])
+  @@index([status, symbol])
 }
 
 model journal {
-  id          String      @id @default(uuid())
+  id          String   @id @default(uuid())
   userId      String
   symbol      String
   title       String?
@@ -65,29 +66,29 @@ model journal {
 }
 
 model user {
-  id                    String         @id @default(uuid())
-  fname                 String         @db.VarChar(256)
-  lname                 String         @db.VarChar(256)
-  email                 String         @unique @db.VarChar(256)
-  role                  String
-  tags                  String[]
-  language              String
-  password              String
-  accountCurrency       String
-  theme                 String         @default("system")
-  rules                 Json
-  journalEntries        journal[]      @relation("UserJournal")
-  createdAt             DateTime       @default(now())
-  updatedAt             DateTime       @updatedAt
-  trade                 trade[]
-  timezone              String         @default("UTC")
-  togglePipValue        Boolean        @default(false)
-  refreshTokens         RefreshToken[]
-  auditLogs             auditLog[]
-  deletedAt             DateTime?
-  deleteScheduledFor    DateTime?
-  emailVerified         Boolean        @default(false)
-  emailVerificationToken String?
+  id                           String         @id @default(uuid())
+  fname                        String         @db.VarChar(256)
+  lname                        String         @db.VarChar(256)
+  email                        String         @unique @db.VarChar(256)
+  role                         String
+  tags                         String[]
+  language                     String
+  password                     String
+  accountCurrency              String
+  theme                        String         @default("system")
+  rules                        Json
+  journalEntries               journal[]      @relation("UserJournal")
+  createdAt                    DateTime       @default(now())
+  updatedAt                    DateTime       @updatedAt
+  trade                        trade[]
+  timezone                     String         @default("UTC")
+  togglePipValue               Boolean        @default(false)
+  refreshTokens                RefreshToken[]
+  auditLogs                    auditLog[]
+  deletedAt                    DateTime?
+  deleteScheduledFor           DateTime?
+  emailVerified                Boolean        @default(false)
+  emailVerificationToken       String?
   emailVerificationTokenExpiry DateTime?
 }
 
@@ -104,16 +105,16 @@ model RefreshToken {
 }
 
 model auditLog {
-  id          String   @id @default(uuid())
-  userId      String?
-  user        user?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  action      String
-  resource    String
-  resourceId  String?
-  changes     Json?
-  ipAddress   String?
-  userAgent   String?
-  createdAt   DateTime @default(now())
+  id         String   @id @default(uuid())
+  userId     String?
+  user       user?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     String
+  resource   String
+  resourceId String?
+  changes    Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
 
   @@index([userId])
   @@index([action])
