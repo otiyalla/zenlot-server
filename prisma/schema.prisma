@@ -37,6 +37,7 @@ model trade {
   closedPrice        Float?
   closedExchangeRate Float?
   closedReason       String?
+  isAutoClosed       Boolean   @default(false)
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
   journal            journal[]

@@ -85,7 +85,6 @@ export class TradeAutoCloseService implements OnModuleInit {
           base: symbol.substring(0, 3),
           quote: symbol.substring(3, 6),
         });
-        console.log('result: ', result);
         price = result.price;
         if (!Number.isFinite(price)) {
           throw new Error(`Invalid price returned for ${symbol}`);
@@ -187,7 +186,6 @@ export class TradeAutoCloseService implements OnModuleInit {
     }
     return null;
   }
-
   private async closeTriggeredTrade(
     trade: MonitoredTrade,
     trigger: Trigger,
@@ -200,6 +198,7 @@ export class TradeAutoCloseService implements OnModuleInit {
         closedPrice: trigger.price,
         closedReason: trigger.reason,
         closedExchangeRate,
+        isAutoClosed: true,
         status: trigger.status,
       },
     });

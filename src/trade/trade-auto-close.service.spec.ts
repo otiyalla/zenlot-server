@@ -26,6 +26,7 @@ type TradeUpdateArg = {
     closedExchangeRate: number;
     closedPrice: number;
     closedReason: string;
+    isAutoClosed: boolean;
     status: string;
   };
 };
@@ -129,6 +130,7 @@ describe('TradeAutoCloseService', () => {
       expect(updateArg.data.closedExchangeRate).toBe(1);
       expect(updateArg.data.closedPrice).toBe(closedPrice);
       expect(updateArg.data.closedReason).toBe(reason);
+      expect(updateArg.data.isAutoClosed).toBe(true);
       expect(updateArg.data.status).toBe(status);
       expect(gateway.emitTradeClosed).toHaveBeenCalledWith(
         'user-1',
@@ -149,8 +151,8 @@ describe('TradeAutoCloseService', () => {
 
     expect(quoteService.fxRate).toHaveBeenCalledTimes(1);
     expect(quoteService.fxRate).toHaveBeenCalledWith({
-      quote: 'EUR',
-      base: 'USD',
+      base: 'EUR',
+      quote: 'USD',
     });
     expect(prisma.trade.updateMany).not.toHaveBeenCalled();
   });
@@ -193,8 +195,8 @@ describe('TradeAutoCloseService', () => {
     await service.scanOpenTrades();
 
     expect(quoteService.fxRate).toHaveBeenNthCalledWith(2, {
-      quote: 'USD',
-      base: 'CAD',
+      base: 'USD',
+      quote: 'CAD',
     });
     expect(
       getLastUpdateArg(prisma.trade.updateMany).data.closedExchangeRate,
