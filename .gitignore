@@ -61,15 +61,10 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 # Sentry Config File
 .sentryclirc
 
+
 # Cursor Skills
 .cursor
 
-#Postman
+# Postman
 .postman
 /postman
-
-AWS Route 53 DNS NS records
-#ns-1396.awsdns-46.org.
-#ns-907.awsdns-49.net.
-#ns-184.awsdns-23.com.
-#ns-1934.awsdns-49.co.uk.
