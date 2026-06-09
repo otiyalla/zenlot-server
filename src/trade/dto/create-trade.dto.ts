@@ -5,7 +5,6 @@ import {
   IsOptional,
   ValidateNested,
   IsUUID,
-  IsBoolean,
   IsIn,
   IsPositive,
   Matches,
@@ -79,16 +78,6 @@ export class CreateTradeDto {
   takeProfit: ExitValue;
 
   @IsString()
-  @IsIn([
-    'open',
-    'close',
-    'closed',
-    'reached_tp',
-    'reached_sl',
-    'pending',
-    'closed_in_profit',
-    'closed_in_loss',
-  ])
   @IsOptional()
   @ApiProperty({ description: 'The trade journal content in plain text' })
   plainText: string | undefined | null;
@@ -99,16 +88,18 @@ export class CreateTradeDto {
   editorState: string | undefined | null;
 
   @IsString()
+  @IsIn([
+    'open',
+    'close',
+    'closed',
+    'reached_tp',
+    'reached_sl',
+    'pending',
+    'closed_in_profit',
+    'closed_in_loss',
+  ])
   @ApiProperty({ description: 'The trade status' })
   status: string;
-
-  @IsBoolean()
-  @IsOptional()
-  @ApiProperty({
-    required: false,
-    description: 'Whether the trade was closed automatically',
-  })
-  isAutoClosed?: boolean;
 
   @IsNumber()
   @IsOptional()
