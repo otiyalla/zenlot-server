@@ -64,7 +64,8 @@ export class AuthGuard implements CanActivate {
   private extractTokenFromHeader(
     request: any,
   ): { token: string; refreshToken: string } | undefined {
-    const token = request.headers['accesstoken'] ?? request.headers['accessToken'];
+    const token =
+      request.headers['accesstoken'] ?? request.headers['accessToken'];
     const refreshToken = request.headers['refreshToken'];
     if (!token && !refreshToken) {
       return undefined;

@@ -72,8 +72,8 @@ export class UniRateClient implements FxQuote {
         params: {
           api_key: this.apiKey,
           amount: 1,
-          to: base.toUpperCase(),
-          from: quote.toUpperCase(),
+          from: base.toUpperCase(),
+          to: quote.toUpperCase(),
         },
       });
 

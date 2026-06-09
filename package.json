@@ -28,6 +28,7 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "db:migrate": "prisma migrate dev --config prisma/prisma.config.ts",
+    "db:migrate:local": "NODE_ENV=local ts-node scripts/migrate-prod.ts",
     "db:migrate:dev": "NODE_ENV=dev ts-node scripts/migrate-prod.ts",
     "db:migrate:prod": "NODE_ENV=prod ts-node scripts/migrate-prod.ts",
     "db:migrate:deploy": "prisma migrate deploy --config prisma/prisma.config.ts",
