@@ -4,7 +4,14 @@ import axios from 'axios';
 import { AvailableSymbols, fmpList } from './dto/quote-list.dto';
 import { Server } from 'socket.io';
 import { ConfigService } from '@nestjs/config';
-import { Currencies, FxQuote, FX_QUOTE } from './interface/quote.interface';
+import {
+  Currencies,
+  FxMarketQuote,
+  FxMarketQuoteSnapshot,
+  FxQuote,
+  FX_MARKET_QUOTE,
+  FX_QUOTE,
+} from './interface/quote.interface';
 
 const forex_url = 'https://financialmodelingprep.com/stable';
 
@@ -16,6 +23,7 @@ export class QuoteService {
 
   constructor(
     @Inject(FX_QUOTE) private readonly fxQuote: FxQuote,
+    @Inject(FX_MARKET_QUOTE) private readonly fxMarketQuote: FxMarketQuote,
     private readonly configService: ConfigService,
   ) {}
 
@@ -90,6 +98,24 @@ export class QuoteService {
       this.logger.error(`Error fetching price for ${symbol}`, error);
       Sentry.captureException(error, { extra: { symbol, context: 'quote' } });
       throw error; // Re-throw to let Bull handle retries or failures
+    }
+  }
+
+  async getMarketQuote(symbol: {
+    base: string;
+    quote: string;
+  }): Promise<FxMarketQuoteSnapshot> {
+    try {
+      return await this.fxMarketQuote.getMarketQuote(symbol as Currencies);
+    } catch (error) {
+      this.logger.error(
+        `Error fetching market quote for ${symbol.base}/${symbol.quote}`,
+        error,
+      );
+      Sentry.captureException(error, {
+        extra: { symbol, context: 'getMarketQuote' },
+      });
+      throw error;
     }
   }
 

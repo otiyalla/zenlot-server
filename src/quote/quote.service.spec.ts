@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { QuoteService } from './quote.service';
-import { FX_QUOTE } from './interface/quote.interface';
+import { FX_MARKET_QUOTE, FX_QUOTE } from './interface/quote.interface';
 
 describe('QuoteService', () => {
   let service: QuoteService;
@@ -14,6 +14,12 @@ describe('QuoteService', () => {
           provide: FX_QUOTE,
           useValue: {
             fxRate: jest.fn(),
+          },
+        },
+        {
+          provide: FX_MARKET_QUOTE,
+          useValue: {
+            getMarketQuote: jest.fn(),
           },
         },
         {

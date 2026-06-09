@@ -63,7 +63,6 @@ export class TradeController {
   @ApiParam({ name: 'id', required: true, description: 'Trade id' })
   @ApiResponse({ status: 200, description: 'Trade fetched successfully.' })
   async findOne(@Param('id') id: string, @Request() req: any) {
-    console.log('Finding trade with id: ', id);
     return this.tradeService.findOneForUser(id, req.user.id);
   }
 

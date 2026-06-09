@@ -1,0 +1,1 @@
+ALTER TABLE "trade" ADD COLUMN "isAutoClosed" BOOLEAN NOT NULL DEFAULT false;
