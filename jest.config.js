@@ -14,7 +14,7 @@ module.exports = {
     '^src/(.*)$': '<rootDir>/src/$1',
   },
   collectCoverageFrom: ['**/*.(t|j)s'],
-  coverageDirectory: '../coverage',
+  coverageDirectory: './coverage',
   coveragePathIgnorePatterns: [
     '/node_modules/',
     'jest.config.js',

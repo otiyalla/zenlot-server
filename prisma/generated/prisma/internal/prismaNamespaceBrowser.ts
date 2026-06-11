@@ -98,6 +98,7 @@ export const TradeScalarFieldEnum = {
   closedPrice: 'closedPrice',
   closedExchangeRate: 'closedExchangeRate',
   closedReason: 'closedReason',
+  isAutoClosed: 'isAutoClosed',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const

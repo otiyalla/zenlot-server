@@ -70,6 +70,7 @@ export type TradeMinAggregateOutputType = {
   closedPrice: number | null
   closedExchangeRate: number | null
   closedReason: string | null
+  isAutoClosed: boolean | null
   createdAt: Date | null
   updatedAt: Date | null
 }
@@ -94,6 +95,7 @@ export type TradeMaxAggregateOutputType = {
   closedPrice: number | null
   closedExchangeRate: number | null
   closedReason: string | null
+  isAutoClosed: boolean | null
   createdAt: Date | null
   updatedAt: Date | null
 }
@@ -121,6 +123,7 @@ export type TradeCountAggregateOutputType = {
   closedPrice: number
   closedExchangeRate: number
   closedReason: number
+  isAutoClosed: number
   createdAt: number
   updatedAt: number
   _all: number
@@ -171,6 +174,7 @@ export type TradeMinAggregateInputType = {
   closedPrice?: true
   closedExchangeRate?: true
   closedReason?: true
+  isAutoClosed?: true
   createdAt?: true
   updatedAt?: true
 }
@@ -195,6 +199,7 @@ export type TradeMaxAggregateInputType = {
   closedPrice?: true
   closedExchangeRate?: true
   closedReason?: true
+  isAutoClosed?: true
   createdAt?: true
   updatedAt?: true
 }
@@ -222,6 +227,7 @@ export type TradeCountAggregateInputType = {
   closedPrice?: true
   closedExchangeRate?: true
   closedReason?: true
+  isAutoClosed?: true
   createdAt?: true
   updatedAt?: true
   _all?: true
@@ -336,6 +342,7 @@ export type TradeGroupByOutputType = {
   closedPrice: number | null
   closedExchangeRate: number | null
   closedReason: string | null
+  isAutoClosed: boolean
   createdAt: Date
   updatedAt: Date
   _count: TradeCountAggregateOutputType | null
@@ -386,6 +393,7 @@ export type tradeWhereInput = {
   closedPrice?: Prisma.FloatNullableFilter<"trade"> | number | null
   closedExchangeRate?: Prisma.FloatNullableFilter<"trade"> | number | null
   closedReason?: Prisma.StringNullableFilter<"trade"> | string | null
+  isAutoClosed?: Prisma.BoolFilter<"trade"> | boolean
   createdAt?: Prisma.DateTimeFilter<"trade"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"trade"> | Date | string
   user?: Prisma.XOR<Prisma.UserScalarRelationFilter, Prisma.userWhereInput>
@@ -415,6 +423,7 @@ export type tradeOrderByWithRelationInput = {
   closedPrice?: Prisma.SortOrderInput | Prisma.SortOrder
   closedExchangeRate?: Prisma.SortOrderInput | Prisma.SortOrder
   closedReason?: Prisma.SortOrderInput | Prisma.SortOrder
+  isAutoClosed?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   user?: Prisma.userOrderByWithRelationInput
@@ -447,6 +456,7 @@ export type tradeWhereUniqueInput = Prisma.AtLeast<{
   closedPrice?: Prisma.FloatNullableFilter<"trade"> | number | null
   closedExchangeRate?: Prisma.FloatNullableFilter<"trade"> | number | null
   closedReason?: Prisma.StringNullableFilter<"trade"> | string | null
+  isAutoClosed?: Prisma.BoolFilter<"trade"> | boolean
   createdAt?: Prisma.DateTimeFilter<"trade"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"trade"> | Date | string
   user?: Prisma.XOR<Prisma.UserScalarRelationFilter, Prisma.userWhereInput>
@@ -476,6 +486,7 @@ export type tradeOrderByWithAggregationInput = {
   closedPrice?: Prisma.SortOrderInput | Prisma.SortOrder
   closedExchangeRate?: Prisma.SortOrderInput | Prisma.SortOrder
   closedReason?: Prisma.SortOrderInput | Prisma.SortOrder
+  isAutoClosed?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   _count?: Prisma.tradeCountOrderByAggregateInput
@@ -511,6 +522,7 @@ export type tradeScalarWhereWithAggregatesInput = {
   closedPrice?: Prisma.FloatNullableWithAggregatesFilter<"trade"> | number | null
   closedExchangeRate?: Prisma.FloatNullableWithAggregatesFilter<"trade"> | number | null
   closedReason?: Prisma.StringNullableWithAggregatesFilter<"trade"> | string | null
+  isAutoClosed?: Prisma.BoolWithAggregatesFilter<"trade"> | boolean
   createdAt?: Prisma.DateTimeWithAggregatesFilter<"trade"> | Date | string
   updatedAt?: Prisma.DateTimeWithAggregatesFilter<"trade"> | Date | string
 }
@@ -537,6 +549,7 @@ export type tradeCreateInput = {
   closedPrice?: number | null
   closedExchangeRate?: number | null
   closedReason?: string | null
+  isAutoClosed?: boolean
   createdAt?: Date | string
   updatedAt?: Date | string
   user: Prisma.userCreateNestedOneWithoutTradeInput
@@ -566,6 +579,7 @@ export type tradeUncheckedCreateInput = {
   closedPrice?: number | null
   closedExchangeRate?: number | null
   closedReason?: string | null
+  isAutoClosed?: boolean
   createdAt?: Date | string
   updatedAt?: Date | string
   journal?: Prisma.journalUncheckedCreateNestedManyWithoutTradeInput
@@ -593,6 +607,7 @@ export type tradeUpdateInput = {
   closedPrice?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   closedExchangeRate?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   closedReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  isAutoClosed?: Prisma.BoolFieldUpdateOperationsInput | boolean
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   user?: Prisma.userUpdateOneRequiredWithoutTradeNestedInput
@@ -622,6 +637,7 @@ export type tradeUncheckedUpdateInput = {
   closedPrice?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   closedExchangeRate?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   closedReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  isAutoClosed?: Prisma.BoolFieldUpdateOperationsInput | boolean
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   journal?: Prisma.journalUncheckedUpdateManyWithoutTradeNestedInput
@@ -650,6 +666,7 @@ export type tradeCreateManyInput = {
   closedPrice?: number | null
   closedExchangeRate?: number | null
   closedReason?: string | null
+  isAutoClosed?: boolean
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -676,6 +693,7 @@ export type tradeUpdateManyMutationInput = {
   closedPrice?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   closedExchangeRate?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   closedReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  isAutoClosed?: Prisma.BoolFieldUpdateOperationsInput | boolean
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -703,6 +721,7 @@ export type tradeUncheckedUpdateManyInput = {
   closedPrice?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   closedExchangeRate?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   closedReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  isAutoClosed?: Prisma.BoolFieldUpdateOperationsInput | boolean
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -738,6 +757,7 @@ export type tradeCountOrderByAggregateInput = {
   closedPrice?: Prisma.SortOrder
   closedExchangeRate?: Prisma.SortOrder
   closedReason?: Prisma.SortOrder
+  isAutoClosed?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -774,6 +794,7 @@ export type tradeMaxOrderByAggregateInput = {
   closedPrice?: Prisma.SortOrder
   closedExchangeRate?: Prisma.SortOrder
   closedReason?: Prisma.SortOrder
+  isAutoClosed?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -798,6 +819,7 @@ export type tradeMinOrderByAggregateInput = {
   closedPrice?: Prisma.SortOrder
   closedExchangeRate?: Prisma.SortOrder
   closedReason?: Prisma.SortOrder
+  isAutoClosed?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -864,6 +886,10 @@ export type NullableFloatFieldUpdateOperationsInput = {
   decrement?: number
   multiply?: number
   divide?: number
+}
+
+export type BoolFieldUpdateOperationsInput = {
+  set?: boolean
 }
 
 export type DateTimeFieldUpdateOperationsInput = {
@@ -950,6 +976,7 @@ export type tradeCreateWithoutJournalInput = {
   closedPrice?: number | null
   closedExchangeRate?: number | null
   closedReason?: string | null
+  isAutoClosed?: boolean
   createdAt?: Date | string
   updatedAt?: Date | string
   user: Prisma.userCreateNestedOneWithoutTradeInput
@@ -978,6 +1005,7 @@ export type tradeUncheckedCreateWithoutJournalInput = {
   closedPrice?: number | null
   closedExchangeRate?: number | null
   closedReason?: string | null
+  isAutoClosed?: boolean
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -1020,6 +1048,7 @@ export type tradeUpdateWithoutJournalInput = {
   closedPrice?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   closedExchangeRate?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   closedReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  isAutoClosed?: Prisma.BoolFieldUpdateOperationsInput | boolean
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   user?: Prisma.userUpdateOneRequiredWithoutTradeNestedInput
@@ -1048,6 +1077,7 @@ export type tradeUncheckedUpdateWithoutJournalInput = {
   closedPrice?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   closedExchangeRate?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   closedReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  isAutoClosed?: Prisma.BoolFieldUpdateOperationsInput | boolean
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -1074,6 +1104,7 @@ export type tradeCreateWithoutUserInput = {
   closedPrice?: number | null
   closedExchangeRate?: number | null
   closedReason?: string | null
+  isAutoClosed?: boolean
   createdAt?: Date | string
   updatedAt?: Date | string
   journal?: Prisma.journalCreateNestedManyWithoutTradeInput
@@ -1101,6 +1132,7 @@ export type tradeUncheckedCreateWithoutUserInput = {
   closedPrice?: number | null
   closedExchangeRate?: number | null
   closedReason?: string | null
+  isAutoClosed?: boolean
   createdAt?: Date | string
   updatedAt?: Date | string
   journal?: Prisma.journalUncheckedCreateNestedManyWithoutTradeInput
@@ -1158,6 +1190,7 @@ export type tradeScalarWhereInput = {
   closedPrice?: Prisma.FloatNullableFilter<"trade"> | number | null
   closedExchangeRate?: Prisma.FloatNullableFilter<"trade"> | number | null
   closedReason?: Prisma.StringNullableFilter<"trade"> | string | null
+  isAutoClosed?: Prisma.BoolFilter<"trade"> | boolean
   createdAt?: Prisma.DateTimeFilter<"trade"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"trade"> | Date | string
 }
@@ -1184,6 +1217,7 @@ export type tradeCreateManyUserInput = {
   closedPrice?: number | null
   closedExchangeRate?: number | null
   closedReason?: string | null
+  isAutoClosed?: boolean
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -1210,6 +1244,7 @@ export type tradeUpdateWithoutUserInput = {
   closedPrice?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   closedExchangeRate?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   closedReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  isAutoClosed?: Prisma.BoolFieldUpdateOperationsInput | boolean
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   journal?: Prisma.journalUpdateManyWithoutTradeNestedInput
@@ -1237,6 +1272,7 @@ export type tradeUncheckedUpdateWithoutUserInput = {
   closedPrice?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   closedExchangeRate?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   closedReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  isAutoClosed?: Prisma.BoolFieldUpdateOperationsInput | boolean
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   journal?: Prisma.journalUncheckedUpdateManyWithoutTradeNestedInput
@@ -1264,6 +1300,7 @@ export type tradeUncheckedUpdateManyWithoutUserInput = {
   closedPrice?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   closedExchangeRate?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   closedReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  isAutoClosed?: Prisma.BoolFieldUpdateOperationsInput | boolean
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -1322,6 +1359,7 @@ export type tradeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = 
   closedPrice?: boolean
   closedExchangeRate?: boolean
   closedReason?: boolean
+  isAutoClosed?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   user?: boolean | Prisma.userDefaultArgs<ExtArgs>
@@ -1352,6 +1390,7 @@ export type tradeSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensi
   closedPrice?: boolean
   closedExchangeRate?: boolean
   closedReason?: boolean
+  isAutoClosed?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   user?: boolean | Prisma.userDefaultArgs<ExtArgs>
@@ -1380,6 +1419,7 @@ export type tradeSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensi
   closedPrice?: boolean
   closedExchangeRate?: boolean
   closedReason?: boolean
+  isAutoClosed?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   user?: boolean | Prisma.userDefaultArgs<ExtArgs>
@@ -1408,11 +1448,12 @@ export type tradeSelectScalar = {
   closedPrice?: boolean
   closedExchangeRate?: boolean
   closedReason?: boolean
+  isAutoClosed?: boolean
   createdAt?: boolean
   updatedAt?: boolean
 }
 
-export type tradeOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "symbol" | "userId" | "entry" | "lot" | "pips" | "execution" | "accountCurrency" | "exchangeRate" | "rr" | "risk" | "reward" | "tags" | "stopLoss" | "takeProfit" | "plainText" | "editorState" | "status" | "closedAt" | "closedPrice" | "closedExchangeRate" | "closedReason" | "createdAt" | "updatedAt", ExtArgs["result"]["trade"]>
+export type tradeOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "symbol" | "userId" | "entry" | "lot" | "pips" | "execution" | "accountCurrency" | "exchangeRate" | "rr" | "risk" | "reward" | "tags" | "stopLoss" | "takeProfit" | "plainText" | "editorState" | "status" | "closedAt" | "closedPrice" | "closedExchangeRate" | "closedReason" | "isAutoClosed" | "createdAt" | "updatedAt", ExtArgs["result"]["trade"]>
 export type tradeInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   user?: boolean | Prisma.userDefaultArgs<ExtArgs>
   journal?: boolean | Prisma.trade$journalArgs<ExtArgs>
@@ -1454,6 +1495,7 @@ export type $tradePayload<ExtArgs extends runtime.Types.Extensions.InternalArgs 
     closedPrice: number | null
     closedExchangeRate: number | null
     closedReason: string | null
+    isAutoClosed: boolean
     createdAt: Date
     updatedAt: Date
   }, ExtArgs["result"]["trade"]>
@@ -1903,6 +1945,7 @@ export interface tradeFieldRefs {
   readonly closedPrice: Prisma.FieldRef<"trade", 'Float'>
   readonly closedExchangeRate: Prisma.FieldRef<"trade", 'Float'>
   readonly closedReason: Prisma.FieldRef<"trade", 'String'>
+  readonly isAutoClosed: Prisma.FieldRef<"trade", 'Boolean'>
   readonly createdAt: Prisma.FieldRef<"trade", 'DateTime'>
   readonly updatedAt: Prisma.FieldRef<"trade", 'DateTime'>
 }

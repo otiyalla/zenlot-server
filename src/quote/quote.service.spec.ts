@@ -2,6 +2,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { QuoteService } from './quote.service';
 import { FX_MARKET_QUOTE, FX_QUOTE } from './interface/quote.interface';
+import { fmpList } from './dto/quote-list.dto';
+
+const forexList = (items: Partial<fmpList>[]): fmpList[] => items as fmpList[];
 
 describe('QuoteService', () => {
   let service: QuoteService;

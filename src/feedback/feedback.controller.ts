@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Request,
+  ForbiddenException,
 } from '@nestjs/common';
 import { FeedbackService } from './feedback.service';
 import { CreateFeedbackDto } from './dto/create-feedback.dto';
@@ -51,7 +52,11 @@ export class FeedbackController {
   async updateFeedbackStatus(
     @Param('id') feedbackId: string,
     @Body() body: { status: string },
+    @Request() req: any,
   ) {
+    if (req.user?.role !== 'admin') {
+      throw new ForbiddenException('Only admins can update feedback status');
+    }
     return this.feedbackService.updateFeedbackStatus(feedbackId, body.status);
   }
 }
