@@ -38,6 +38,21 @@ export class PriceFeedController {
     return this.priceFeedService.addPriceFeedJob(query.symbol);
   }
 
+  @Get('search')
+  @ApiOperation({ summary: 'Search available forex symbols' })
+  @ApiQuery({
+    name: 'query',
+    required: true,
+    description: 'Symbol or quote currency search text',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Available forex symbols fetched successfully.',
+  })
+  async search(@Query('query') query: string) {
+    return this.priceFeedService.search(query);
+  }
+
   @Get('exchangeRate')
   @ApiOperation({ summary: 'Get exchange rate for a symbol' })
   @ApiParam({

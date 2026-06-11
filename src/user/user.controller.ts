@@ -28,6 +28,12 @@ import {
 export class UserController {
   constructor(private readonly userService: UserService) {}
 
+  private assertSelfOrAdmin(targetUserId: string, req: any) {
+    if (req.user.id !== targetUserId && req.user.role !== 'admin') {
+      throw new ForbiddenException('Cannot access another user');
+    }
+  }
+
   @Post()
   @ApiOperation({ summary: 'Create a user' })
   @ApiResponse({ status: 201, description: 'User created successfully.' })
@@ -69,9 +75,7 @@ export class UserController {
   @ApiParam({ name: 'id', required: true, description: 'User id' })
   @ApiResponse({ status: 200, description: 'User fetched successfully.' })
   findOne(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
-    if (req.user.id !== id && req.user.role !== 'admin') {
-      throw new ForbiddenException('Cannot access another user profile');
-    }
+    this.assertSelfOrAdmin(id, req);
     return this.userService.findOne(id);
   }
 
@@ -84,6 +88,7 @@ export class UserController {
     @Body() dto: UpdateUserDto,
     @Request() req: any,
   ) {
+    this.assertSelfOrAdmin(id, req);
     return this.userService.update(id, dto, req.ip, req.headers['user-agent']);
   }
 
@@ -95,6 +100,7 @@ export class UserController {
     @Param('id', ParseUUIDPipe) id: string,
     @Request() req: any,
   ) {
+    this.assertSelfOrAdmin(id, req);
     return this.userService.initiateAccountDeletion(
       id,
       req.ip,
@@ -110,6 +116,7 @@ export class UserController {
     @Param('id', ParseUUIDPipe) id: string,
     @Request() req: any,
   ) {
+    this.assertSelfOrAdmin(id, req);
     return this.userService.cancelAccountDeletion(
       id,
       req.ip,
@@ -122,6 +129,7 @@ export class UserController {
   @ApiParam({ name: 'id', required: true, description: 'User id' })
   @ApiResponse({ status: 200, description: 'User deleted successfully.' })
   remove(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
+    this.assertSelfOrAdmin(id, req);
     return this.userService.remove(id, req.ip, req.headers['user-agent']);
   }
 }

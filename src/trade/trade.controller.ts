@@ -18,6 +18,7 @@ import { SymbolDateRangeDto } from './dto/symbol-date-range.dto';
 import { MultiTradeDto } from './dto/multiple-properties.dto';
 import { MultipleSymbolsDto } from './dto/multiple-symbols.dto';
 import { TradeOwnerDto } from './dto/trade-owner.dto';
+import { SearchTradeDto } from './dto/search-trade.dto';
 import {
   ApiOperation,
   ApiParam,
@@ -59,14 +60,6 @@ export class TradeController {
   async findAll(@Query() query: TradeOwnerDto, @Request() req: any) {
     query.userId = req.user.id;
     return this.tradeService.findAll(query);
-  }
-
-  @Get(':id')
-  @ApiOperation({ summary: 'Get a trade by id' })
-  @ApiParam({ name: 'id', required: true, description: 'Trade id' })
-  @ApiResponse({ status: 200, description: 'Trade fetched successfully.' })
-  async findOne(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
-    return this.tradeService.findOneForUser(id, req.user.id);
   }
 
   //http://localhost:3000/trade/range?start=2025-07-01&end=2025-07-12
@@ -208,6 +201,52 @@ export class TradeController {
   async filterTrade(@Query() dto: MultiTradeDto, @Request() req: any) {
     dto.userId = req.user.id;
     return this.tradeService.findByMultipleProperties(dto);
+  }
+
+  @Get('search')
+  @ApiOperation({ summary: 'Search trades' })
+  @ApiQuery({ name: 'userId', required: false, description: 'Trade owner id' })
+  @ApiQuery({ name: 'query', required: false, description: 'Text query' })
+  @ApiQuery({
+    name: 'queryTerms',
+    required: false,
+    isArray: true,
+    description: 'Additional text terms to search',
+  })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    description: 'Single trade status',
+  })
+  @ApiQuery({
+    name: 'statuses',
+    required: false,
+    isArray: true,
+    description: 'Multiple trade statuses',
+  })
+  @ApiQuery({
+    name: 'start',
+    required: false,
+    description: 'Start date (YYYY-MM-DD)',
+  })
+  @ApiQuery({
+    name: 'end',
+    required: false,
+    description: 'End date (YYYY-MM-DD)',
+  })
+  @ApiResponse({ status: 200, description: 'Trades fetched successfully.' })
+  async search(@Query() dto: SearchTradeDto, @Request() req: any) {
+    dto.userId = req.user.id;
+    return this.tradeService.search(dto);
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Get a trade by id' })
+  @ApiParam({ name: 'id', required: true, description: 'Trade id' })
+  @ApiResponse({ status: 200, description: 'Trade fetched successfully.' })
+  async findOne(@Param('id') id: string, @Request() req: any) {
+    console.log('Finding trade with id: ', id);
+    return this.tradeService.findOneForUser(id, req.user.id);
   }
 
   @Put(':id')

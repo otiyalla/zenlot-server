@@ -48,4 +48,36 @@ describe('UserController authorization', () => {
       ForbiddenException,
     );
   });
+
+  it('allows an admin to access another users profile', () => {
+    const req = { user: { id: 'admin-1', role: 'admin' } };
+
+    controller.findOne('owner-2', req);
+
+    expect(userService.findOne).toHaveBeenCalledWith('owner-2');
+  });
+
+  it('rejects updates to another user for non-admin', () => {
+    const req = {
+      user: { id: 'owner-1', role: 'trader' },
+      ip: '127.0.0.1',
+      headers: { 'user-agent': 'jest' },
+    };
+
+    expect(() => controller.update('owner-2', {} as any, req)).toThrow(
+      ForbiddenException,
+    );
+    expect(userService.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects deleting another user for non-admin', () => {
+    const req = {
+      user: { id: 'owner-1', role: 'trader' },
+      ip: '127.0.0.1',
+      headers: { 'user-agent': 'jest' },
+    };
+
+    expect(() => controller.remove('owner-2', req)).toThrow(ForbiddenException);
+    expect(userService.remove).not.toHaveBeenCalled();
+  });
 });

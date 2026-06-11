@@ -171,12 +171,13 @@ export class AuthService {
           expiresAt: refreshTokenExpiry,
         },
       });
+      return publicRefreshToken ?? '';
     } catch (error) {
       this.logger.warn('Error creating refresh token', error);
       Sentry.captureException(error, {
         extra: { userId: payload.sub, context: 'createRefreshToken' },
       });
-      throw new UnauthorizedException('Unable to create refresh token');
+      throw new UnauthorizedException('Could not create refresh token');
     }
     return publicRefreshToken ?? '';
   }

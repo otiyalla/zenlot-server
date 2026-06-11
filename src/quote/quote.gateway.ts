@@ -106,8 +106,9 @@ export class QuoteGateway implements OnModuleInit, OnModuleDestroy {
   }
 
   private extractAccessToken(socket: Socket): string | undefined {
-    const authToken = (socket.handshake.auth as SocketHandshakeAuth)
-      .accessToken;
+    const authToken = (
+      socket.handshake?.auth as SocketHandshakeAuth | undefined
+    )?.accessToken;
     if (typeof authToken === 'string' && authToken.trim()) {
       return authToken.trim();
     }

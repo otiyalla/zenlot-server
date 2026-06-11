@@ -101,4 +101,36 @@ describe('UserService sanitization', () => {
     expect(callArg.emailVerified).toBeUndefined();
     expect(callArg.deleteScheduledFor).toBeUndefined();
   });
+
+  it('does not allow callers to choose a privileged role on create', async () => {
+    prisma.user.findUnique.mockResolvedValue(null);
+    prisma.user.update.mockReset();
+    (prisma.user as any).create = jest.fn().mockResolvedValue({
+      id: 'u1',
+      fname: 'Alice',
+      lname: 'Trader',
+      email: 'alice@example.com',
+      role: 'trader',
+      password: 'hash-1',
+    });
+
+    await service.create({
+      fname: 'Alice',
+      lname: 'Trader',
+      email: 'alice@example.com',
+      language: 'en',
+      accountCurrency: 'USD',
+      password: 'password123',
+      role: 'admin',
+      rules: { forex: { takeProfit: [], stopLoss: [] } },
+    } as any);
+
+    expect((prisma.user as any).create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          role: 'trader',
+        }),
+      }),
+    );
+  });
 });

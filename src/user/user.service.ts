@@ -46,11 +46,13 @@ export class UserService {
       email,
       fname,
       lname,
-      role,
       language,
       accountCurrency,
       rules,
       tags,
+      timezone,
+      togglePipValue,
+      theme,
     } = user;
     const userFound = await this.prisma.user.findUnique({ where: { email } });
     if (userFound)
@@ -65,12 +67,15 @@ export class UserService {
       fname: fname,
       lname: lname,
       email: email,
-      role: role ?? 'trader',
+      role: 'trader',
       language: language,
       password: hashed,
       accountCurrency: accountCurrency,
       tags: tags || [],
       rules: rulesData as Prisma.InputJsonValue,
+      ...(theme !== undefined && { theme }),
+      ...(timezone !== undefined && { timezone }),
+      ...(togglePipValue !== undefined && { togglePipValue }),
     };
     const result = await this.prisma.user.create({ data });
 
@@ -232,28 +237,33 @@ export class UserService {
     ipAddress?: string,
     userAgent?: string,
   ) {
-    const editableData = {
-      fname: dto.fname,
-      lname: dto.lname,
-      email: dto.email,
-      language: dto.language,
-      accountCurrency: dto.accountCurrency,
-      theme: dto.theme,
-      rules: dto.rules,
-      timezone: dto.timezone,
-      togglePipValue: dto.togglePipValue,
-      tags: dto.tags,
-    };
-    const updatedFields = Object.entries(editableData)
+    delete dto.id;
+    const allowedData: Prisma.userUpdateInput = {};
+
+    if (dto.fname !== undefined) allowedData.fname = dto.fname;
+    if (dto.lname !== undefined) allowedData.lname = dto.lname;
+    if (dto.email !== undefined) allowedData.email = dto.email;
+    if (dto.language !== undefined) allowedData.language = dto.language;
+    if (dto.accountCurrency !== undefined)
+      allowedData.accountCurrency = dto.accountCurrency;
+    if (dto.theme !== undefined) allowedData.theme = dto.theme;
+    if (dto.rules !== undefined)
+      allowedData.rules = dto.rules as unknown as Prisma.InputJsonValue;
+    if (dto.tags !== undefined) allowedData.tags = dto.tags;
+    if (dto.timezone !== undefined) allowedData.timezone = dto.timezone;
+    if (dto.togglePipValue !== undefined)
+      allowedData.togglePipValue = dto.togglePipValue;
+
+    const updatedFields = Object.entries(allowedData)
       .filter(([, value]) => value !== undefined)
       .map(([key]) => key);
     if (dto.email) {
       await this.verifyEmailUpdate(id, dto.email);
     }
-    const data: any = Object.fromEntries(
-      Object.entries(editableData).filter(([, value]) => value !== undefined),
-    );
-    data.updatedAt = new Date();
+    const data: Prisma.userUpdateInput = {
+      ...allowedData,
+      updatedAt: new Date(),
+    };
     const update = await this.prisma.user.update({ where: { id }, data });
 
     // Log user update

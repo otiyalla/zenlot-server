@@ -7,9 +7,10 @@
   "license": "UNLICENSED",
   "scripts": {
     "build": "nest build",
-    "build:with:package": "NODE_OPTIONS=--max_old_space_size=4096 yarn build && yarn copy:env && yarn copy:prisma && yarn copy:migrations && yarn copy:package && yarn sentry:sourcemaps",
+    "build:with:package": "NODE_OPTIONS=--max_old_space_size=4096 yarn build && yarn copy:env:for:package && yarn copy:prisma && yarn copy:migrations && yarn copy:package && yarn sentry:sourcemaps:optional",
     "copy:env": "cp .env dist/.env",
-    "copy:prisma": "cp ./prisma/schema.prisma ./prisma/prisma.config.ts dist/prisma/",
+    "copy:env:for:package": "sh -c 'if [ -n \"${BUILD_ENV_FILE:-}\" ] && [ -f \"$BUILD_ENV_FILE\" ]; then cp \"$BUILD_ENV_FILE\" dist/.env; elif [ -f .env ]; then cp .env dist/.env; else touch dist/.env; fi'",
+    "copy:prisma": "cp ./prisma/schema.prisma dist/prisma/schema.prisma",
     "copy:migrations": "cp -r ./prisma/migrations dist/prisma/migrations",
     "copy:package": "cp package.json dist/package.json",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
@@ -30,6 +31,7 @@
     "db:migrate:local": "NODE_ENV=local ts-node scripts/migrate-prod.ts",
     "db:migrate:dev": "NODE_ENV=dev ts-node scripts/migrate-prod.ts",
     "db:migrate:prod": "NODE_ENV=prod ts-node scripts/migrate-prod.ts",
+    "db:migrate:deploy": "prisma migrate deploy --config prisma/prisma.config.ts",
     "db:generate": "prisma generate",
     "db:seed": "ts-node prisma/seed.ts",
     "db:dev": "prisma db push && ts-node prisma/seed.ts",
@@ -38,7 +40,8 @@
     "db:format": "prisma format",
     "db:reset": "prisma migrate reset --force --skip-seed --skip-generate --config prisma/prisma.config.ts",
     "db:docker:rebuild": "docker-compose down && docker-compose up -d && docker exec zenlot-db psql -U zenlot -d zenlot -c \"DO $$ DECLARE r RECORD; BEGIN FOR r IN SELECT tablename FROM pg_tables WHERE schemaname = 'public' LOOP EXECUTE 'ALTER TABLE ' || quote_ident(r.tablename) || ' COLLATE DEFAULT'; END LOOP; END $$;\" && docker exec zenlot-db psql -U zenlot -d template1 -c \"ALTER DATABASE template1 REFRESH COLLATION VERSION;\" && yarn db:migrate",
-    "sentry:sourcemaps": "sentry-cli sourcemaps inject --org zenlot --project node-nestjs ./dist && sentry-cli sourcemaps upload --org zenlot --project node-nestjs ./dist"
+    "sentry:sourcemaps": "sentry-cli sourcemaps inject --org zenlot --project node-nestjs ./dist && sentry-cli sourcemaps upload --org zenlot --project node-nestjs ./dist",
+    "sentry:sourcemaps:optional": "sh -c 'if [ -n \"${SENTRY_AUTH_TOKEN:-}\" ]; then yarn sentry:sourcemaps; else echo \"Skipping Sentry sourcemap upload\"; fi'"
   },
   "dependencies": {
     "@fastify/helmet": "^13.0.1",

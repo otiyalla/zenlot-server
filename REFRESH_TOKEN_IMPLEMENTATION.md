@@ -133,11 +133,11 @@ curl -X POST http://localhost:3000/auth/signin \
 # Test token refresh
 curl -X POST http://localhost:3000/auth/refresh \
   -H "Content-Type: application/json" \
-  -d '{"refresh_token":"your_refresh_token"}'
+  -d '{"refreshToken":"your_refresh_token"}'
 
 # Test protected endpoint with expired access token
 curl -X GET http://localhost:3000/protected-endpoint \
-  -H "access_token:expired_token" \
+  -H "accessToken:expired_token" \
   -H "refresh_access_token:valid_refresh_token"
 ```
 
