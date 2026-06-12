@@ -12,7 +12,7 @@ export class DeletionProcessor extends WorkerHost {
   }
 
   async process(
-    job: Job<any, any, string>,
+    job: Job<{ userId: string }, { success: boolean; userId: string }, string>,
   ): Promise<{ success: boolean; userId: string }> {
     const {
       data: { userId },

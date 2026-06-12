@@ -15,8 +15,12 @@ export class TradeService {
   async create(createTradeDto: CreateTradeDto) {
     const data = {
       ...createTradeDto,
-      stopLoss: JSON.parse(JSON.stringify(createTradeDto.stopLoss)),
-      takeProfit: JSON.parse(JSON.stringify(createTradeDto.takeProfit)),
+      stopLoss: JSON.parse(
+        JSON.stringify(createTradeDto.stopLoss),
+      ) as Prisma.InputJsonValue,
+      takeProfit: JSON.parse(
+        JSON.stringify(createTradeDto.takeProfit),
+      ) as Prisma.InputJsonValue,
     };
     return this.prisma.trade.create({ data });
   }

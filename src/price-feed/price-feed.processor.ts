@@ -6,7 +6,6 @@ import Redis from 'ioredis';
 import axios from 'axios';
 import { Job } from 'bullmq';
 import { config } from 'src/config/config.constant';
-import { fmp } from 'financialmodelingprep';
 
 @Processor('price-feed')
 export class PriceFeedProcessor extends WorkerHost {
@@ -17,7 +16,7 @@ export class PriceFeedProcessor extends WorkerHost {
     super();
     const host = this.configService.get<string>('REDIS_HOST');
     const port = Number(this.configService.get<string>('REDIS_PORT') ?? 6379);
-    const username = this.configService.get('REDIS_USERNAME');
+    const username = this.configService.get<string>('REDIS_USERNAME');
     const password = this.configService.get<string>('REDIS_PASSWORD');
     const tlsEnabled = ['1', 'true', 'yes'].includes(
       (this.configService.get<string>('REDIS_TLS') ?? '').toLowerCase(),
@@ -40,14 +39,14 @@ export class PriceFeedProcessor extends WorkerHost {
     });
   }
 
-  async process(job: Job): Promise<any> {
+  async process(job: Job<{ symbol: string }>): Promise<unknown> {
     const { name } = job;
 
     if (name === 'price-feed') {
       const symbol = job.data.symbol;
       try {
         const url = `https://financialmodelingprep.com/api/v3/fx/${symbol}?apikey=${config.fmp_api_key}`;
-        const response = await axios.get(url);
+        const response = await axios.get<unknown>(url);
 
         // Publish the price to the Redis channel
         const { data } = response; // Adjust based on actual API response structure

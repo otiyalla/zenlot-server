@@ -34,11 +34,27 @@ export class UserService {
     @InjectQueue('deletion') private deletionQueue: Queue,
   ) {}
 
+  /**
+   * Removes secrets/credentials that must never be serialized to clients:
+   * the password hash and the email-verification token (which could be used
+   * for account takeover if leaked).
+   */
   private stripPassword<T extends { password?: string | null }>(
     user: T,
   ): Omit<T, 'password'> {
-    const { password, ...safeUser } = user;
-    return safeUser;
+    const {
+      password,
+      emailVerificationToken,
+      emailVerificationTokenExpiry,
+      ...safeUser
+    } = user as T & {
+      emailVerificationToken?: string | null;
+      emailVerificationTokenExpiry?: Date | string | null;
+    };
+    void password;
+    void emailVerificationToken;
+    void emailVerificationTokenExpiry;
+    return safeUser as Omit<T, 'password'>;
   }
 
   async create(user: CreateUserDto, ipAddress?: string, userAgent?: string) {
@@ -114,12 +130,13 @@ export class UserService {
 
     return {
       ...newUser,
-      rules:
-        typeof user.rules === 'string'
-          ? JSON.parse(user.rules)
-          : user.rules && typeof user.rules === 'object'
-            ? user.rules
-            : { forex: { take_profit: [], stop_loss: [] } },
+      rules: (typeof user.rules === 'string'
+        ? JSON.parse(user.rules)
+        : user.rules && typeof user.rules === 'object'
+          ? user.rules
+          : {
+              forex: { take_profit: [], stop_loss: [] },
+            }) as AuthenticatedUser['rules'],
     };
   }
 
@@ -201,15 +218,22 @@ export class UserService {
     return this.prisma.user.findUnique({ where: { email } });
   }
 
-  findAll() {
+  async findAll() {
     return this.prisma.user
       .findMany({
         where: { deletedAt: null },
       })
-      .then((users) => users.map((user) => this.stripPassword(user)));
+      .then((users) => users.map((user) => this.stripPassword(user)))
+      .catch((error) => {
+        this.logger.error('Error finding all users', error);
+        Sentry.captureException(error, {
+          extra: { context: 'findAll' },
+        });
+        throw error;
+      });
   }
 
-  async findOne(id: string): Promise<any | null> {
+  async findOne(id: string): Promise<unknown> {
     const user = await this.prisma.user.findUnique({ where: { id } });
     if (!user) throw new NotFoundException('User not found');
 
@@ -511,7 +535,11 @@ export class UserService {
   }
 
   // Legacy method - kept for backward compatibility, now calls initiateAccountDeletion
-  async remove(id: string, ipAddress?: string, userAgent?: string) {
+  async remove(
+    id: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<unknown> {
     return this.initiateAccountDeletion(id, ipAddress, userAgent);
   }
 }

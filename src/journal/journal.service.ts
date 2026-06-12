@@ -31,6 +31,7 @@ export class JournalService {
     return journals;
   }
 
+  // eslint-disable-next-line @typescript-eslint/require-await
   async findAll(): Promise<IJournal[]> {
     return this.prisma.journal.findMany({
       include: { author: true },

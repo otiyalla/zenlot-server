@@ -1,5 +1,6 @@
 import { TradeController } from './trade.controller';
 import { TradeService } from './trade.service';
+import { AuthenticatedRequest } from '../user/interfaces/authenticated-request.interface';
 
 describe('TradeController authorization', () => {
   const tradeService = {
@@ -16,20 +17,22 @@ describe('TradeController authorization', () => {
   } as unknown as TradeService;
 
   const controller = new TradeController(tradeService);
-  const req = { user: { id: 'owner-1' } };
+  const req = { user: { id: 'owner-1' } } as unknown as AuthenticatedRequest;
 
   beforeEach(() => jest.clearAllMocks());
 
   it('forces request user id on create', async () => {
-    const dto: any = { userId: 'attacker-id', symbol: 'EURUSD' };
-    await controller.create(dto, req);
+    const dto = { userId: 'attacker-id', symbol: 'EURUSD' };
+    await controller.create(dto as never, req);
 
     expect(dto.userId).toBe('owner-1');
+    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(tradeService.create).toHaveBeenCalledWith(dto);
   });
 
   it('uses request user id for findOne', async () => {
     await controller.findOne('trade-123', req);
+    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(tradeService.findOneForUser).toHaveBeenCalledWith(
       'trade-123',
       'owner-1',
@@ -37,10 +40,11 @@ describe('TradeController authorization', () => {
   });
 
   it('overrides query userId for findAll', async () => {
-    const query: any = { userId: 'attacker-id' };
-    await controller.findAll(query, req);
+    const query = { userId: 'attacker-id' };
+    await controller.findAll(query as never, req);
 
     expect(query.userId).toBe('owner-1');
+    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(tradeService.findAll).toHaveBeenCalledWith(query);
   });
 });

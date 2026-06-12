@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument */
 import { UserService } from './user.service';
 
 describe('UserService sanitization', () => {
@@ -64,6 +65,28 @@ describe('UserService sanitization', () => {
 
     const user = await service.findOne('u1');
 
+    expect(user).toEqual({
+      id: 'u1',
+      email: 'u1@mail.com',
+      deletedAt: null,
+    });
+  });
+
+  it('removes email verification token/expiry from serialized user', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'u1',
+      email: 'u1@mail.com',
+      password: 'hash-1',
+      emailVerificationToken: 'secret-token',
+      emailVerificationTokenExpiry: new Date('2026-01-01'),
+      deletedAt: null,
+    });
+
+    const user: any = await service.findOne('u1');
+
+    expect(user.password).toBeUndefined();
+    expect(user.emailVerificationToken).toBeUndefined();
+    expect(user.emailVerificationTokenExpiry).toBeUndefined();
     expect(user).toEqual({
       id: 'u1',
       email: 'u1@mail.com',

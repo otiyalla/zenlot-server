@@ -1,6 +1,7 @@
 import { ForbiddenException } from '@nestjs/common';
 import { UserController } from './user.controller';
 import { UserService } from './user.service';
+import { AuthenticatedRequest } from './interfaces/authenticated-request.interface';
 
 describe('UserController authorization', () => {
   const userService = {
@@ -20,7 +21,7 @@ describe('UserController authorization', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('forces current user id in changePassword payload', async () => {
-    const dto: any = {
+    const dto = {
       userId: 'attacker-id',
       currentPassword: 'currpass123',
       newPassword: 'newpass123',
@@ -29,11 +30,12 @@ describe('UserController authorization', () => {
       user: { id: 'owner-1', role: 'trader' },
       ip: '127.0.0.1',
       headers: { 'user-agent': 'jest' },
-    };
+    } as unknown as AuthenticatedRequest;
 
-    await controller.changePassword(dto, req);
+    await controller.changePassword(dto as never, req);
 
     expect(dto.userId).toBe('owner-1');
+    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(userService.changePassword).toHaveBeenCalledWith(
       dto,
       '127.0.0.1',
@@ -41,8 +43,31 @@ describe('UserController authorization', () => {
     );
   });
 
+  it('rejects listing all users for non-admin', () => {
+    const req = {
+      user: { id: 'owner-1', role: 'trader' },
+    } as unknown as AuthenticatedRequest;
+
+    expect(() => controller.findAll(req)).toThrow(ForbiddenException);
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    expect(userService.findAll).not.toHaveBeenCalled();
+  });
+
+  it('allows an admin to list all users', () => {
+    const req = {
+      user: { id: 'admin-1', role: 'admin' },
+    } as unknown as AuthenticatedRequest;
+
+    void controller.findAll(req);
+
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    expect(userService.findAll).toHaveBeenCalled();
+  });
+
   it('rejects access to another users profile for non-admin', () => {
-    const req = { user: { id: 'owner-1', role: 'trader' } };
+    const req = {
+      user: { id: 'owner-1', role: 'trader' },
+    } as unknown as AuthenticatedRequest;
 
     expect(() => controller.findOne('owner-2', req)).toThrow(
       ForbiddenException,
@@ -50,10 +75,13 @@ describe('UserController authorization', () => {
   });
 
   it('allows an admin to access another users profile', () => {
-    const req = { user: { id: 'admin-1', role: 'admin' } };
+    const req = {
+      user: { id: 'admin-1', role: 'admin' },
+    } as unknown as AuthenticatedRequest;
 
-    controller.findOne('owner-2', req);
+    void controller.findOne('owner-2', req);
 
+    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(userService.findOne).toHaveBeenCalledWith('owner-2');
   });
 
@@ -62,11 +90,12 @@ describe('UserController authorization', () => {
       user: { id: 'owner-1', role: 'trader' },
       ip: '127.0.0.1',
       headers: { 'user-agent': 'jest' },
-    };
+    } as unknown as AuthenticatedRequest;
 
-    expect(() => controller.update('owner-2', {} as any, req)).toThrow(
+    expect(() => controller.update('owner-2', {} as never, req)).toThrow(
       ForbiddenException,
     );
+    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(userService.update).not.toHaveBeenCalled();
   });
 
@@ -75,9 +104,10 @@ describe('UserController authorization', () => {
       user: { id: 'owner-1', role: 'trader' },
       ip: '127.0.0.1',
       headers: { 'user-agent': 'jest' },
-    };
+    } as unknown as AuthenticatedRequest;
 
     expect(() => controller.remove('owner-2', req)).toThrow(ForbiddenException);
+    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(userService.remove).not.toHaveBeenCalled();
   });
 });

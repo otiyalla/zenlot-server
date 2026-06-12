@@ -1,18 +1,12 @@
-import {
-  Injectable,
-  Logger,
-  OnModuleInit,
-  OnModuleDestroy,
-} from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import * as Sentry from '@sentry/nestjs';
-import { CreatePriceFeedDto } from './dto/create-price-feed.dto';
-import { UpdatePriceFeedDto } from './dto/update-price-feed.dto';
 import { InjectQueue } from '@nestjs/bullmq';
 import { ConfigService } from '@nestjs/config';
 import { Queue } from 'bullmq';
 import Redis from 'ioredis';
 import { PriceFeedGateway } from './price-feed.gateway';
 import { QuoteService } from 'src/quote/quote.service';
+import { CreatePriceFeedDto } from './dto/create-price-feed.dto';
 
 @Injectable()
 export class PriceFeedService {
@@ -69,7 +63,7 @@ export class PriceFeedService {
     this.subscriber.on('message', (channel, message) => {
       if (channel === 'price-feed') {
         try {
-          const data = JSON.parse(message);
+          const data: unknown = JSON.parse(message);
           this.gateway.server.emit('price-feed-update', data);
         } catch (error) {
           this.logger.error('Error parsing price feed message', error);

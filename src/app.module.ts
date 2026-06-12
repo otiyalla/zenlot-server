@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { UserModule } from './user/user.module';
-import { HistoryModule } from './history/history.module';
 import { AuthModule } from './auth/auth.module';
 import { JournalModule } from './journal/journal.module';
 import { PriceFeedModule } from './price-feed/price-feed.module';
@@ -50,7 +49,6 @@ function getEnvFilePath(): string[] {
       ],
     }),
     UserModule,
-    HistoryModule,
     AuthModule,
     JournalModule,
     PriceFeedModule,
@@ -66,7 +64,7 @@ function getEnvFilePath(): string[] {
       useFactory: (config: ConfigService) => {
         const host = config.get<string>('REDIS_HOST');
         const port = Number(config.get<string>('REDIS_PORT') ?? 6379);
-        const username = config.get('REDIS_USERNAME');
+        const username = config.get<string>('REDIS_USERNAME');
         const password = config.get<string>('REDIS_PASSWORD');
         const tlsEnabled = ['1', 'true', 'yes'].includes(
           (config.get<string>('REDIS_TLS') ?? '').toLowerCase(),

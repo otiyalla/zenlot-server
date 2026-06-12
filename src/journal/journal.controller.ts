@@ -18,6 +18,7 @@ import { CreateJournalDto } from './dto/create-journal.dto';
 import { UpdateJournalDto } from './dto/update-journal.dto';
 import { SearchJournalDto } from './dto/search-journal.dto';
 import { IJournal } from './interfaces/journal.interface';
+import { AuthenticatedRequest } from '../user/interfaces/authenticated-request.interface';
 import {
   ApiOperation,
   ApiParam,
@@ -41,7 +42,10 @@ export class JournalController {
     status: 201,
     description: 'Journal entry created successfully.',
   })
-  create(@Body() createJournalDto: CreateJournalDto, @Request() req: any) {
+  create(
+    @Body() createJournalDto: CreateJournalDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
     createJournalDto.userId = req.user.id;
     return this.journalService.create(createJournalDto);
   }
@@ -52,7 +56,7 @@ export class JournalController {
     status: 200,
     description: 'Journal entries fetched successfully.',
   })
-  async findAll(@Request() req: any): Promise<IJournal[]> {
+  async findAll(@Request() req: AuthenticatedRequest): Promise<IJournal[]> {
     try {
       return await this.journalService.findByUserId(req.user.id);
     } catch (error) {
@@ -99,7 +103,7 @@ export class JournalController {
   })
   async search(
     @Query() searchDto: SearchJournalDto,
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
   ): Promise<IJournal[]> {
     try {
       searchDto.userId = req.user.id;
@@ -122,7 +126,7 @@ export class JournalController {
   })
   async findByUserId(
     @Param('userId', ParseUUIDPipe) userId: string,
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
   ): Promise<IJournal[]> {
     try {
       if (req.user.id !== userId && req.user.role !== 'admin') {
@@ -145,7 +149,10 @@ export class JournalController {
     status: 200,
     description: 'Journal entry fetched successfully.',
   })
-  findOne(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
+  findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
     return this.journalService.findOneByUser(id, req.user.id);
   }
 
@@ -159,7 +166,7 @@ export class JournalController {
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateJournalDto: UpdateJournalDto,
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
   ) {
     return this.journalService.updateByUser(id, req.user.id, updateJournalDto);
   }
@@ -171,7 +178,10 @@ export class JournalController {
     status: 200,
     description: 'Journal entry deleted successfully.',
   })
-  remove(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
+  remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
     return this.journalService.removeByUser(id, req.user.id);
   }
 }

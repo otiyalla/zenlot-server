@@ -1,95 +1,95 @@
-# Production readiness (zenlot-server)
+# Production Readiness — zenlot-server
 
-This list covers what is still needed to consider the backend production ready. Excluded from this list: containerization (Dockerfile), E2E tests, CI, and frontend API URL.
+A living checklist for operating the Zenlot API (NestJS + Fastify, Prisma/PostgreSQL,
+Redis/BullMQ, Socket.IO) in production. Status reflects the codebase as of the last review.
 
----
-
-## Done
-
-- CORS driven by `CORS_ORIGIN` (HTTP + WebSocket gateways)
-- Health check at `GET /health` with database probe (returns 503 if DB down)
-- Feedback rate limit backed by Redis, configurable via `FEEDBACK_RATE_LIMIT_PER_USER_PER_DAY`
-- Global validation pipe, Helmet, rate limiting, Sentry, auth (JWT + refresh)
+Legend: ✅ done · 🟡 partial / verify · ⬜ todo · ➖ optional / N-A
 
 ---
 
-## Remaining (to be production ready)
+## 1. Security
 
-### 1. Sentry configuration for production
+| Item | Status | Notes |
+| --- | --- | --- |
+| Authentication (JWT access + rotating refresh tokens) | ✅ | `auth` module; refresh tokens persisted & revoked on signin/signout |
+| Authorization enforced on every protected route | ✅ | Global guard + per-resource owner/admin checks (`assertSelfOrAdmin`, `assertAdmin`) |
+| No PII / secrets in API responses | ✅ | `stripPassword` removes password **and** email-verification token/expiry |
+| Input validation + DTO whitelisting | ✅ | Global `ValidationPipe` (`whitelist`, `forbidNonWhitelisted`, `transform`) |
+| Security headers | ✅ | `@fastify/helmet` with a restrictive CSP |
+| CORS from config | ✅ | `CORS_ORIGIN` drives HTTP + WebSocket origins |
+| Rate limiting (HTTP) from config | ✅ | `@fastify/rate-limit`, `RATE_LIMIT_MAX_REQUESTS` / `RATE_LIMIT_WINDOW_MS` |
+| Per-feature rate limiting | ✅ | Feedback endpoint limited via Redis (`FEEDBACK_RATE_LIMIT_PER_USER_PER_DAY`) |
+| WebSocket authentication | ✅ | Quote + price-feed gateways verify JWT on handshake, disconnect on failure |
+| Secrets never committed | ✅ | `.env*` gitignored; history clean; only `.env.example` tracked |
+| Secrets sourced from a manager in prod | 🟡 | Document/inject via platform env or AWS Secrets Manager/Vault (no plaintext `.env` on hosts) |
+| Dependency vulnerability scanning | ⬜ | Add `yarn npm audit` / Dependabot / Snyk in CI |
+| Password hashing | ✅ | bcrypt (bcryptjs), salted |
 
-**File:** `src/instrument.ts`
+## 2. Observability
 
-- **sendDefaultPii:** Set from env (e.g. `SENTRY_PII`). Use `false` in production; avoid sending PII by default.
-- **tracesSampleRate / profilesSampleRate:** Set from env (e.g. `SENTRY_TRACES_SAMPLE_RATE`, `SENTRY_PROFILE_SAMPLE_RATE`). In production use lower values (e.g. 0.1) or disable profiling to reduce cost and overhead.
+| Item | Status | Notes |
+| --- | --- | --- |
+| Error tracking (Sentry) | ✅ | `instrument.ts`; PII + trace/profile sample rates from env, prod-safe defaults |
+| Structured request logging | ✅ | Fastify logger enabled |
+| Configurable log level | 🟡 | Wire `LOG_LEVEL` → logger (Pino/Nest Logger) so verbosity is env-driven |
+| Health check with dependency probe | ✅ | `GET /health` returns 503 when the DB is down |
+| Readiness vs. liveness split | 🟡 | Consider `/health/live` (process up) vs `/health/ready` (DB + Redis reachable) for orchestrators |
+| Product analytics | ✅ | Mixpanel (`analytics` module), gated by token |
+| Metrics (RED/USE) endpoint | ➖ | Optional: expose Prometheus metrics if you run a metrics stack |
 
-**Action:** Read these from `process.env` and default to production-safe values when `NODE_ENV === 'production'`.
+## 3. Reliability & operations
+
+| Item | Status | Notes |
+| --- | --- | --- |
+| Graceful shutdown | ✅ | `enableShutdownHooks()` + Prisma `onModuleDestroy` `$disconnect`; BullMQ workers drain on `app.close()` |
+| Container image | ✅ | Production `Dockerfile`; `RUN_DB_MIGRATIONS=true` runs `prisma migrate deploy` on boot |
+| Reverse proxy / TLS termination | ✅ | Behind Nginx; `localhost:3000` → `https://api.zenlot.net` (see DEPLOYMENT_NGINX… doc) |
+| `trustProxy` enabled | ✅ | Set in Fastify adapter so client IPs/rate-limit keys are correct behind the proxy |
+| Background jobs (BullMQ) | ✅ | `price-feed`, `deletion` queues with retry/backoff & removeOnComplete/Fail |
+| Job idempotency / dead-letter handling | 🟡 | Verify retried jobs are idempotent; monitor failed queue |
+| Horizontal scalability | 🟡 | Stateless HTTP ✅; confirm Socket.IO uses a Redis adapter before running >1 instance |
+
+## 4. Data
+
+| Item | Status | Notes |
+| --- | --- | --- |
+| Migrations are versioned & forward-only | ✅ | Prisma migrations; `migrate deploy` in prod (never `db push`) |
+| Migration strategy documented | ✅ | `MIGRATION_*.md`, `create_migration.sh`, env-scoped `db:migrate:*` scripts |
+| Connection pooling | ✅ | Prisma adapter (local) / Accelerate (managed) |
+| Backups & PITR | ⬜ | Confirm managed Postgres backups + tested restore runbook |
+| Soft-delete + scheduled hard-delete (GDPR) | ✅ | Account deletion: 30-day grace, status endpoint, cancel, `deletion` queue |
+| Audit logging | ✅ | `audit` module records auth/account/security events |
+
+## 5. CI/CD & quality
+
+| Item | Status | Notes |
+| --- | --- | --- |
+| Continuous Integration | ✅ | `.github/workflows/ci.yml`: install → prisma generate → lint → typecheck → build → test |
+| Unit / integration tests | ✅ | Jest; controllers, services, guards, authz, gateways covered |
+| Lint clean (0 errors) | ✅ | `any`-propagation rules are warnings (tracked debt); real-defect rules are errors |
+| Type safety | ✅ | `tsc --noEmit` clean in CI |
+| Test coverage gate | ⬜ | Add a `--coverage` threshold once a baseline is agreed |
+| E2E / contract tests against a real DB | 🟡 | Spin up Postgres + Redis service containers in CI for a true e2e job |
+| Automated deploy pipeline | 🟡 | Document/automate build → migrate → release (currently manual `build:with:package`) |
+
+## 6. Configuration & docs
+
+| Item | Status | Notes |
+| --- | --- | --- |
+| 12-factor config (all settings via env) | ✅ | `ConfigModule`, env-specific files, DB URL mapping by `NODE_ENV` |
+| Env var reference doc | ⬜ | Add `ENV_VARIABLES.md` listing every var the code reads, with defaults |
+| `.env.example` matches code | 🟡 | Keep in sync with the reference doc above |
+| Swagger gated in prod | ✅ | Enabled by default off-prod; `SWAGGER_ENABLED` to force on |
+| Runbooks (deploy, rollback, incident) | 🟡 | Nginx/EACCES doc exists; add rollback + on-call runbook |
 
 ---
 
-### 2. Global HTTP rate limit from config
+## Top remaining items (highest leverage first)
 
-**File:** `src/main.ts`
-
-Rate limit is hardcoded (`max: 100`, `timeWindow: '1 minute'`). ENV_VARIABLES.md documents `RATE_LIMIT_WINDOW_MS` and `RATE_LIMIT_MAX_REQUESTS` but they are not used.
-
-**Action:** Read `RATE_LIMIT_MAX_REQUESTS` and `RATE_LIMIT_WINDOW_MS` (or a human-friendly window) from ConfigService and pass them into `@fastify/rate-limit`. Document defaults in ENV_VARIABLES.md.
-
----
-
-### 3. Graceful shutdown
-
-Ensure the app closes cleanly on SIGTERM/SIGINT (e.g. in production) so that:
-
-- Prisma disconnects
-- BullMQ workers drain and Redis connection closes
-- HTTP server stops accepting new requests
-
-**Action:** Call `app.close()` in a signal handler (or use `enableShutdownHooks` if not already wired). Ensure PrismaModule/PrismaService and BullMQ are closed in order.
-
----
-
-### 4. Environment variable and doc alignment
-
-**File:** `ENV_VARIABLES.md` (repo root)
-
-There are mismatches between the doc, `.env.example`, and the code (e.g. JWT/refresh names, Redis TLS, Sentry vars, DB env-specific vars). A dedicated **“Environment variable alignment”** section was added to ENV_VARIABLES.md.
-
-**Action:** Apply the changes suggested in that section so the doc and `.env.example` match what the code actually reads.
-
----
-
-### 5. Secrets in production
-
-Doc recommends using a secrets manager (e.g. AWS Secrets Manager, Vault) in production instead of plain `.env` files.
-
-**Action:** Document how production secrets are loaded (env vars injected by platform, or a small bootstrap that fetches from a secrets manager and sets `process.env` before the app starts). No code change strictly required if the platform injects env.
-
----
-
-### 6. (Optional) WebSocket authentication
-
-Quote and price-feed gateways accept unauthenticated connections. If those endpoints should be restricted:
-
-**Action:** Add the same JWT (or token) validation on WebSocket handshake; reject connections without a valid token.
-
----
-
-### 7. (Optional) Reverse proxy and logging
-
-- **Reverse proxy:** Document running behind Nginx/Caddy (or host proxy) for TLS and optional rate limiting at the edge.
-- **Structured logging:** If you add `LOG_LEVEL`, wire it to your logger (e.g. Nest Logger or Pino) so log level is configurable without code changes.
-
----
-
-## Quick checklist
-
-
-| Item                                                    | Status                     |
-| ------------------------------------------------------- | -------------------------- |
-| Sentry: PII + sample rates from env, prod-safe defaults | Todo                       |
-| HTTP rate limit from RATE_LIMIT_* env                   | Todo                       |
-| Graceful shutdown (SIGTERM/SIGINT)                      | Todo                       |
-| Env doc and .env.example aligned with code              | Section added; apply fixes |
-| Production secrets approach documented                  | Todo                       |
-| WebSocket auth (if required)                            | Optional                   |
-| Reverse proxy + LOG_LEVEL (optional)                    | Optional                   |
+1. **`ENV_VARIABLES.md`** — single source of truth for env vars + defaults; reconcile with `.env.example`.
+2. **Dependency scanning in CI** — Dependabot/Snyk or `yarn npm audit`.
+3. **E2E job with Postgres + Redis service containers** — exercise real migrations + queues.
+4. **Backups + tested restore runbook** for production Postgres.
+5. **Socket.IO Redis adapter** before scaling beyond one instance.
+6. **`LOG_LEVEL`** wired to the logger; **liveness/readiness** split for orchestrators.
+7. **Secrets manager** in production (no plaintext `.env` on hosts) + **automated deploy** pipeline.

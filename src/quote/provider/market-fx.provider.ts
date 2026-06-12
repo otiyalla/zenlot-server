@@ -162,7 +162,7 @@ export class MarketFxClient implements FxQuote, FxMarketQuote {
       if (price === undefined) {
         throw new Error(`Price not found in market FX response for ${symbol}`);
       }
-      
+
       return { price };
     } catch (error) {
       if (axios.isAxiosError(error) && error.response?.status === 401) {
