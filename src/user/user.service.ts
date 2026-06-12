@@ -130,12 +130,13 @@ export class UserService {
 
     return {
       ...newUser,
-      rules:
-        typeof user.rules === 'string'
-          ? (JSON.parse(user.rules) as unknown)
-          : user.rules && typeof user.rules === 'object'
-            ? user.rules
-            : { forex: { take_profit: [], stop_loss: [] } },
+      rules: (typeof user.rules === 'string'
+        ? JSON.parse(user.rules)
+        : user.rules && typeof user.rules === 'object'
+          ? user.rules
+          : {
+              forex: { take_profit: [], stop_loss: [] },
+            }) as AuthenticatedUser['rules'],
     };
   }
 

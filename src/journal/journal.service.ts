@@ -31,7 +31,8 @@ export class JournalService {
     return journals;
   }
 
-  findAll(): Promise<IJournal[]> {
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async findAll(): Promise<IJournal[]> {
     return this.prisma.journal.findMany({
       include: { author: true },
       orderBy: { createdAt: 'desc' },

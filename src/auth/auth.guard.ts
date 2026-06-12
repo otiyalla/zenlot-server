@@ -81,6 +81,6 @@ export class AuthGuard implements CanActivate {
     if (!token && !refreshToken) {
       return undefined;
     }
-    return { token, refreshToken };
+    return { token: token ?? '', refreshToken: refreshToken ?? '' };
   }
 }
