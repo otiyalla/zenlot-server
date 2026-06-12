@@ -7,6 +7,7 @@ import {
   Delete,
   Put,
   Request,
+  ParseUUIDPipe,
   ForbiddenException,
 } from '@nestjs/common';
 import { UserService } from './user.service';
@@ -81,7 +82,7 @@ export class UserController {
   @ApiOperation({ summary: 'Get a user by id' })
   @ApiParam({ name: 'id', required: true, description: 'User id' })
   @ApiResponse({ status: 200, description: 'User fetched successfully.' })
-  findOne(@Param('id') id: string, @Request() req: any) {
+  findOne(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
     this.assertSelfOrAdmin(id, req);
     return this.userService.findOne(id);
   }
@@ -91,7 +92,7 @@ export class UserController {
   @ApiParam({ name: 'id', required: true, description: 'User id' })
   @ApiResponse({ status: 200, description: 'User updated successfully.' })
   update(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateUserDto,
     @Request() req: any,
   ) {
@@ -103,7 +104,10 @@ export class UserController {
   @ApiOperation({ summary: 'Initiate account deletion' })
   @ApiParam({ name: 'id', required: true, description: 'User id' })
   @ApiResponse({ status: 200, description: 'Account deletion initiated.' })
-  initiateAccountDeletion(@Param('id') id: string, @Request() req: any) {
+  initiateAccountDeletion(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() req: any,
+  ) {
     this.assertSelfOrAdmin(id, req);
     return this.userService.initiateAccountDeletion(
       id,
@@ -116,7 +120,10 @@ export class UserController {
   @ApiOperation({ summary: 'Cancel account deletion' })
   @ApiParam({ name: 'id', required: true, description: 'User id' })
   @ApiResponse({ status: 200, description: 'Account deletion canceled.' })
-  cancelAccountDeletion(@Param('id') id: string, @Request() req: any) {
+  cancelAccountDeletion(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() req: any,
+  ) {
     this.assertSelfOrAdmin(id, req);
     return this.userService.cancelAccountDeletion(
       id,
@@ -129,7 +136,7 @@ export class UserController {
   @ApiOperation({ summary: 'Delete a user by id' })
   @ApiParam({ name: 'id', required: true, description: 'User id' })
   @ApiResponse({ status: 200, description: 'User deleted successfully.' })
-  remove(@Param('id') id: string, @Request() req: any) {
+  remove(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
     this.assertSelfOrAdmin(id, req);
     return this.userService.remove(id, req.ip, req.headers['user-agent']);
   }

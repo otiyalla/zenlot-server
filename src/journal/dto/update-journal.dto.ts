@@ -11,6 +11,7 @@ export class UpdateJournalDto extends PartialType(CreateJournalDto) {
 
   @IsOptional()
   @IsArray()
+  @IsString({ each: true })
   @ApiProperty({ description: 'The user tags' })
   tags?: string[];
 

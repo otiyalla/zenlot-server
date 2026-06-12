@@ -7,6 +7,7 @@ import {
   IsDate,
   IsOptional,
   IsUUID,
+  IsPositive,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
@@ -18,21 +19,25 @@ export class UpdateTradeDto extends PartialType(CreateTradeDto) {
 
   @IsNumber()
   @IsOptional()
+  @IsPositive()
   @ApiProperty({ description: 'Risk reward ratio' })
   rr: number;
 
   @IsNumber()
   @IsOptional()
+  @IsPositive()
   @ApiProperty({ description: 'The trade risk' })
   risk: number;
 
   @IsNumber()
   @IsOptional()
+  @IsPositive()
   @ApiProperty({ description: 'The trade reward' })
   reward: number;
 
   @IsArray()
   @IsOptional()
+  @IsString({ each: true })
   @ApiProperty({ description: 'The trade tags' })
   tags: string[];
 
@@ -53,10 +58,12 @@ export class UpdateTradeDto extends PartialType(CreateTradeDto) {
 
   @IsOptional()
   @IsNumber()
+  @IsPositive()
   closedPrice?: number;
 
   @IsOptional()
   @IsNumber()
+  @IsPositive()
   @Type(() => Number)
   closedExchangeRate?: number;
 

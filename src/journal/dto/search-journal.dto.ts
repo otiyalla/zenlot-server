@@ -32,6 +32,7 @@ export class SearchJournalDto {
 
   @IsArray()
   @IsOptional()
+  @IsString({ each: true })
   @ApiProperty({
     description: 'Filter by tags array',
     required: false,

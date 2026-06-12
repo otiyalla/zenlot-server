@@ -4,6 +4,8 @@ import {
   IsOptional,
   MinLength,
   MaxLength,
+  IsIn,
+  IsUUID,
 } from 'class-validator';
 
 export class CreateFeedbackDto {
@@ -22,9 +24,10 @@ export class CreateFeedbackDto {
 
   @IsOptional()
   @IsString()
+  @IsIn(['bug', 'feature', 'feedback', 'challenge'])
   type?: 'bug' | 'feature' | 'feedback' | 'challenge';
 
   @IsOptional()
-  @IsString()
+  @IsUUID()
   userId?: string;
 }

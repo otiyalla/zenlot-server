@@ -1,12 +1,6 @@
 import { IsString, Matches } from 'class-validator';
 
-export class CreatePriceFeedDto {
-  @IsString()
-  @Matches(/^[A-Za-z]{6}$/)
-  symbol: string;
-}
-
-export class ExchangeRateDto {
+export class QuoteRequestDto {
   @IsString()
   @Matches(/^[A-Za-z]{3}$/)
   base: string;

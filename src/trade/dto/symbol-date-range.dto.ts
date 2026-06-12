@@ -1,4 +1,4 @@
-import { IsISO8601, IsString, IsUUID } from 'class-validator';
+import { IsISO8601, IsString, IsUUID, Matches } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class SymbolDateRangeDto {
@@ -7,6 +7,7 @@ export class SymbolDateRangeDto {
   userId: string;
 
   @IsString()
+  @Matches(/^[A-Za-z]{6}$/)
   symbol: string;
 
   @IsISO8601()

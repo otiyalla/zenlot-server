@@ -14,9 +14,11 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
   id?: string;
 
   @IsDate()
+  @IsOptional()
   createdAt: Date;
 
   @IsDate()
+  @IsOptional()
   updatedAt: Date;
 
   @IsDate()
@@ -28,7 +30,8 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
   deleteScheduledFor?: Date;
 
   @IsBoolean()
-  emailVerified: boolean;
+  @IsOptional()
+  emailVerified?: boolean;
 
   @IsString()
   @IsOptional()

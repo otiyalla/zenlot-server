@@ -10,6 +10,7 @@ import { ApiProperty } from '@nestjs/swagger';
 export class CreateJournalDto {
   @IsArray()
   @IsOptional()
+  @IsString({ each: true })
   @ApiProperty({ description: 'The user tags' })
   tags: string[];
 
@@ -32,21 +33,14 @@ export class CreateJournalDto {
   tradeId?: string;
 
   @IsString()
+  @IsOptional()
   @ApiProperty({ description: 'The journal content in plain text' })
-  plainText: string;
+  plainText?: string;
 
   @IsString()
+  @IsOptional()
   @ApiProperty({ description: 'The journal content in editor format' })
-  editorState: string;
-
-  /*
-    @IsDate()
-    @ApiProperty({ type: Date, description: 'The date of the journal entry' })
-    createdAt: Date;
-
-    @IsDate()
-    @ApiProperty({ type: Date, description: 'The last updated date of the journal entry' })
-    updatedAt: Date;*/
+  editorState?: string;
 
   @IsBoolean()
   @IsOptional()

@@ -7,8 +7,13 @@ import { QuoteService } from '../quote/quote.service';
 
 describe('PriceFeedService', () => {
   let service: PriceFeedService;
+  let priceFeedQueue: { add: jest.Mock };
 
   beforeEach(async () => {
+    priceFeedQueue = {
+      add: jest.fn().mockResolvedValue({ id: 'job-1' }),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PriceFeedService,
@@ -28,7 +33,7 @@ describe('PriceFeedService', () => {
         },
         {
           provide: getQueueToken('price-feed'),
-          useValue: { add: jest.fn() },
+          useValue: priceFeedQueue,
         },
       ],
     }).compile();
@@ -38,5 +43,13 @@ describe('PriceFeedService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  it('preserves the symbol property when adding a price-feed job', async () => {
+    const payload = { symbol: 'EURUSD' };
+
+    await service.addPriceFeedJob(payload);
+
+    expect(priceFeedQueue.add).toHaveBeenCalledWith('price-feed', payload);
   });
 });

@@ -11,6 +11,7 @@ import { QuoteService } from './quote.service';
 import { Namespace, Server, Socket } from 'socket.io';
 import { getCorsOrigins } from '../config/cors.config';
 import { AuthService } from '../auth/auth.service';
+import { QuoteRequestDto } from './dto/quote-request.dto';
 
 interface AuthUser {
   id: string;
@@ -192,7 +193,7 @@ export class QuoteGateway implements OnModuleInit, OnModuleDestroy {
 
   @SubscribeMessage('get-quote')
   async handleGetQuote(
-    @MessageBody() symbol: { base: string; quote: string },
+    @MessageBody() symbol: QuoteRequestDto,
     @ConnectedSocket() client: Socket,
   ): Promise<void> {
     const quote = await this.quoteService.fxRate(symbol);
@@ -201,7 +202,7 @@ export class QuoteGateway implements OnModuleInit, OnModuleDestroy {
 
   @SubscribeMessage('get-exchange-rate')
   async handleRate(
-    @MessageBody() symbol: { base: string; quote: string },
+    @MessageBody() symbol: QuoteRequestDto,
     @ConnectedSocket() client: Socket,
   ): Promise<void> {
     const quote = await this.quoteService.fxRate(symbol);
