@@ -2,7 +2,6 @@ import {
   IsOptional,
   IsISO8601,
   IsString,
-  IsNumber,
   IsBoolean,
   IsArray,
   IsUUID,

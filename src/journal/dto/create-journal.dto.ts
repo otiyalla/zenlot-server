@@ -1,10 +1,7 @@
 import {
   IsString,
   IsArray,
-  IsNumber,
   IsBoolean,
-  IsDate,
-  IsJSON,
   IsOptional,
   IsUUID,
 } from 'class-validator';

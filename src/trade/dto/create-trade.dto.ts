@@ -2,10 +2,7 @@ import {
   IsArray,
   IsString,
   IsNumber,
-  IsDate,
-  IsJSON,
   IsOptional,
-  IsObject,
   ValidateNested,
   IsUUID,
 } from 'class-validator';

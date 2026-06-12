@@ -41,6 +41,21 @@ describe('UserController authorization', () => {
     );
   });
 
+  it('rejects listing all users for non-admin', () => {
+    const req = { user: { id: 'owner-1', role: 'trader' } };
+
+    expect(() => controller.findAll(req)).toThrow(ForbiddenException);
+    expect(userService.findAll).not.toHaveBeenCalled();
+  });
+
+  it('allows an admin to list all users', () => {
+    const req = { user: { id: 'admin-1', role: 'admin' } };
+
+    controller.findAll(req);
+
+    expect(userService.findAll).toHaveBeenCalled();
+  });
+
   it('rejects access to another users profile for non-admin', () => {
     const req = { user: { id: 'owner-1', role: 'trader' } };
 

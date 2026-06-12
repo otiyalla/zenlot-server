@@ -33,6 +33,12 @@ export class UserController {
     }
   }
 
+  private assertAdmin(req: any) {
+    if (req.user?.role !== 'admin') {
+      throw new ForbiddenException('Admin access required');
+    }
+  }
+
   @Post()
   @ApiOperation({ summary: 'Create a user' })
   @ApiResponse({ status: 201, description: 'User created successfully.' })
@@ -53,9 +59,11 @@ export class UserController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Get all users' })
+  @ApiOperation({ summary: 'Get all users (admin only)' })
   @ApiResponse({ status: 200, description: 'Users fetched successfully.' })
-  findAll() {
+  @ApiResponse({ status: 403, description: 'Admin access required.' })
+  findAll(@Request() req: any) {
+    this.assertAdmin(req);
     return this.userService.findAll();
   }
 

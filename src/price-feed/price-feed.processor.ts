@@ -6,7 +6,6 @@ import Redis from 'ioredis';
 import axios from 'axios';
 import { Job } from 'bullmq';
 import { config } from 'src/config/config.constant';
-import { fmp } from 'financialmodelingprep';
 
 @Processor('price-feed')
 export class PriceFeedProcessor extends WorkerHost {

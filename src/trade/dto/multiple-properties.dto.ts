@@ -3,8 +3,6 @@ import {
   IsISO8601,
   IsString,
   IsNumber,
-  IsDate,
-  IsJSON,
   IsUUID,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';

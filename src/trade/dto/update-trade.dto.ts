@@ -5,9 +5,7 @@ import {
   IsString,
   IsNumber,
   IsDate,
-  IsJSON,
   IsOptional,
-  IsObject,
   IsUUID,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';

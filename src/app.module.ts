@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { UserModule } from './user/user.module';
-import { HistoryModule } from './history/history.module';
 import { AuthModule } from './auth/auth.module';
 import { JournalModule } from './journal/journal.module';
 import { PriceFeedModule } from './price-feed/price-feed.module';
@@ -50,7 +49,6 @@ function getEnvFilePath(): string[] {
       ],
     }),
     UserModule,
-    HistoryModule,
     AuthModule,
     JournalModule,
     PriceFeedModule,

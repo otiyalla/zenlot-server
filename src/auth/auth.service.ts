@@ -313,36 +313,32 @@ export class AuthService {
       throw new NotFoundException('User not found');
     }
 
-    try {
-      const tempPassword = Math.random().toString(36).slice(-9);
-      const newPassword = `tPass${tempPassword}`;
-      this.logger.log(`Password reset for ${email}`);
-      const updatedUser = await this.userService.resetPassword(
-        user.id,
-        newPassword,
-      );
-      if (!updatedUser) {
-        throw new NotFoundException('Could not update password');
-      }
-      this.analytics.trackPasswordReset(user.id);
-      const emailSent = await this.emailService.sendPasswordResentEmail(
-        email,
-        newPassword,
-        user.fname,
-        user.language,
-      );
-      this.auditService.log({
-        userId: user.id,
-        action: 'PASSWORD_RESET_SUCCESS',
-        resource: 'auth',
-        resourceId: user.id,
-        ipAddress,
-        userAgent,
-      });
-      return emailSent;
-    } catch (error) {
-      throw error;
+    const tempPassword = Math.random().toString(36).slice(-9);
+    const newPassword = `tPass${tempPassword}`;
+    this.logger.log(`Password reset for ${email}`);
+    const updatedUser = await this.userService.resetPassword(
+      user.id,
+      newPassword,
+    );
+    if (!updatedUser) {
+      throw new NotFoundException('Could not update password');
     }
+    this.analytics.trackPasswordReset(user.id);
+    const emailSent = await this.emailService.sendPasswordResentEmail(
+      email,
+      newPassword,
+      user.fname,
+      user.language,
+    );
+    this.auditService.log({
+      userId: user.id,
+      action: 'PASSWORD_RESET_SUCCESS',
+      resource: 'auth',
+      resourceId: user.id,
+      ipAddress,
+      userAgent,
+    });
+    return emailSent;
   }
 
   async forgotPassword(email: string, ipAddress?: string, userAgent?: string) {
