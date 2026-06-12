@@ -19,6 +19,7 @@ import { MultiTradeDto } from './dto/multiple-properties.dto';
 import { MultipleSymbolsDto } from './dto/multiple-symbols.dto';
 import { TradeOwnerDto } from './dto/trade-owner.dto';
 import { SearchTradeDto } from './dto/search-trade.dto';
+import { AuthenticatedRequest } from '../user/interfaces/authenticated-request.interface';
 import {
   ApiOperation,
   ApiParam,
@@ -48,7 +49,10 @@ export class TradeController {
     description: 'The trade has been created.',
     type: CreateTradeDto,
   })
-  async create(@Body() createTradeDto: CreateTradeDto, @Request() req: any) {
+  async create(
+    @Body() createTradeDto: CreateTradeDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
     createTradeDto.userId = req.user.id;
     return this.tradeService.create(createTradeDto);
   }
@@ -57,7 +61,10 @@ export class TradeController {
   @ApiOperation({ summary: 'Get all trades for a user' })
   @ApiQuery({ name: 'userId', required: true, description: 'Trade owner id' })
   @ApiResponse({ status: 200, description: 'Trades fetched successfully.' })
-  async findAll(@Query() query: TradeOwnerDto, @Request() req: any) {
+  async findAll(
+    @Query() query: TradeOwnerDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
     query.userId = req.user.id;
     return this.tradeService.findAll(query);
   }
@@ -97,7 +104,10 @@ export class TradeController {
     description: 'End date (YYYY-MM-DD)',
   })
   @ApiResponse({ status: 200, description: 'Trades fetched successfully.' })
-  async findByDateRange(@Query() dto: DateRangeDto, @Request() req: any) {
+  async findByDateRange(
+    @Query() dto: DateRangeDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
     dto.userId = req.user.id;
     console.log('the data: ', dto);
     return this.tradeService.findByDateRange(dto);
@@ -125,7 +135,7 @@ export class TradeController {
   @ApiResponse({ status: 200, description: 'Trades fetched successfully.' })
   async findSymbolByDateRange(
     @Query() dto: SymbolDateRangeDto,
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
   ) {
     dto.userId = req.user.id;
     console.log('symbol date range dto: ', dto);
@@ -151,7 +161,10 @@ export class TradeController {
     description: 'End date (YYYY-MM-DD)',
   })
   @ApiResponse({ status: 200, description: 'Trades fetched successfully.' })
-  async findSymbol(@Query() dto: SymbolDateRangeDto, @Request() req: any) {
+  async findSymbol(
+    @Query() dto: SymbolDateRangeDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
     dto.userId = req.user.id;
     return this.tradeService.findBySymbol(dto);
   }
@@ -166,7 +179,10 @@ export class TradeController {
     description: 'Instrument symbols',
   })
   @ApiResponse({ status: 200, description: 'Trades fetched successfully.' })
-  async findSymbols(@Query() dto: MultipleSymbolsDto, @Request() req: any) {
+  async findSymbols(
+    @Query() dto: MultipleSymbolsDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
     dto.userId = req.user.id;
     return this.tradeService.findByMultipleSymbols(dto);
   }
@@ -198,7 +214,10 @@ export class TradeController {
     description: 'End date (YYYY-MM-DD)',
   })
   @ApiResponse({ status: 200, description: 'Trades fetched successfully.' })
-  async filterTrade(@Query() dto: MultiTradeDto, @Request() req: any) {
+  async filterTrade(
+    @Query() dto: MultiTradeDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
     dto.userId = req.user.id;
     return this.tradeService.findByMultipleProperties(dto);
   }
@@ -235,7 +254,10 @@ export class TradeController {
     description: 'End date (YYYY-MM-DD)',
   })
   @ApiResponse({ status: 200, description: 'Trades fetched successfully.' })
-  async search(@Query() dto: SearchTradeDto, @Request() req: any) {
+  async search(
+    @Query() dto: SearchTradeDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
     dto.userId = req.user.id;
     return this.tradeService.search(dto);
   }
@@ -244,7 +266,10 @@ export class TradeController {
   @ApiOperation({ summary: 'Get a trade by id' })
   @ApiParam({ name: 'id', required: true, description: 'Trade id' })
   @ApiResponse({ status: 200, description: 'Trade fetched successfully.' })
-  async findOne(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
+  async findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
     return this.tradeService.findOneForUser(id, req.user.id);
   }
 
@@ -255,7 +280,7 @@ export class TradeController {
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateTradeDto: UpdateTradeDto,
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
   ) {
     return this.tradeService.updateForUser(id, req.user.id, updateTradeDto);
   }
@@ -264,7 +289,10 @@ export class TradeController {
   @ApiOperation({ summary: 'Delete a trade by id' })
   @ApiParam({ name: 'id', required: true, description: 'Trade id' })
   @ApiResponse({ status: 200, description: 'Trade deleted successfully.' })
-  async remove(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
+  async remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
     return this.tradeService.removeForUser(id, req.user.id);
   }
 }

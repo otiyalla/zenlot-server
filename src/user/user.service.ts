@@ -132,7 +132,7 @@ export class UserService {
       ...newUser,
       rules:
         typeof user.rules === 'string'
-          ? JSON.parse(user.rules)
+          ? (JSON.parse(user.rules) as unknown)
           : user.rules && typeof user.rules === 'object'
             ? user.rules
             : { forex: { take_profit: [], stop_loss: [] } },
@@ -232,7 +232,7 @@ export class UserService {
       });
   }
 
-  async findOne(id: string): Promise<any | null> {
+  async findOne(id: string): Promise<unknown> {
     const user = await this.prisma.user.findUnique({ where: { id } });
     if (!user) throw new NotFoundException('User not found');
 
@@ -534,7 +534,11 @@ export class UserService {
   }
 
   // Legacy method - kept for backward compatibility, now calls initiateAccountDeletion
-  async remove(id: string, ipAddress?: string, userAgent?: string) {
+  async remove(
+    id: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<unknown> {
     return this.initiateAccountDeletion(id, ipAddress, userAgent);
   }
 }

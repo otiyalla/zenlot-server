@@ -1,8 +1,14 @@
+/* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument */
 import { AuthService } from './auth.service';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { UnauthorizedException } from '@nestjs/common';
 import * as crypto from 'crypto';
+import { UserService } from '../user/user.service';
+import { EmailService } from '../email/email.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { AnalyticsService } from '../analytics/analytics.service';
+import { AuditService } from '../audit/audit.service';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -28,7 +34,7 @@ describe('AuthService', () => {
     JWT_REFRESH_EXPIRES: '7d',
   };
 
-  beforeEach(async () => {
+  beforeEach(() => {
     jwtService = {
       sign: jest.fn(),
       verify: jest.fn(),
@@ -73,12 +79,12 @@ describe('AuthService', () => {
 
     service = new AuthService(
       jwtService,
-      userService,
-      emailService,
-      prisma,
+      userService as unknown as UserService,
+      emailService as unknown as EmailService,
+      prisma as unknown as PrismaService,
       configService,
-      analytics,
-      auditService,
+      analytics as unknown as AnalyticsService,
+      auditService as unknown as AuditService,
     );
   });
 
@@ -102,6 +108,7 @@ describe('AuthService', () => {
       user.email,
       'password',
     );
+    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(jwtService.sign).toHaveBeenCalledWith(
       { email: user.email, sub: user.id },
       expect.objectContaining({ secret: configMock.JWT_SECRET }),
@@ -132,6 +139,7 @@ describe('AuthService', () => {
       sub: user.id,
     });
 
+    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(jwtService.sign).toHaveBeenCalledWith(
       {
         token:
@@ -181,9 +189,11 @@ describe('AuthService', () => {
 
     const result = await service.verifyRefreshToken('public-refresh-token');
 
+    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(jwtService.verify).toHaveBeenCalledWith('public-refresh-token', {
       secret: configMock.JWT_REFRESH_SECRET,
     });
+
     expect(prisma.refreshToken.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
@@ -207,6 +217,7 @@ describe('AuthService', () => {
     await expect(
       service.verifyRefreshToken('public-refresh-token'),
     ).rejects.toBeInstanceOf(UnauthorizedException);
+
     expect(prisma.refreshToken.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
@@ -246,6 +257,7 @@ describe('AuthService', () => {
       'valid-refresh-token',
     );
 
+    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(jwtService.sign).toHaveBeenCalledWith(
       { email: 'user@example.com', sub: 'user-1' },
       expect.objectContaining({ secret: configMock.JWT_SECRET }),
@@ -274,6 +286,7 @@ describe('AuthService', () => {
     const result = await service.resetPassword(user.email);
 
     expect(result).toBe(true);
+
     expect(emailService.sendPasswordResentEmail).toHaveBeenCalledWith(
       user.email,
       expect.stringMatching(/^tPass/),

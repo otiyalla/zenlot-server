@@ -4,6 +4,7 @@ import {
   ExecutionContext,
   Injectable,
 } from '@nestjs/common';
+import { IncomingHttpHeaders } from 'http';
 import * as Sentry from '@sentry/nestjs';
 import { AuthService } from './auth.service';
 import { Reflector } from '@nestjs/core';
@@ -26,7 +27,10 @@ export class AuthGuard implements CanActivate {
       return true;
     }
 
-    const request = context.switchToHttp().getRequest();
+    const request = context.switchToHttp().getRequest<{
+      headers: import('http').IncomingHttpHeaders;
+      user?: unknown;
+    }>();
     const tokens = this.extractTokenFromHeader(request);
 
     if (!tokens || (!tokens.token && !tokens.refreshToken)) {
@@ -35,7 +39,12 @@ export class AuthGuard implements CanActivate {
 
     const { token, refreshToken } = tokens;
     try {
-      const result = await this.authService.verify(token, refreshToken);
+      const result = (await this.authService.verify(token, refreshToken)) as
+        | (Record<string, unknown> & {
+            accessToken?: string;
+            refreshToken?: string;
+          })
+        | null;
       if (!result) {
         throw new UnauthorizedException('Invalid token');
       }
@@ -46,7 +55,9 @@ export class AuthGuard implements CanActivate {
         result.refreshToken &&
         result.accessToken !== token
       ) {
-        const response = context.switchToHttp().getResponse();
+        const response = context.switchToHttp().getResponse<{
+          setHeader: (name: string, value: string) => void;
+        }>();
         response.setHeader('new-access-token', result.accessToken);
         response.setHeader('new-refresh-token', result.refreshToken);
       }
@@ -61,12 +72,12 @@ export class AuthGuard implements CanActivate {
     }
   }
 
-  private extractTokenFromHeader(
-    request: any,
-  ): { token: string; refreshToken: string } | undefined {
-    const token =
-      request.headers['accesstoken'] ?? request.headers['accessToken'];
-    const refreshToken = request.headers['refreshToken'];
+  private extractTokenFromHeader(request: {
+    headers: IncomingHttpHeaders;
+  }): { token: string; refreshToken: string } | undefined {
+    const token = (request.headers['accesstoken'] ??
+      request.headers['accesstoken']) as string | undefined;
+    const refreshToken = request.headers['refreshtoken'] as string | undefined;
     if (!token && !refreshToken) {
       return undefined;
     }

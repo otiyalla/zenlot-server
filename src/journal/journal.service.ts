@@ -31,7 +31,7 @@ export class JournalService {
     return journals;
   }
 
-  async findAll(): Promise<IJournal[]> {
+  findAll(): Promise<IJournal[]> {
     return this.prisma.journal.findMany({
       include: { author: true },
       orderBy: { createdAt: 'desc' },

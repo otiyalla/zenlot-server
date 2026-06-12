@@ -81,7 +81,7 @@ export class FinageClient implements FxQuote {
   }
 
   private extractPrice(data: unknown, symbol: string): number {
-    const payload = Array.isArray(data) ? data[0] : data;
+    const payload: unknown = Array.isArray(data) ? data[0] : data;
     if (!payload || typeof payload !== 'object') {
       throw new Error(`Invalid Finage response for ${symbol}`);
     }
@@ -131,7 +131,7 @@ export class FinageClient implements FxQuote {
     const pair = `${quote}${base}`.toUpperCase();
 
     try {
-      const { data } = await this.finageClient({
+      const { data } = await this.finageClient<unknown>({
         url: `/last/forex/${pair}`,
         params: { apikey: this.apiKey },
       });

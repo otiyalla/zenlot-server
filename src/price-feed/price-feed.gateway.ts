@@ -26,34 +26,38 @@ export class PriceFeedGateway implements OnModuleInit {
 
   onModuleInit() {
     // Handle client connections
-    this.server.on('connection', async (socket: Socket) => {
-      const accessToken = this.extractAccessToken(socket);
-      if (!accessToken) {
-        this.logger.warn(
-          `Price feed socket missing access token: ${socket.id}`,
-        );
-        socket.disconnect(true);
-        return;
-      }
+    this.server.on('connection', (socket: Socket) => {
+      void (async () => {
+        const accessToken = this.extractAccessToken(socket);
+        if (!accessToken) {
+          this.logger.warn(
+            `Price feed socket missing access token: ${socket.id}`,
+          );
+          socket.disconnect(true);
+          return;
+        }
 
-      const user = await this.authService.verifyToken(accessToken);
-      if (!user) {
-        this.logger.warn(`Price feed socket auth failed: ${socket.id}`);
-        socket.disconnect(true);
-        return;
-      }
+        const user = await this.authService.verifyToken(accessToken);
+        if (!user) {
+          this.logger.warn(`Price feed socket auth failed: ${socket.id}`);
+          socket.disconnect(true);
+          return;
+        }
 
-      (socket as any).user = user;
-      this.logger.log(`Price Feed Client connected: ${socket.id}`);
-      socket.join(this.getUserRoom(user.id));
-      socket.on('disconnect', () => {
-        this.logger.log(`Price Feed Client disconnected: ${socket.id}`);
-      });
+        (socket as Socket & { user: typeof user }).user = user;
+        this.logger.log(`Price Feed Client connected: ${socket.id}`);
+        void socket.join(this.getUserRoom(user.id));
+        socket.on('disconnect', () => {
+          this.logger.log(`Price Feed Client disconnected: ${socket.id}`);
+        });
+      })();
     });
   }
 
   private extractAccessToken(socket: Socket): string | undefined {
-    const authToken = (socket.handshake?.auth as any)?.accessToken;
+    const authToken = (socket.handshake?.auth as Record<string, unknown>)?.[
+      'accessToken'
+    ];
     if (typeof authToken === 'string' && authToken.trim()) {
       return authToken.trim();
     }

@@ -64,7 +64,7 @@ function getEnvFilePath(): string[] {
       useFactory: (config: ConfigService) => {
         const host = config.get<string>('REDIS_HOST');
         const port = Number(config.get<string>('REDIS_PORT') ?? 6379);
-        const username = config.get('REDIS_USERNAME');
+        const username = config.get<string>('REDIS_USERNAME');
         const password = config.get<string>('REDIS_PASSWORD');
         const tlsEnabled = ['1', 'true', 'yes'].includes(
           (config.get<string>('REDIS_TLS') ?? '').toLowerCase(),

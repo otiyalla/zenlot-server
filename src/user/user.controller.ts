@@ -14,6 +14,7 @@ import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UserPasswordDto } from './dto/user-password.dto';
+import { AuthenticatedRequest } from './interfaces/authenticated-request.interface';
 import {
   ApiOperation,
   ApiParam,
@@ -28,13 +29,13 @@ import {
 export class UserController {
   constructor(private readonly userService: UserService) {}
 
-  private assertSelfOrAdmin(targetUserId: string, req: any) {
+  private assertSelfOrAdmin(targetUserId: string, req: AuthenticatedRequest) {
     if (req.user.id !== targetUserId && req.user.role !== 'admin') {
       throw new ForbiddenException('Cannot access another user');
     }
   }
 
-  private assertAdmin(req: any) {
+  private assertAdmin(req: AuthenticatedRequest) {
     if (req.user?.role !== 'admin') {
       throw new ForbiddenException('Admin access required');
     }
@@ -43,14 +44,17 @@ export class UserController {
   @Post()
   @ApiOperation({ summary: 'Create a user' })
   @ApiResponse({ status: 201, description: 'User created successfully.' })
-  create(@Body() dto: CreateUserDto, @Request() req: any) {
+  create(@Body() dto: CreateUserDto, @Request() req: AuthenticatedRequest) {
     return this.userService.create(dto, req.ip, req.headers['user-agent']);
   }
 
   @Post('change-password')
   @ApiOperation({ summary: 'Change user password' })
   @ApiResponse({ status: 200, description: 'Password changed successfully.' })
-  changePassword(@Body() dto: UserPasswordDto, @Request() req: any) {
+  changePassword(
+    @Body() dto: UserPasswordDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
     dto.userId = req.user.id;
     return this.userService.changePassword(
       dto,
@@ -63,7 +67,7 @@ export class UserController {
   @ApiOperation({ summary: 'Get all users (admin only)' })
   @ApiResponse({ status: 200, description: 'Users fetched successfully.' })
   @ApiResponse({ status: 403, description: 'Admin access required.' })
-  findAll(@Request() req: any) {
+  findAll(@Request() req: AuthenticatedRequest) {
     this.assertAdmin(req);
     return this.userService.findAll();
   }
@@ -74,7 +78,9 @@ export class UserController {
     status: 200,
     description: 'Deletion status fetched successfully.',
   })
-  async getDeletionStatus(@Request() req: any) {
+  async getDeletionStatus(
+    @Request() req: AuthenticatedRequest,
+  ): Promise<unknown> {
     return this.userService.getDeletionStatus(req.user.id);
   }
 
@@ -82,7 +88,10 @@ export class UserController {
   @ApiOperation({ summary: 'Get a user by id' })
   @ApiParam({ name: 'id', required: true, description: 'User id' })
   @ApiResponse({ status: 200, description: 'User fetched successfully.' })
-  findOne(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
+  findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
     this.assertSelfOrAdmin(id, req);
     return this.userService.findOne(id);
   }
@@ -94,7 +103,7 @@ export class UserController {
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateUserDto,
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
   ) {
     this.assertSelfOrAdmin(id, req);
     return this.userService.update(id, dto, req.ip, req.headers['user-agent']);
@@ -106,7 +115,7 @@ export class UserController {
   @ApiResponse({ status: 200, description: 'Account deletion initiated.' })
   initiateAccountDeletion(
     @Param('id', ParseUUIDPipe) id: string,
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
   ) {
     this.assertSelfOrAdmin(id, req);
     return this.userService.initiateAccountDeletion(
@@ -122,7 +131,7 @@ export class UserController {
   @ApiResponse({ status: 200, description: 'Account deletion canceled.' })
   cancelAccountDeletion(
     @Param('id', ParseUUIDPipe) id: string,
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
   ) {
     this.assertSelfOrAdmin(id, req);
     return this.userService.cancelAccountDeletion(
@@ -136,7 +145,10 @@ export class UserController {
   @ApiOperation({ summary: 'Delete a user by id' })
   @ApiParam({ name: 'id', required: true, description: 'User id' })
   @ApiResponse({ status: 200, description: 'User deleted successfully.' })
-  remove(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
+  remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
     this.assertSelfOrAdmin(id, req);
     return this.userService.remove(id, req.ip, req.headers['user-agent']);
   }

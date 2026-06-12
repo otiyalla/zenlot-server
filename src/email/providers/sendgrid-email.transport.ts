@@ -23,7 +23,7 @@ export class SendGridEmailTransport implements EmailTransport {
   private initializeClient(): void {
     try {
       // Keep SendGrid as an optional dependency so nodemailer-only setups still boot.
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-unsafe-assignment
       this.client = require('@sendgrid/mail');
     } catch {
       this.logger.warn(

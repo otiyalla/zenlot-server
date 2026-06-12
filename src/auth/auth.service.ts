@@ -20,6 +20,33 @@ import { AnalyticsService } from '../analytics/analytics.service';
 import { AuditService } from '../audit/audit.service';
 import { CreateUserDto } from '../user/dto/create-user.dto';
 
+interface AccessTokenPayload {
+  email: string;
+  sub: string;
+}
+
+interface RefreshTokenPayload {
+  token: string;
+}
+
+interface StoredUser {
+  id: string;
+  email: string;
+  fname: string;
+  lname: string;
+  language: string;
+  role: string;
+  accountCurrency: string;
+  theme: string;
+  timezone: string;
+  togglePipValue: boolean;
+  tags: string[];
+  createdAt: Date;
+  updatedAt: Date;
+  password?: string | null;
+  isAuthenticated?: boolean;
+}
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -128,7 +155,7 @@ export class AuthService {
 
   async verifyToken(token: string) {
     try {
-      const decoded = this.jwtService.verify(token, {
+      const decoded = this.jwtService.verify<AccessTokenPayload>(token, {
         secret: this.getAccessSecret(),
       });
       const user = await this.userService.findByEmail(decoded.email);
@@ -164,6 +191,7 @@ export class AuthService {
     );
 
     try {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
       await (this.prisma as any).refreshToken.create({
         data: {
           token,
@@ -182,32 +210,46 @@ export class AuthService {
     return publicRefreshToken ?? '';
   }
 
-  async verifyRefreshToken(token: string) {
+  async verifyRefreshToken(
+    token: string,
+  ): Promise<{ user: StoredUser; token: string }> {
     try {
-      const decoded = this.jwtService.verify(token, {
+      const decoded = this.jwtService.verify<RefreshTokenPayload>(token, {
         secret: this.getRefreshSecret(),
       });
-      const refreshTokenRecord = await (
-        this.prisma as any
-      ).refreshToken.findFirst({
-        where: {
-          token: decoded.token,
-          isRevoked: false,
-          expiresAt: {
-            gt: new Date(),
+
+      const refreshTokenRecord: { token: string; user: StoredUser } | null =
+        await (
+          this.prisma as unknown as {
+            refreshToken: {
+              findFirst: (
+                args: unknown,
+              ) => Promise<{ token: string; user: StoredUser } | null>;
+            };
+          }
+        ).refreshToken.findFirst({
+          where: {
+            token: decoded.token,
+            isRevoked: false,
+            expiresAt: {
+              gt: new Date(),
+            },
           },
-        },
-        include: {
-          user: true,
-        },
-      });
+          include: {
+            user: true,
+          },
+        });
 
       if (!refreshTokenRecord) {
         throw new UnauthorizedException('Invalid or expired refresh token');
       }
 
       const user = refreshTokenRecord.user;
-      const newUser = { ...user, isAuthenticated: true, password: undefined };
+      const newUser: StoredUser = {
+        ...user,
+        isAuthenticated: true,
+        password: undefined,
+      };
       return {
         user: newUser,
         token: decoded.token,
@@ -332,7 +374,7 @@ export class AuthService {
       user.fname,
       user.language,
     );
-    this.auditService.log({
+    void this.auditService.log({
       userId: user.id,
       action: 'PASSWORD_RESET_SUCCESS',
       resource: 'auth',
@@ -385,6 +427,7 @@ export class AuthService {
 
   private async revokeAllRefreshTokens(userId: string): Promise<void> {
     try {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
       await (this.prisma as any).refreshToken.updateMany({
         where: {
           userId: userId,
@@ -406,6 +449,7 @@ export class AuthService {
 
   private async revokeRefreshToken(token: string): Promise<void> {
     try {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
       await (this.prisma as any).refreshToken.updateMany({
         where: {
           token: token,

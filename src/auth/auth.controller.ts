@@ -16,6 +16,7 @@ import {
   SignInDto,
   VerifyTokenDto,
 } from './dto/auth.dto';
+import { AuthenticatedRequest } from '../user/interfaces/authenticated-request.interface';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -34,7 +35,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Sign in with email and password' })
   @ApiResponse({ status: 200, description: 'Sign in successful.' })
-  async signin(@Body() body: SignInDto, @Request() req: any) {
+  async signin(@Body() body: SignInDto, @Request() req: AuthenticatedRequest) {
     const { email, password } = body;
     return this.authService.signin(
       email,
@@ -49,13 +50,16 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Verify access and refresh tokens' })
   @ApiResponse({ status: 200, description: 'Token verification successful.' })
-  async verify(@Body() body: VerifyTokenDto, @Request() req: any) {
+  async verify(
+    @Body() body: VerifyTokenDto,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<unknown> {
     const { token, refreshToken } = body;
     return this.authService.verify(
       token,
       refreshToken,
       req.ip,
-      req.headers['user-agent'],
+      req.headers?.['user-agent'],
     );
   }
 
@@ -64,7 +68,10 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Refresh access token' })
   @ApiResponse({ status: 200, description: 'Token refreshed successfully.' })
-  async refresh(@Body() body: RefreshTokenDto, @Request() req: any) {
+  async refresh(
+    @Body() body: RefreshTokenDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
     const { refreshToken } = body;
     return this.authService.refreshTokens(
       refreshToken,
@@ -77,7 +84,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Sign out and revoke tokens' })
   @ApiResponse({ status: 200, description: 'Signed out successfully.' })
-  async signout(@Request() req: any) {
+  async signout(@Request() req: AuthenticatedRequest) {
     const userId = req.user.id;
     return this.authService.signout(userId, req.ip, req.headers['user-agent']);
   }
@@ -86,7 +93,10 @@ export class AuthController {
   @Public()
   @ApiOperation({ summary: 'Create a new user account' })
   @ApiResponse({ status: 201, description: 'User signed up successfully.' })
-  async signup(@Body() body: CreateUserDto, @Request() req: any) {
+  async signup(
+    @Body() body: CreateUserDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
     return this.authService.signup(body, req.ip, req.headers['user-agent']);
   }
 
@@ -95,7 +105,10 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Reset password with email' })
   @ApiResponse({ status: 200, description: 'Password reset initiated.' })
-  async resetPassword(@Body() body: EmailDto, @Request() req: any) {
+  async resetPassword(
+    @Body() body: EmailDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
     const email = body.email;
     return this.authService.resetPassword(
       email,
@@ -109,7 +122,10 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Send forgot password email' })
   @ApiResponse({ status: 200, description: 'Password recovery email sent.' })
-  async forgotPassword(@Body() body: EmailDto, @Request() req: any) {
+  async forgotPassword(
+    @Body() body: EmailDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
     const { email } = body;
     return this.authService.forgotPassword(
       email,

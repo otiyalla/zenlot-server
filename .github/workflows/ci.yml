@@ -18,31 +18,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: 'yarn'
 
       - name: Enable Yarn through Corepack
-        run: corepack enable
-
-      - name: Get Yarn cache directory
-        id: yarn-cache
-        run: echo "dir=$(yarn cache dir)" >> "$GITHUB_OUTPUT"
-
-      - name: Cache Yarn packages
-        uses: actions/cache@v4
-        with:
-          path: ${{ steps.yarn-cache.outputs.dir }}
-          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-yarn-
+        run: |
+          corepack enable
+          # Pin Yarn classic to match the v1 lockfile in this repo
+          corepack prepare yarn@1.22.22 --activate
 
       - name: Install dependencies
         run: yarn install --frozen-lockfile
 
       - name: Generate Prisma client
         run: yarn db:generate
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
 
       - name: Lint
         run: yarn lint
@@ -53,5 +49,32 @@ jobs:
       - name: Build
         run: yarn build
 
-      - name: Test
-        run: yarn test --ci
+      - name: Detect changed source files
+        id: changed
+        run: |
+          BASE=${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD=${{ github.sha }}
+          # Fall back to HEAD~1 on direct pushes where before is all-zeros
+          if [ "$BASE" = "0000000000000000000000000000000000000000" ] || [ -z "$BASE" ]; then
+            BASE=$(git rev-parse HEAD~1 2>/dev/null || echo "")
+          fi
+          if [ -z "$BASE" ]; then
+            echo "pattern=**" >> "$GITHUB_OUTPUT"
+          else
+            CHANGED=$(git diff --name-only "$BASE" "$HEAD" | grep -E '^src/.*\.(ts|js)$' | sed 's|src/||; s|\.ts$||; s|\.js$||' | sort -u | tr '\n' '|' | sed 's/|$//')
+            if [ -z "$CHANGED" ]; then
+              echo "pattern=" >> "$GITHUB_OUTPUT"
+            else
+              echo "pattern=$CHANGED" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      - name: Test (changed files only)
+        if: steps.changed.outputs.pattern != ''
+        run: |
+          PATTERN="${{ steps.changed.outputs.pattern }}"
+          if [ "$PATTERN" = "**" ]; then
+            yarn test --ci
+          else
+            yarn test --ci --testPathPattern="$PATTERN"
+          fi

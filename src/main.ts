@@ -34,6 +34,7 @@ async function bootstrap() {
     credentials: true,
   });
 
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
   await app.register(require('@fastify/helmet'), {
     contentSecurityPolicy: {
       directives: {
@@ -58,10 +59,11 @@ async function bootstrap() {
     ? Number(rateLimitWindowRaw)
     : rateLimitWindowRaw;
 
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
   await app.register(require('@fastify/rate-limit'), {
     max: Number.isFinite(rateLimitMax) ? rateLimitMax : 100, // Limit each IP to N requests per window
     timeWindow: rateLimitWindow, // Time window for rate limiting
-    keyGenerator: (req) => req.ip, // Use the request IP as the key
+    keyGenerator: (req: { ip: string }) => req.ip, // Use the request IP as the key
     skipOnError: true, // Skip rate limiting on error responses
   });
 
@@ -100,7 +102,7 @@ async function bootstrap() {
   }
 
   app.enableShutdownHooks();
-  await prismaService.enableShutdownHooks(app);
+  prismaService.enableShutdownHooks(app);
 
   const port = process.env.PORT || 3000;
   await app.listen(port, '0.0.0.0');
@@ -108,7 +110,7 @@ async function bootstrap() {
     `🚀  Zenlot API running on http://localhost:${port} in ${process.env.NODE_ENV} environment`,
   );
 }
-bootstrap();
+void bootstrap();
 
 //TODO: look into using a reverse proxy like Nginx or Caddy for production deployments
 //TODO: consider using Docker for containerization and deployment
