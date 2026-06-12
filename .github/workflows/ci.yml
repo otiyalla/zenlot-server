@@ -61,7 +61,7 @@ jobs:
           if [ -z "$BASE" ]; then
             echo "pattern=**" >> "$GITHUB_OUTPUT"
           else
-            CHANGED=$(git diff --name-only "$BASE" "$HEAD" | grep -E '^src/.*\.(ts|js)$' || true | sed 's|src/||; s|\.ts$||; s|\.js$||' | sort -u | tr '\n' '|' | sed 's/|$//')
+            CHANGED=$(git diff --name-only "$BASE" "$HEAD" | sed -nE 's#^src/(.*)\.(ts|js)$#\1#p' | sort -u | tr '\n' '|' | sed 's/|$//')
             if [ -z "$CHANGED" ]; then
               echo "pattern=" >> "$GITHUB_OUTPUT"
             else
