@@ -35,7 +35,7 @@ export class PriceFeedController {
       'PriceFeedController: getPriceFeed called with symbol:',
       query.symbol,
     );
-    return this.priceFeedService.addPriceFeedJob(query.symbol);
+    return this.priceFeedService.addPriceFeedJob(query);
   }
 
   @Get('search')

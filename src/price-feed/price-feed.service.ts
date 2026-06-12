@@ -48,9 +48,11 @@ export class PriceFeedService {
   }
 
   // Add a new price feed job to the queue
-  async addPriceFeedJob(symbol: string) {
-    const job = await this.priceFeedQueue.add('price-feed', symbol);
-    this.logger.log(`Added job to queue: ${job.id} for symbol ${symbol}`);
+  async addPriceFeedJob(createPriceFeedDto: CreatePriceFeedDto) {
+    const job = await this.priceFeedQueue.add('price-feed', createPriceFeedDto);
+    this.logger.log(
+      `Added job to queue: ${job.id} for symbol ${createPriceFeedDto.symbol}`,
+    );
     return job;
   }
 
