@@ -5,6 +5,7 @@ import { SignInDto } from './auth/dto/auth.dto';
 import { CreateFeedbackDto } from './feedback/dto/create-feedback.dto';
 import { CreateJournalDto } from './journal/dto/create-journal.dto';
 import { CreateTradeDto } from './trade/dto/create-trade.dto';
+import { TradeOwnerDto } from './trade/dto/trade-owner.dto';
 import { CreateUserDto } from './user/dto/create-user.dto';
 
 const validTradePayload = {
@@ -48,6 +49,20 @@ describe('Request validation boundaries', () => {
     });
 
     expect(await validate(dto)).not.toHaveLength(0);
+  });
+
+  it('allows the authenticated trade owner query to be omitted', async () => {
+    const validationPipe = new ValidationPipe({
+      transform: true,
+      transformOptions: { enableImplicitConversion: true },
+    });
+
+    await expect(
+      validationPipe.transform({}, { type: 'query', metatype: TradeOwnerDto }),
+    ).resolves.toBeInstanceOf(TradeOwnerDto);
+
+    const dto = plainToInstance(TradeOwnerDto, {});
+    expect(await validate(dto)).toHaveLength(0);
   });
 
   it('rejects unsupported trade enums and non-positive values', async () => {
