@@ -10,6 +10,7 @@ import {
   Query,
   Request,
   ForbiddenException,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import * as Sentry from '@sentry/nestjs';
 import { JournalService } from './journal.service';
@@ -120,7 +121,7 @@ export class JournalController {
     description: 'Journal entries fetched successfully.',
   })
   async findByUserId(
-    @Param('userId') userId: string,
+    @Param('userId', ParseUUIDPipe) userId: string,
     @Request() req: any,
   ): Promise<IJournal[]> {
     try {
@@ -144,7 +145,7 @@ export class JournalController {
     status: 200,
     description: 'Journal entry fetched successfully.',
   })
-  findOne(@Param('id') id: string, @Request() req: any) {
+  findOne(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
     return this.journalService.findOneByUser(id, req.user.id);
   }
 
@@ -156,7 +157,7 @@ export class JournalController {
     description: 'Journal entry updated successfully.',
   })
   update(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() updateJournalDto: UpdateJournalDto,
     @Request() req: any,
   ) {
@@ -170,7 +171,7 @@ export class JournalController {
     status: 200,
     description: 'Journal entry deleted successfully.',
   })
-  remove(@Param('id') id: string, @Request() req: any) {
+  remove(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
     return this.journalService.removeByUser(id, req.user.id);
   }
 }

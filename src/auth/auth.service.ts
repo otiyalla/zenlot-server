@@ -18,6 +18,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { randomBytes } from 'crypto';
 import { AnalyticsService } from '../analytics/analytics.service';
 import { AuditService } from '../audit/audit.service';
+import { CreateUserDto } from '../user/dto/create-user.dto';
 
 @Injectable()
 export class AuthService {
@@ -170,14 +171,15 @@ export class AuthService {
           expiresAt: refreshTokenExpiry,
         },
       });
+      return publicRefreshToken ?? '';
     } catch (error) {
       this.logger.warn('Error creating refresh token', error);
       Sentry.captureException(error, {
         extra: { userId: payload.sub, context: 'createRefreshToken' },
       });
-    } finally {
-      return publicRefreshToken ?? '';
+      throw new UnauthorizedException('Could not create refresh token');
     }
+    return publicRefreshToken ?? '';
   }
 
   async verifyRefreshToken(token: string) {
@@ -190,6 +192,7 @@ export class AuthService {
       ).refreshToken.findFirst({
         where: {
           token: decoded.token,
+          isRevoked: false,
           expiresAt: {
             gt: new Date(),
           },
@@ -283,7 +286,7 @@ export class AuthService {
     }
   }
 
-  async signup(user: any, ipAddress?: string, userAgent?: string) {
+  async signup(user: CreateUserDto, ipAddress?: string, userAgent?: string) {
     const newUser = await this.userService.create(user, ipAddress, userAgent);
     if (!newUser) {
       throw new NotFoundException('User could not be created');

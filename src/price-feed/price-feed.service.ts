@@ -48,14 +48,20 @@ export class PriceFeedService {
   }
 
   // Add a new price feed job to the queue
-  async addPriceFeedJob(symbol: string) {
-    const job = await this.priceFeedQueue.add('price-feed', symbol);
-    this.logger.log(`Added job to queue: ${job.id} for symbol ${symbol}`);
+  async addPriceFeedJob(createPriceFeedDto: CreatePriceFeedDto) {
+    const job = await this.priceFeedQueue.add('price-feed', createPriceFeedDto);
+    this.logger.log(
+      `Added job to queue: ${job.id} for symbol ${createPriceFeedDto.symbol}`,
+    );
     return job;
   }
 
   async getFX(symbol: { base: string; quote: string }) {
     return this.quoteService.fxRate(symbol);
+  }
+
+  async search(query: string) {
+    return this.quoteService.search(query);
   }
 
   async onModuleInit() {

@@ -4,6 +4,7 @@ import { UpdateTradeDto } from './dto/update-trade.dto';
 import { DateRangeDto } from './dto/date-range.dto';
 import { SymbolDateRangeDto } from './dto/symbol-date-range.dto';
 import { MultiTradeDto } from './dto/multiple-properties.dto';
+import { SearchTradeDto } from './dto/search-trade.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '../../prisma/generated/prisma/client';
 
@@ -144,6 +145,58 @@ export class TradeService {
       }
     }
     return this.prisma.trade.findMany({ where });
+  }
+
+  async search(dto: SearchTradeDto) {
+    const {
+      userId,
+      query,
+      queryTerms,
+      symbol,
+      execution,
+      status,
+      statuses,
+      start,
+      end,
+    } = dto;
+    const where: Prisma.tradeWhereInput = { userId };
+
+    if (symbol) where.symbol = symbol;
+    if (execution) where.execution = execution;
+    if (statuses?.length) {
+      where.status = { in: statuses };
+    } else if (status) {
+      where.status = status;
+    }
+
+    if (start || end) {
+      where.createdAt = {};
+      if (start) {
+        where.createdAt.gte = new Date(start);
+      }
+      if (end) {
+        where.createdAt.lte = new Date(end);
+      }
+    }
+
+    const searchTerms = [query, ...(queryTerms ?? [])]
+      .map((term) => term?.trim())
+      .filter((term): term is string => Boolean(term));
+    const uniqueSearchTerms = [...new Set(searchTerms)];
+
+    if (uniqueSearchTerms.length) {
+      where.OR = uniqueSearchTerms.flatMap((term) => [
+        { symbol: { contains: term, mode: 'insensitive' } },
+        { plainText: { contains: term, mode: 'insensitive' } },
+        { execution: { contains: term, mode: 'insensitive' } },
+        { status: { contains: term, mode: 'insensitive' } },
+      ]);
+    }
+
+    return this.prisma.trade.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
   async update(id: string, updateTradeDto: UpdateTradeDto) {

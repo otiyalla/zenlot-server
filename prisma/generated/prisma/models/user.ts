@@ -698,10 +698,6 @@ export type userUpdatetagsInput = {
   push?: string | string[]
 }
 
-export type BoolFieldUpdateOperationsInput = {
-  set?: boolean
-}
-
 export type userCreateNestedOneWithoutRefreshTokensInput = {
   create?: Prisma.XOR<Prisma.userCreateWithoutRefreshTokensInput, Prisma.userUncheckedCreateWithoutRefreshTokensInput>
   connectOrCreate?: Prisma.userCreateOrConnectWithoutRefreshTokensInput
