@@ -38,12 +38,86 @@ model trade {
   closedExchangeRate Float?
   closedReason       String?
   isAutoClosed       Boolean   @default(false)
+  // Risk Engine (Phase 1) — populated when a trade is sized/logged/closed via the risk engine.
+  capitalExposure    Float?
+  capitalExposurePct Float?
+  governanceStatus   String?
+  // True when the user knowingly logged this trade despite a blocking governance
+  // rule (this is a journal, not an execution platform — rules warn, never block).
+  overridden         Boolean   @default(false)
+  pnl                Float?
+  rMultiple          Float?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
   journal            journal[]
 
   @@index([userId])
   @@index([status, symbol])
+}
+
+model riskProfile {
+  userId                  String   @id
+  user                    user     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  maxRiskPerTradePct      Float    @default(1.0)
+  maxPortfolioExposurePct Float    @default(3.0)
+  maxDailyDrawdownPct     Float    @default(5.0)
+  maxWeeklyDrawdownPct    Float    @default(8.0)
+  maxMonthlyDrawdownPct   Float    @default(10.0)
+  maxOpenTrades           Int      @default(5)
+  maxCorrelatedExposure   Float    @default(6.0)
+  accountBalance          Decimal  @default(0) @db.Decimal(18, 2)
+  lastBalanceSetAt        DateTime @default(now())
+  lastBalanceSource       String   @default("manual") // 'manual' | 'trade_close'
+  // How the override confirmation is presented when a trade breaks a rule:
+  // 'simple' = one acknowledgement; 'detailed' = tick each broken rule.
+  overrideMode            String   @default("simple")
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+}
+
+model drawdownState {
+  userId             String   @id
+  user               user     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  accountBalance     Decimal  @db.Decimal(18, 2)
+  peakBalance        Decimal  @db.Decimal(18, 2)
+  dailyOpenBalance   Decimal  @db.Decimal(18, 2)
+  weeklyOpenBalance  Decimal  @db.Decimal(18, 2)
+  monthlyOpenBalance Decimal  @db.Decimal(18, 2)
+  dailyDrawdownPct   Float    @default(0)
+  weeklyDrawdownPct  Float    @default(0)
+  monthlyDrawdownPct Float    @default(0)
+  allTimeDrawdownPct Float    @default(0)
+  dailyBreached      Boolean  @default(false)
+  weeklyBreached     Boolean  @default(false)
+  monthlyBreached    Boolean  @default(false)
+  // The user's local calendar date (YYYY-MM-DD, in their IANA timezone) on which
+  // the circuit breakers were last reset. Used by the hourly reset job to fire
+  // exactly once per local day — DST-safe and idempotent across retries.
+  lastResetLocalDate String?
+  updatedAt          DateTime @updatedAt
+  createdAt          DateTime @default(now())
+}
+
+model governanceLog {
+  id            String   @id @default(uuid())
+  user          user     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  userId        String
+  tradeId       String?
+  overallStatus String
+  checksJson    Json
+  blockedReason String?
+  // True when this log records a trade the user overrode past a blocking rule.
+  acknowledged     Boolean  @default(false)
+  // The rule keys the user explicitly acknowledged when overriding (e.g.
+  // ['maxPortfolioExposure']). Empty unless `acknowledged` is true.
+  acknowledgedRules String[]
+  // Optional free-text note the user gave for why they overrode the rule(s).
+  overrideReason    String?
+  aiCoaching    String? // populated asynchronously (Phase 1 Section 15)
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+  @@index([tradeId])
 }
 
 model journal {
@@ -67,28 +141,31 @@ model journal {
 }
 
 model user {
-  id                           String         @id @default(uuid())
-  fname                        String         @db.VarChar(256)
-  lname                        String         @db.VarChar(256)
-  email                        String         @unique @db.VarChar(256)
+  id                           String          @id @default(uuid())
+  fname                        String          @db.VarChar(256)
+  lname                        String          @db.VarChar(256)
+  email                        String          @unique @db.VarChar(256)
   role                         String
   tags                         String[]
   language                     String
   password                     String
   accountCurrency              String
-  theme                        String         @default("system")
+  theme                        String          @default("system")
   rules                        Json
-  journalEntries               journal[]      @relation("UserJournal")
-  createdAt                    DateTime       @default(now())
-  updatedAt                    DateTime       @updatedAt
+  journalEntries               journal[]       @relation("UserJournal")
+  createdAt                    DateTime        @default(now())
+  updatedAt                    DateTime        @updatedAt
   trade                        trade[]
-  timezone                     String         @default("UTC")
-  togglePipValue               Boolean        @default(false)
+  timezone                     String          @default("UTC")
+  togglePipValue               Boolean         @default(false)
   refreshTokens                RefreshToken[]
   auditLogs                    auditLog[]
+  riskProfile                  riskProfile?
+  drawdownState                drawdownState?
+  governanceLogs               governanceLog[]
   deletedAt                    DateTime?
   deleteScheduledFor           DateTime?
-  emailVerified                Boolean        @default(false)
+  emailVerified                Boolean         @default(false)
   emailVerificationToken       String?
   emailVerificationTokenExpiry DateTime?
 }

@@ -1,5 +1,5 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Logger } from '@nestjs/common';
+import { Logger, OnModuleDestroy } from '@nestjs/common';
 import * as Sentry from '@sentry/nestjs';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
@@ -8,7 +8,7 @@ import { Job } from 'bullmq';
 import { config } from 'src/config/config.constant';
 
 @Processor('price-feed')
-export class PriceFeedProcessor extends WorkerHost {
+export class PriceFeedProcessor extends WorkerHost implements OnModuleDestroy {
   private readonly logger = new Logger(PriceFeedProcessor.name);
   private publisher: Redis;
 
@@ -37,6 +37,13 @@ export class PriceFeedProcessor extends WorkerHost {
       lazyConnect: true,
       commandTimeout: 10000,
     });
+
+    this.publisher.on('error', (error) => {
+      this.logger.error('Redis publisher error', error);
+      Sentry.captureException(error, {
+        extra: { context: 'PriceFeedProcessor.publisher' },
+      });
+    });
   }
 
   async process(job: Job<{ symbol: string }>): Promise<unknown> {
@@ -61,5 +68,10 @@ export class PriceFeedProcessor extends WorkerHost {
       }
     }
     return null;
+  }
+
+  onModuleDestroy() {
+    this.publisher.disconnect();
+    this.logger.log('Redis publisher disconnected');
   }
 }

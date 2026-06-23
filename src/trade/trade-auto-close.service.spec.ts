@@ -2,6 +2,7 @@ import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
 import { QuoteGateway } from '../quote/quote.gateway';
 import { QuoteService } from '../quote/quote.service';
+import { DrawdownService } from '../risk/drawdown.service';
 import {
   SCAN_OPEN_TRADES_JOB,
   TRADE_SCAN_INTERVAL_MS,
@@ -13,6 +14,8 @@ type OpenTradeFixture = {
   userId: string;
   symbol: string;
   execution: string;
+  entry: number;
+  lot: number;
   accountCurrency: string;
   exchangeRate: number;
   stopLoss: { value: number; pips: number };
@@ -28,6 +31,8 @@ type TradeUpdateArg = {
     closedReason: string;
     isAutoClosed: boolean;
     status: string;
+    pnl: number;
+    rMultiple: number | null;
   };
 };
 
@@ -37,6 +42,8 @@ describe('TradeAutoCloseService', () => {
     userId: 'user-1',
     symbol: 'EURUSD',
     execution: 'buy',
+    entry: 1.1,
+    lot: 0.2,
     accountCurrency: 'USD',
     exchangeRate: 1.1,
     stopLoss: { value: 1.09, pips: 10 },
@@ -44,20 +51,29 @@ describe('TradeAutoCloseService', () => {
   };
 
   const createSubject = (trades: OpenTradeFixture[] = [openTrade]) => {
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
     const prisma = {
       trade: {
         findMany: jest.fn().mockResolvedValue(trades),
-        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        // updateMany runs inside $transaction; expose the same mock on prisma
+        // so existing assertions on prisma.trade.updateMany keep working.
+        updateMany,
         findUnique: jest
           .fn()
           .mockResolvedValue({ ...trades[0], status: 'reached_tp' }),
       },
+      $transaction: jest.fn((cb: (tx: unknown) => unknown) =>
+        cb({ trade: { updateMany } }),
+      ),
     };
     const quoteService = {
       fxRate: jest.fn(),
     };
     const gateway = {
       emitTradeClosed: jest.fn(),
+    };
+    const drawdown = {
+      settleRealizedPnL: jest.fn().mockResolvedValue(undefined),
     };
     const queue = {
       add: jest.fn(),
@@ -66,10 +82,11 @@ describe('TradeAutoCloseService', () => {
       prisma as unknown as PrismaService,
       quoteService as unknown as QuoteService,
       gateway as unknown as QuoteGateway,
+      drawdown as unknown as DrawdownService,
       queue as unknown as Queue,
     );
 
-    return { gateway, prisma, queue, quoteService, service };
+    return { drawdown, gateway, prisma, queue, quoteService, service };
   };
 
   const getLastUpdateArg = (updateMany: jest.Mock): TradeUpdateArg => {
@@ -138,6 +155,24 @@ describe('TradeAutoCloseService', () => {
       );
     },
   );
+
+  it('records PnL/R-multiple and settles balance + drawdown on close', async () => {
+    const { drawdown, prisma, quoteService, service } = createSubject();
+    quoteService.fxRate.mockResolvedValue({ price: 1.11 }); // buy TP hit
+
+    await service.scanOpenTrades();
+
+    const data = getLastUpdateArg(prisma.trade.updateMany).data;
+    // entry 1.10 → exit 1.11, lot 0.2, forex contract 100000, rate 1 → +200
+    expect(data.pnl).toBeCloseTo(200, 6);
+    // R = (1.11-1.10)/(1.10-1.09) = 1
+    expect(data.rMultiple).toBeCloseTo(1, 6);
+    expect(drawdown.settleRealizedPnL).toHaveBeenCalledWith(
+      expect.anything(),
+      'user-1',
+      expect.closeTo(200, 6),
+    );
+  });
 
   it('requests a symbol quote once in entry orientation and leaves untriggered trades open', async () => {
     const secondTrade = { ...openTrade, id: 'trade-2' };

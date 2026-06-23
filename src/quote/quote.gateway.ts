@@ -55,6 +55,10 @@ export class QuoteGateway implements OnModuleInit, OnModuleDestroy {
     this.server.to(this.getUserRoom(userId)).emit('trade-closed', trade);
   }
 
+  emitCoachingReady(userId: string, payload: unknown): void {
+    this.server.to(this.getUserRoom(userId)).emit('coaching_ready', payload);
+  }
+
   onModuleInit() {
     // Handle client connections
     this.server.setMaxListeners(20);

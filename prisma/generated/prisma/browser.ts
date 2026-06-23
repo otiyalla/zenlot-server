@@ -23,6 +23,21 @@ export * from './enums';
  */
 export type trade = Prisma.tradeModel
 /**
+ * Model riskProfile
+ * 
+ */
+export type riskProfile = Prisma.riskProfileModel
+/**
+ * Model drawdownState
+ * 
+ */
+export type drawdownState = Prisma.drawdownStateModel
+/**
+ * Model governanceLog
+ * 
+ */
+export type governanceLog = Prisma.governanceLogModel
+/**
  * Model journal
  * 
  */

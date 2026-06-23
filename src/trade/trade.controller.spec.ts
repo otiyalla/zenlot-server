@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { TradeController } from './trade.controller';
 import { TradeService } from './trade.service';
+import { TradeLogService } from '../risk/trade-log.service';
 
 describe('TradeController', () => {
   let controller: TradeController;
@@ -11,6 +12,10 @@ describe('TradeController', () => {
       providers: [
         {
           provide: TradeService,
+          useValue: {},
+        },
+        {
+          provide: TradeLogService,
           useValue: {},
         },
       ],

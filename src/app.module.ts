@@ -10,6 +10,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JobsModule } from './jobs/jobs.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { TradeModule } from './trade/trade.module';
+import { RiskModule } from './risk/risk.module';
 import { QuoteModule } from './quote/quote.module';
 import { mapDatabaseUrl } from './config/database.config';
 import { FeedbackModule } from './feedback/feedback.module';
@@ -55,6 +56,7 @@ function getEnvFilePath(): string[] {
     JobsModule,
     PrismaModule,
     TradeModule,
+    RiskModule,
     FeedbackModule,
     AuditModule,
     EmailModule,

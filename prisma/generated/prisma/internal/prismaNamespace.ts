@@ -385,6 +385,9 @@ type FieldRefInputType<Model, FieldType> = Model extends never ? never : FieldRe
 
 export const ModelName = {
   trade: 'trade',
+  riskProfile: 'riskProfile',
+  drawdownState: 'drawdownState',
+  governanceLog: 'governanceLog',
   journal: 'journal',
   user: 'user',
   RefreshToken: 'RefreshToken',
@@ -405,7 +408,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "trade" | "journal" | "user" | "refreshToken" | "auditLog" | "feedback"
+    modelProps: "trade" | "riskProfile" | "drawdownState" | "governanceLog" | "journal" | "user" | "refreshToken" | "auditLog" | "feedback"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -480,6 +483,228 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         count: {
           args: Prisma.tradeCountArgs<ExtArgs>
           result: runtime.Types.Utils.Optional<Prisma.TradeCountAggregateOutputType> | number
+        }
+      }
+    }
+    riskProfile: {
+      payload: Prisma.$riskProfilePayload<ExtArgs>
+      fields: Prisma.riskProfileFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.riskProfileFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$riskProfilePayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.riskProfileFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$riskProfilePayload>
+        }
+        findFirst: {
+          args: Prisma.riskProfileFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$riskProfilePayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.riskProfileFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$riskProfilePayload>
+        }
+        findMany: {
+          args: Prisma.riskProfileFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$riskProfilePayload>[]
+        }
+        create: {
+          args: Prisma.riskProfileCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$riskProfilePayload>
+        }
+        createMany: {
+          args: Prisma.riskProfileCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.riskProfileCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$riskProfilePayload>[]
+        }
+        delete: {
+          args: Prisma.riskProfileDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$riskProfilePayload>
+        }
+        update: {
+          args: Prisma.riskProfileUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$riskProfilePayload>
+        }
+        deleteMany: {
+          args: Prisma.riskProfileDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.riskProfileUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.riskProfileUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$riskProfilePayload>[]
+        }
+        upsert: {
+          args: Prisma.riskProfileUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$riskProfilePayload>
+        }
+        aggregate: {
+          args: Prisma.RiskProfileAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateRiskProfile>
+        }
+        groupBy: {
+          args: Prisma.riskProfileGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.RiskProfileGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.riskProfileCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.RiskProfileCountAggregateOutputType> | number
+        }
+      }
+    }
+    drawdownState: {
+      payload: Prisma.$drawdownStatePayload<ExtArgs>
+      fields: Prisma.drawdownStateFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.drawdownStateFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$drawdownStatePayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.drawdownStateFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$drawdownStatePayload>
+        }
+        findFirst: {
+          args: Prisma.drawdownStateFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$drawdownStatePayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.drawdownStateFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$drawdownStatePayload>
+        }
+        findMany: {
+          args: Prisma.drawdownStateFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$drawdownStatePayload>[]
+        }
+        create: {
+          args: Prisma.drawdownStateCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$drawdownStatePayload>
+        }
+        createMany: {
+          args: Prisma.drawdownStateCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.drawdownStateCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$drawdownStatePayload>[]
+        }
+        delete: {
+          args: Prisma.drawdownStateDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$drawdownStatePayload>
+        }
+        update: {
+          args: Prisma.drawdownStateUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$drawdownStatePayload>
+        }
+        deleteMany: {
+          args: Prisma.drawdownStateDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.drawdownStateUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.drawdownStateUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$drawdownStatePayload>[]
+        }
+        upsert: {
+          args: Prisma.drawdownStateUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$drawdownStatePayload>
+        }
+        aggregate: {
+          args: Prisma.DrawdownStateAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateDrawdownState>
+        }
+        groupBy: {
+          args: Prisma.drawdownStateGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.DrawdownStateGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.drawdownStateCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.DrawdownStateCountAggregateOutputType> | number
+        }
+      }
+    }
+    governanceLog: {
+      payload: Prisma.$governanceLogPayload<ExtArgs>
+      fields: Prisma.governanceLogFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.governanceLogFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$governanceLogPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.governanceLogFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$governanceLogPayload>
+        }
+        findFirst: {
+          args: Prisma.governanceLogFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$governanceLogPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.governanceLogFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$governanceLogPayload>
+        }
+        findMany: {
+          args: Prisma.governanceLogFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$governanceLogPayload>[]
+        }
+        create: {
+          args: Prisma.governanceLogCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$governanceLogPayload>
+        }
+        createMany: {
+          args: Prisma.governanceLogCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.governanceLogCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$governanceLogPayload>[]
+        }
+        delete: {
+          args: Prisma.governanceLogDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$governanceLogPayload>
+        }
+        update: {
+          args: Prisma.governanceLogUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$governanceLogPayload>
+        }
+        deleteMany: {
+          args: Prisma.governanceLogDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.governanceLogUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.governanceLogUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$governanceLogPayload>[]
+        }
+        upsert: {
+          args: Prisma.governanceLogUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$governanceLogPayload>
+        }
+        aggregate: {
+          args: Prisma.GovernanceLogAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateGovernanceLog>
+        }
+        groupBy: {
+          args: Prisma.governanceLogGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.GovernanceLogGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.governanceLogCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.GovernanceLogCountAggregateOutputType> | number
         }
       }
     }
@@ -916,11 +1141,76 @@ export const TradeScalarFieldEnum = {
   closedExchangeRate: 'closedExchangeRate',
   closedReason: 'closedReason',
   isAutoClosed: 'isAutoClosed',
+  capitalExposure: 'capitalExposure',
+  capitalExposurePct: 'capitalExposurePct',
+  governanceStatus: 'governanceStatus',
+  overridden: 'overridden',
+  pnl: 'pnl',
+  rMultiple: 'rMultiple',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const
 
 export type TradeScalarFieldEnum = (typeof TradeScalarFieldEnum)[keyof typeof TradeScalarFieldEnum]
+
+
+export const RiskProfileScalarFieldEnum = {
+  userId: 'userId',
+  maxRiskPerTradePct: 'maxRiskPerTradePct',
+  maxPortfolioExposurePct: 'maxPortfolioExposurePct',
+  maxDailyDrawdownPct: 'maxDailyDrawdownPct',
+  maxWeeklyDrawdownPct: 'maxWeeklyDrawdownPct',
+  maxMonthlyDrawdownPct: 'maxMonthlyDrawdownPct',
+  maxOpenTrades: 'maxOpenTrades',
+  maxCorrelatedExposure: 'maxCorrelatedExposure',
+  accountBalance: 'accountBalance',
+  lastBalanceSetAt: 'lastBalanceSetAt',
+  lastBalanceSource: 'lastBalanceSource',
+  overrideMode: 'overrideMode',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type RiskProfileScalarFieldEnum = (typeof RiskProfileScalarFieldEnum)[keyof typeof RiskProfileScalarFieldEnum]
+
+
+export const DrawdownStateScalarFieldEnum = {
+  userId: 'userId',
+  accountBalance: 'accountBalance',
+  peakBalance: 'peakBalance',
+  dailyOpenBalance: 'dailyOpenBalance',
+  weeklyOpenBalance: 'weeklyOpenBalance',
+  monthlyOpenBalance: 'monthlyOpenBalance',
+  dailyDrawdownPct: 'dailyDrawdownPct',
+  weeklyDrawdownPct: 'weeklyDrawdownPct',
+  monthlyDrawdownPct: 'monthlyDrawdownPct',
+  allTimeDrawdownPct: 'allTimeDrawdownPct',
+  dailyBreached: 'dailyBreached',
+  weeklyBreached: 'weeklyBreached',
+  monthlyBreached: 'monthlyBreached',
+  lastResetLocalDate: 'lastResetLocalDate',
+  updatedAt: 'updatedAt',
+  createdAt: 'createdAt'
+} as const
+
+export type DrawdownStateScalarFieldEnum = (typeof DrawdownStateScalarFieldEnum)[keyof typeof DrawdownStateScalarFieldEnum]
+
+
+export const GovernanceLogScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  tradeId: 'tradeId',
+  overallStatus: 'overallStatus',
+  checksJson: 'checksJson',
+  blockedReason: 'blockedReason',
+  acknowledged: 'acknowledged',
+  acknowledgedRules: 'acknowledgedRules',
+  overrideReason: 'overrideReason',
+  aiCoaching: 'aiCoaching',
+  createdAt: 'createdAt'
+} as const
+
+export type GovernanceLogScalarFieldEnum = (typeof GovernanceLogScalarFieldEnum)[keyof typeof GovernanceLogScalarFieldEnum]
 
 
 export const JournalScalarFieldEnum = {
@@ -1139,6 +1429,20 @@ export type IntFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'In
 export type ListIntFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Int[]'>
     
 
+
+/**
+ * Reference to a field of type 'Decimal'
+ */
+export type DecimalFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Decimal'>
+    
+
+
+/**
+ * Reference to a field of type 'Decimal[]'
+ */
+export type ListDecimalFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Decimal[]'>
+    
+
 /**
  * Batch Payload for updateMany & deleteMany & createMany
  */
@@ -1235,6 +1539,9 @@ export type PrismaClientOptions = ({
 }
 export type GlobalOmitConfig = {
   trade?: Prisma.tradeOmit
+  riskProfile?: Prisma.riskProfileOmit
+  drawdownState?: Prisma.drawdownStateOmit
+  governanceLog?: Prisma.governanceLogOmit
   journal?: Prisma.journalOmit
   user?: Prisma.userOmit
   refreshToken?: Prisma.RefreshTokenOmit
