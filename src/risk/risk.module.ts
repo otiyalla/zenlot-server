@@ -27,11 +27,13 @@ import {
 import { createFailoverCoachingProvider } from './coaching/coaching.provider-factory';
 import { AuditModule } from '../audit/audit.module';
 import { QuoteModule } from '../quote/quote.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
     AuditModule,
     QuoteModule,
+    NotificationsModule,
     BullModule.registerQueue(
       { name: DRAWDOWN_RESET_QUEUE },
       { name: COACHING_QUEUE },

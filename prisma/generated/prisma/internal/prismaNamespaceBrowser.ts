@@ -57,6 +57,8 @@ export const ModelName = {
   governanceLog: 'governanceLog',
   journal: 'journal',
   user: 'user',
+  pushToken: 'pushToken',
+  notificationPreference: 'notificationPreference',
   RefreshToken: 'RefreshToken',
   auditLog: 'auditLog',
   feedback: 'feedback'
@@ -216,6 +218,43 @@ export const UserScalarFieldEnum = {
 } as const
 
 export type UserScalarFieldEnum = (typeof UserScalarFieldEnum)[keyof typeof UserScalarFieldEnum]
+
+
+export const PushTokenScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  token: 'token',
+  platform: 'platform',
+  deviceId: 'deviceId',
+  deviceName: 'deviceName',
+  enabled: 'enabled',
+  lastErrorAt: 'lastErrorAt',
+  lastError: 'lastError',
+  lastUsedAt: 'lastUsedAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type PushTokenScalarFieldEnum = (typeof PushTokenScalarFieldEnum)[keyof typeof PushTokenScalarFieldEnum]
+
+
+export const NotificationPreferenceScalarFieldEnum = {
+  userId: 'userId',
+  pushEnabled: 'pushEnabled',
+  tradeClosed: 'tradeClosed',
+  coachingReady: 'coachingReady',
+  drawdownAlerts: 'drawdownAlerts',
+  governanceAlerts: 'governanceAlerts',
+  journalReminders: 'journalReminders',
+  quietHoursStart: 'quietHoursStart',
+  quietHoursEnd: 'quietHoursEnd',
+  reminderHour: 'reminderHour',
+  lastReminderLocalDate: 'lastReminderLocalDate',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type NotificationPreferenceScalarFieldEnum = (typeof NotificationPreferenceScalarFieldEnum)[keyof typeof NotificationPreferenceScalarFieldEnum]
 
 
 export const RefreshTokenScalarFieldEnum = {

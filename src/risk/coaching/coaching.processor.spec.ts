@@ -3,6 +3,7 @@ import { CoachingProcessor, CoachingJobData } from './coaching.processor';
 import { CoachingService } from './coaching.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { QuoteGateway } from '../../quote/quote.gateway';
+import { NotificationsService } from '../../notifications/notifications.service';
 
 const jobData: CoachingJobData = {
   governanceLogId: 'g1',
@@ -18,13 +19,15 @@ function make(coachingResult: string | null) {
   const generateCoaching = jest.fn().mockResolvedValue(coachingResult);
   const update = jest.fn().mockResolvedValue({});
   const emitCoachingReady = jest.fn();
+  const notifyCoachingReady = jest.fn().mockResolvedValue(undefined);
 
   const processor = new CoachingProcessor(
     { generateCoaching } as unknown as CoachingService,
     { governanceLog: { update } } as unknown as PrismaService,
     { emitCoachingReady } as unknown as QuoteGateway,
+    { notifyCoachingReady } as unknown as NotificationsService,
   );
-  return { processor, update, emitCoachingReady };
+  return { processor, update, emitCoachingReady, notifyCoachingReady };
 }
 
 const job = { data: jobData } as Job<CoachingJobData>;

@@ -68,6 +68,24 @@ export type journal = Prisma.journalModel
  */
 export type user = Prisma.userModel
 /**
+ * Model pushToken
+ * An Expo push token for one of a user's devices. A user can have many devices;
+ * each device's Expo token is unique. We store the platform + a device
+ * identifier so a re-registration from the same device updates in place rather
+ * than accumulating stale rows, and an `enabled` flag plus `lastErrorAt` so the
+ * send pipeline can soft-disable tokens that Expo reports as
+ * `DeviceNotRegistered` instead of hard-deleting them immediately.
+ */
+export type pushToken = Prisma.pushTokenModel
+/**
+ * Model notificationPreference
+ * Per-user notification preferences. One row per user, lazily created with
+ * sensible supportive defaults (all categories on, no quiet hours). Quiet hours
+ * are stored as local "HH:mm" strings and evaluated against the user's IANA
+ * `timezone`, mirroring the drawdown reset's DST-safe local-date approach.
+ */
+export type notificationPreference = Prisma.notificationPreferenceModel
+/**
  * Model RefreshToken
  * 
  */

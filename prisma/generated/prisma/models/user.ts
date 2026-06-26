@@ -301,6 +301,8 @@ export type userWhereInput = {
   riskProfile?: Prisma.XOR<Prisma.RiskProfileNullableScalarRelationFilter, Prisma.riskProfileWhereInput> | null
   drawdownState?: Prisma.XOR<Prisma.DrawdownStateNullableScalarRelationFilter, Prisma.drawdownStateWhereInput> | null
   governanceLogs?: Prisma.GovernanceLogListRelationFilter
+  pushTokens?: Prisma.PushTokenListRelationFilter
+  notificationPreference?: Prisma.XOR<Prisma.NotificationPreferenceNullableScalarRelationFilter, Prisma.notificationPreferenceWhereInput> | null
 }
 
 export type userOrderByWithRelationInput = {
@@ -331,6 +333,8 @@ export type userOrderByWithRelationInput = {
   riskProfile?: Prisma.riskProfileOrderByWithRelationInput
   drawdownState?: Prisma.drawdownStateOrderByWithRelationInput
   governanceLogs?: Prisma.governanceLogOrderByRelationAggregateInput
+  pushTokens?: Prisma.pushTokenOrderByRelationAggregateInput
+  notificationPreference?: Prisma.notificationPreferenceOrderByWithRelationInput
 }
 
 export type userWhereUniqueInput = Prisma.AtLeast<{
@@ -364,6 +368,8 @@ export type userWhereUniqueInput = Prisma.AtLeast<{
   riskProfile?: Prisma.XOR<Prisma.RiskProfileNullableScalarRelationFilter, Prisma.riskProfileWhereInput> | null
   drawdownState?: Prisma.XOR<Prisma.DrawdownStateNullableScalarRelationFilter, Prisma.drawdownStateWhereInput> | null
   governanceLogs?: Prisma.GovernanceLogListRelationFilter
+  pushTokens?: Prisma.PushTokenListRelationFilter
+  notificationPreference?: Prisma.XOR<Prisma.NotificationPreferenceNullableScalarRelationFilter, Prisma.notificationPreferenceWhereInput> | null
 }, "id" | "email">
 
 export type userOrderByWithAggregationInput = {
@@ -446,6 +452,8 @@ export type userCreateInput = {
   riskProfile?: Prisma.riskProfileCreateNestedOneWithoutUserInput
   drawdownState?: Prisma.drawdownStateCreateNestedOneWithoutUserInput
   governanceLogs?: Prisma.governanceLogCreateNestedManyWithoutUserInput
+  pushTokens?: Prisma.pushTokenCreateNestedManyWithoutUserInput
+  notificationPreference?: Prisma.notificationPreferenceCreateNestedOneWithoutUserInput
 }
 
 export type userUncheckedCreateInput = {
@@ -476,6 +484,8 @@ export type userUncheckedCreateInput = {
   riskProfile?: Prisma.riskProfileUncheckedCreateNestedOneWithoutUserInput
   drawdownState?: Prisma.drawdownStateUncheckedCreateNestedOneWithoutUserInput
   governanceLogs?: Prisma.governanceLogUncheckedCreateNestedManyWithoutUserInput
+  pushTokens?: Prisma.pushTokenUncheckedCreateNestedManyWithoutUserInput
+  notificationPreference?: Prisma.notificationPreferenceUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type userUpdateInput = {
@@ -506,6 +516,8 @@ export type userUpdateInput = {
   riskProfile?: Prisma.riskProfileUpdateOneWithoutUserNestedInput
   drawdownState?: Prisma.drawdownStateUpdateOneWithoutUserNestedInput
   governanceLogs?: Prisma.governanceLogUpdateManyWithoutUserNestedInput
+  pushTokens?: Prisma.pushTokenUpdateManyWithoutUserNestedInput
+  notificationPreference?: Prisma.notificationPreferenceUpdateOneWithoutUserNestedInput
 }
 
 export type userUncheckedUpdateInput = {
@@ -536,6 +548,8 @@ export type userUncheckedUpdateInput = {
   riskProfile?: Prisma.riskProfileUncheckedUpdateOneWithoutUserNestedInput
   drawdownState?: Prisma.drawdownStateUncheckedUpdateOneWithoutUserNestedInput
   governanceLogs?: Prisma.governanceLogUncheckedUpdateManyWithoutUserNestedInput
+  pushTokens?: Prisma.pushTokenUncheckedUpdateManyWithoutUserNestedInput
+  notificationPreference?: Prisma.notificationPreferenceUncheckedUpdateOneWithoutUserNestedInput
 }
 
 export type userCreateManyInput = {
@@ -761,6 +775,34 @@ export type userUpdatetagsInput = {
   push?: string | string[]
 }
 
+export type userCreateNestedOneWithoutPushTokensInput = {
+  create?: Prisma.XOR<Prisma.userCreateWithoutPushTokensInput, Prisma.userUncheckedCreateWithoutPushTokensInput>
+  connectOrCreate?: Prisma.userCreateOrConnectWithoutPushTokensInput
+  connect?: Prisma.userWhereUniqueInput
+}
+
+export type userUpdateOneRequiredWithoutPushTokensNestedInput = {
+  create?: Prisma.XOR<Prisma.userCreateWithoutPushTokensInput, Prisma.userUncheckedCreateWithoutPushTokensInput>
+  connectOrCreate?: Prisma.userCreateOrConnectWithoutPushTokensInput
+  upsert?: Prisma.userUpsertWithoutPushTokensInput
+  connect?: Prisma.userWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.userUpdateToOneWithWhereWithoutPushTokensInput, Prisma.userUpdateWithoutPushTokensInput>, Prisma.userUncheckedUpdateWithoutPushTokensInput>
+}
+
+export type userCreateNestedOneWithoutNotificationPreferenceInput = {
+  create?: Prisma.XOR<Prisma.userCreateWithoutNotificationPreferenceInput, Prisma.userUncheckedCreateWithoutNotificationPreferenceInput>
+  connectOrCreate?: Prisma.userCreateOrConnectWithoutNotificationPreferenceInput
+  connect?: Prisma.userWhereUniqueInput
+}
+
+export type userUpdateOneRequiredWithoutNotificationPreferenceNestedInput = {
+  create?: Prisma.XOR<Prisma.userCreateWithoutNotificationPreferenceInput, Prisma.userUncheckedCreateWithoutNotificationPreferenceInput>
+  connectOrCreate?: Prisma.userCreateOrConnectWithoutNotificationPreferenceInput
+  upsert?: Prisma.userUpsertWithoutNotificationPreferenceInput
+  connect?: Prisma.userWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.userUpdateToOneWithWhereWithoutNotificationPreferenceInput, Prisma.userUpdateWithoutNotificationPreferenceInput>, Prisma.userUncheckedUpdateWithoutNotificationPreferenceInput>
+}
+
 export type userCreateNestedOneWithoutRefreshTokensInput = {
   create?: Prisma.XOR<Prisma.userCreateWithoutRefreshTokensInput, Prisma.userUncheckedCreateWithoutRefreshTokensInput>
   connectOrCreate?: Prisma.userCreateOrConnectWithoutRefreshTokensInput
@@ -818,6 +860,8 @@ export type userCreateWithoutTradeInput = {
   riskProfile?: Prisma.riskProfileCreateNestedOneWithoutUserInput
   drawdownState?: Prisma.drawdownStateCreateNestedOneWithoutUserInput
   governanceLogs?: Prisma.governanceLogCreateNestedManyWithoutUserInput
+  pushTokens?: Prisma.pushTokenCreateNestedManyWithoutUserInput
+  notificationPreference?: Prisma.notificationPreferenceCreateNestedOneWithoutUserInput
 }
 
 export type userUncheckedCreateWithoutTradeInput = {
@@ -847,6 +891,8 @@ export type userUncheckedCreateWithoutTradeInput = {
   riskProfile?: Prisma.riskProfileUncheckedCreateNestedOneWithoutUserInput
   drawdownState?: Prisma.drawdownStateUncheckedCreateNestedOneWithoutUserInput
   governanceLogs?: Prisma.governanceLogUncheckedCreateNestedManyWithoutUserInput
+  pushTokens?: Prisma.pushTokenUncheckedCreateNestedManyWithoutUserInput
+  notificationPreference?: Prisma.notificationPreferenceUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type userCreateOrConnectWithoutTradeInput = {
@@ -892,6 +938,8 @@ export type userUpdateWithoutTradeInput = {
   riskProfile?: Prisma.riskProfileUpdateOneWithoutUserNestedInput
   drawdownState?: Prisma.drawdownStateUpdateOneWithoutUserNestedInput
   governanceLogs?: Prisma.governanceLogUpdateManyWithoutUserNestedInput
+  pushTokens?: Prisma.pushTokenUpdateManyWithoutUserNestedInput
+  notificationPreference?: Prisma.notificationPreferenceUpdateOneWithoutUserNestedInput
 }
 
 export type userUncheckedUpdateWithoutTradeInput = {
@@ -921,6 +969,8 @@ export type userUncheckedUpdateWithoutTradeInput = {
   riskProfile?: Prisma.riskProfileUncheckedUpdateOneWithoutUserNestedInput
   drawdownState?: Prisma.drawdownStateUncheckedUpdateOneWithoutUserNestedInput
   governanceLogs?: Prisma.governanceLogUncheckedUpdateManyWithoutUserNestedInput
+  pushTokens?: Prisma.pushTokenUncheckedUpdateManyWithoutUserNestedInput
+  notificationPreference?: Prisma.notificationPreferenceUncheckedUpdateOneWithoutUserNestedInput
 }
 
 export type userCreateWithoutRiskProfileInput = {
@@ -950,6 +1000,8 @@ export type userCreateWithoutRiskProfileInput = {
   auditLogs?: Prisma.auditLogCreateNestedManyWithoutUserInput
   drawdownState?: Prisma.drawdownStateCreateNestedOneWithoutUserInput
   governanceLogs?: Prisma.governanceLogCreateNestedManyWithoutUserInput
+  pushTokens?: Prisma.pushTokenCreateNestedManyWithoutUserInput
+  notificationPreference?: Prisma.notificationPreferenceCreateNestedOneWithoutUserInput
 }
 
 export type userUncheckedCreateWithoutRiskProfileInput = {
@@ -979,6 +1031,8 @@ export type userUncheckedCreateWithoutRiskProfileInput = {
   auditLogs?: Prisma.auditLogUncheckedCreateNestedManyWithoutUserInput
   drawdownState?: Prisma.drawdownStateUncheckedCreateNestedOneWithoutUserInput
   governanceLogs?: Prisma.governanceLogUncheckedCreateNestedManyWithoutUserInput
+  pushTokens?: Prisma.pushTokenUncheckedCreateNestedManyWithoutUserInput
+  notificationPreference?: Prisma.notificationPreferenceUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type userCreateOrConnectWithoutRiskProfileInput = {
@@ -1024,6 +1078,8 @@ export type userUpdateWithoutRiskProfileInput = {
   auditLogs?: Prisma.auditLogUpdateManyWithoutUserNestedInput
   drawdownState?: Prisma.drawdownStateUpdateOneWithoutUserNestedInput
   governanceLogs?: Prisma.governanceLogUpdateManyWithoutUserNestedInput
+  pushTokens?: Prisma.pushTokenUpdateManyWithoutUserNestedInput
+  notificationPreference?: Prisma.notificationPreferenceUpdateOneWithoutUserNestedInput
 }
 
 export type userUncheckedUpdateWithoutRiskProfileInput = {
@@ -1053,6 +1109,8 @@ export type userUncheckedUpdateWithoutRiskProfileInput = {
   auditLogs?: Prisma.auditLogUncheckedUpdateManyWithoutUserNestedInput
   drawdownState?: Prisma.drawdownStateUncheckedUpdateOneWithoutUserNestedInput
   governanceLogs?: Prisma.governanceLogUncheckedUpdateManyWithoutUserNestedInput
+  pushTokens?: Prisma.pushTokenUncheckedUpdateManyWithoutUserNestedInput
+  notificationPreference?: Prisma.notificationPreferenceUncheckedUpdateOneWithoutUserNestedInput
 }
 
 export type userCreateWithoutDrawdownStateInput = {
@@ -1082,6 +1140,8 @@ export type userCreateWithoutDrawdownStateInput = {
   auditLogs?: Prisma.auditLogCreateNestedManyWithoutUserInput
   riskProfile?: Prisma.riskProfileCreateNestedOneWithoutUserInput
   governanceLogs?: Prisma.governanceLogCreateNestedManyWithoutUserInput
+  pushTokens?: Prisma.pushTokenCreateNestedManyWithoutUserInput
+  notificationPreference?: Prisma.notificationPreferenceCreateNestedOneWithoutUserInput
 }
 
 export type userUncheckedCreateWithoutDrawdownStateInput = {
@@ -1111,6 +1171,8 @@ export type userUncheckedCreateWithoutDrawdownStateInput = {
   auditLogs?: Prisma.auditLogUncheckedCreateNestedManyWithoutUserInput
   riskProfile?: Prisma.riskProfileUncheckedCreateNestedOneWithoutUserInput
   governanceLogs?: Prisma.governanceLogUncheckedCreateNestedManyWithoutUserInput
+  pushTokens?: Prisma.pushTokenUncheckedCreateNestedManyWithoutUserInput
+  notificationPreference?: Prisma.notificationPreferenceUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type userCreateOrConnectWithoutDrawdownStateInput = {
@@ -1156,6 +1218,8 @@ export type userUpdateWithoutDrawdownStateInput = {
   auditLogs?: Prisma.auditLogUpdateManyWithoutUserNestedInput
   riskProfile?: Prisma.riskProfileUpdateOneWithoutUserNestedInput
   governanceLogs?: Prisma.governanceLogUpdateManyWithoutUserNestedInput
+  pushTokens?: Prisma.pushTokenUpdateManyWithoutUserNestedInput
+  notificationPreference?: Prisma.notificationPreferenceUpdateOneWithoutUserNestedInput
 }
 
 export type userUncheckedUpdateWithoutDrawdownStateInput = {
@@ -1185,6 +1249,8 @@ export type userUncheckedUpdateWithoutDrawdownStateInput = {
   auditLogs?: Prisma.auditLogUncheckedUpdateManyWithoutUserNestedInput
   riskProfile?: Prisma.riskProfileUncheckedUpdateOneWithoutUserNestedInput
   governanceLogs?: Prisma.governanceLogUncheckedUpdateManyWithoutUserNestedInput
+  pushTokens?: Prisma.pushTokenUncheckedUpdateManyWithoutUserNestedInput
+  notificationPreference?: Prisma.notificationPreferenceUncheckedUpdateOneWithoutUserNestedInput
 }
 
 export type userCreateWithoutGovernanceLogsInput = {
@@ -1214,6 +1280,8 @@ export type userCreateWithoutGovernanceLogsInput = {
   auditLogs?: Prisma.auditLogCreateNestedManyWithoutUserInput
   riskProfile?: Prisma.riskProfileCreateNestedOneWithoutUserInput
   drawdownState?: Prisma.drawdownStateCreateNestedOneWithoutUserInput
+  pushTokens?: Prisma.pushTokenCreateNestedManyWithoutUserInput
+  notificationPreference?: Prisma.notificationPreferenceCreateNestedOneWithoutUserInput
 }
 
 export type userUncheckedCreateWithoutGovernanceLogsInput = {
@@ -1243,6 +1311,8 @@ export type userUncheckedCreateWithoutGovernanceLogsInput = {
   auditLogs?: Prisma.auditLogUncheckedCreateNestedManyWithoutUserInput
   riskProfile?: Prisma.riskProfileUncheckedCreateNestedOneWithoutUserInput
   drawdownState?: Prisma.drawdownStateUncheckedCreateNestedOneWithoutUserInput
+  pushTokens?: Prisma.pushTokenUncheckedCreateNestedManyWithoutUserInput
+  notificationPreference?: Prisma.notificationPreferenceUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type userCreateOrConnectWithoutGovernanceLogsInput = {
@@ -1288,6 +1358,8 @@ export type userUpdateWithoutGovernanceLogsInput = {
   auditLogs?: Prisma.auditLogUpdateManyWithoutUserNestedInput
   riskProfile?: Prisma.riskProfileUpdateOneWithoutUserNestedInput
   drawdownState?: Prisma.drawdownStateUpdateOneWithoutUserNestedInput
+  pushTokens?: Prisma.pushTokenUpdateManyWithoutUserNestedInput
+  notificationPreference?: Prisma.notificationPreferenceUpdateOneWithoutUserNestedInput
 }
 
 export type userUncheckedUpdateWithoutGovernanceLogsInput = {
@@ -1317,6 +1389,8 @@ export type userUncheckedUpdateWithoutGovernanceLogsInput = {
   auditLogs?: Prisma.auditLogUncheckedUpdateManyWithoutUserNestedInput
   riskProfile?: Prisma.riskProfileUncheckedUpdateOneWithoutUserNestedInput
   drawdownState?: Prisma.drawdownStateUncheckedUpdateOneWithoutUserNestedInput
+  pushTokens?: Prisma.pushTokenUncheckedUpdateManyWithoutUserNestedInput
+  notificationPreference?: Prisma.notificationPreferenceUncheckedUpdateOneWithoutUserNestedInput
 }
 
 export type userCreateWithoutJournalEntriesInput = {
@@ -1346,6 +1420,8 @@ export type userCreateWithoutJournalEntriesInput = {
   riskProfile?: Prisma.riskProfileCreateNestedOneWithoutUserInput
   drawdownState?: Prisma.drawdownStateCreateNestedOneWithoutUserInput
   governanceLogs?: Prisma.governanceLogCreateNestedManyWithoutUserInput
+  pushTokens?: Prisma.pushTokenCreateNestedManyWithoutUserInput
+  notificationPreference?: Prisma.notificationPreferenceCreateNestedOneWithoutUserInput
 }
 
 export type userUncheckedCreateWithoutJournalEntriesInput = {
@@ -1375,6 +1451,8 @@ export type userUncheckedCreateWithoutJournalEntriesInput = {
   riskProfile?: Prisma.riskProfileUncheckedCreateNestedOneWithoutUserInput
   drawdownState?: Prisma.drawdownStateUncheckedCreateNestedOneWithoutUserInput
   governanceLogs?: Prisma.governanceLogUncheckedCreateNestedManyWithoutUserInput
+  pushTokens?: Prisma.pushTokenUncheckedCreateNestedManyWithoutUserInput
+  notificationPreference?: Prisma.notificationPreferenceUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type userCreateOrConnectWithoutJournalEntriesInput = {
@@ -1420,6 +1498,8 @@ export type userUpdateWithoutJournalEntriesInput = {
   riskProfile?: Prisma.riskProfileUpdateOneWithoutUserNestedInput
   drawdownState?: Prisma.drawdownStateUpdateOneWithoutUserNestedInput
   governanceLogs?: Prisma.governanceLogUpdateManyWithoutUserNestedInput
+  pushTokens?: Prisma.pushTokenUpdateManyWithoutUserNestedInput
+  notificationPreference?: Prisma.notificationPreferenceUpdateOneWithoutUserNestedInput
 }
 
 export type userUncheckedUpdateWithoutJournalEntriesInput = {
@@ -1449,6 +1529,288 @@ export type userUncheckedUpdateWithoutJournalEntriesInput = {
   riskProfile?: Prisma.riskProfileUncheckedUpdateOneWithoutUserNestedInput
   drawdownState?: Prisma.drawdownStateUncheckedUpdateOneWithoutUserNestedInput
   governanceLogs?: Prisma.governanceLogUncheckedUpdateManyWithoutUserNestedInput
+  pushTokens?: Prisma.pushTokenUncheckedUpdateManyWithoutUserNestedInput
+  notificationPreference?: Prisma.notificationPreferenceUncheckedUpdateOneWithoutUserNestedInput
+}
+
+export type userCreateWithoutPushTokensInput = {
+  id?: string
+  fname: string
+  lname: string
+  email: string
+  role: string
+  tags?: Prisma.userCreatetagsInput | string[]
+  language: string
+  password: string
+  accountCurrency: string
+  theme?: string
+  rules: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  timezone?: string
+  togglePipValue?: boolean
+  deletedAt?: Date | string | null
+  deleteScheduledFor?: Date | string | null
+  emailVerified?: boolean
+  emailVerificationToken?: string | null
+  emailVerificationTokenExpiry?: Date | string | null
+  journalEntries?: Prisma.journalCreateNestedManyWithoutAuthorInput
+  trade?: Prisma.tradeCreateNestedManyWithoutUserInput
+  refreshTokens?: Prisma.RefreshTokenCreateNestedManyWithoutUserInput
+  auditLogs?: Prisma.auditLogCreateNestedManyWithoutUserInput
+  riskProfile?: Prisma.riskProfileCreateNestedOneWithoutUserInput
+  drawdownState?: Prisma.drawdownStateCreateNestedOneWithoutUserInput
+  governanceLogs?: Prisma.governanceLogCreateNestedManyWithoutUserInput
+  notificationPreference?: Prisma.notificationPreferenceCreateNestedOneWithoutUserInput
+}
+
+export type userUncheckedCreateWithoutPushTokensInput = {
+  id?: string
+  fname: string
+  lname: string
+  email: string
+  role: string
+  tags?: Prisma.userCreatetagsInput | string[]
+  language: string
+  password: string
+  accountCurrency: string
+  theme?: string
+  rules: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  timezone?: string
+  togglePipValue?: boolean
+  deletedAt?: Date | string | null
+  deleteScheduledFor?: Date | string | null
+  emailVerified?: boolean
+  emailVerificationToken?: string | null
+  emailVerificationTokenExpiry?: Date | string | null
+  journalEntries?: Prisma.journalUncheckedCreateNestedManyWithoutAuthorInput
+  trade?: Prisma.tradeUncheckedCreateNestedManyWithoutUserInput
+  refreshTokens?: Prisma.RefreshTokenUncheckedCreateNestedManyWithoutUserInput
+  auditLogs?: Prisma.auditLogUncheckedCreateNestedManyWithoutUserInput
+  riskProfile?: Prisma.riskProfileUncheckedCreateNestedOneWithoutUserInput
+  drawdownState?: Prisma.drawdownStateUncheckedCreateNestedOneWithoutUserInput
+  governanceLogs?: Prisma.governanceLogUncheckedCreateNestedManyWithoutUserInput
+  notificationPreference?: Prisma.notificationPreferenceUncheckedCreateNestedOneWithoutUserInput
+}
+
+export type userCreateOrConnectWithoutPushTokensInput = {
+  where: Prisma.userWhereUniqueInput
+  create: Prisma.XOR<Prisma.userCreateWithoutPushTokensInput, Prisma.userUncheckedCreateWithoutPushTokensInput>
+}
+
+export type userUpsertWithoutPushTokensInput = {
+  update: Prisma.XOR<Prisma.userUpdateWithoutPushTokensInput, Prisma.userUncheckedUpdateWithoutPushTokensInput>
+  create: Prisma.XOR<Prisma.userCreateWithoutPushTokensInput, Prisma.userUncheckedCreateWithoutPushTokensInput>
+  where?: Prisma.userWhereInput
+}
+
+export type userUpdateToOneWithWhereWithoutPushTokensInput = {
+  where?: Prisma.userWhereInput
+  data: Prisma.XOR<Prisma.userUpdateWithoutPushTokensInput, Prisma.userUncheckedUpdateWithoutPushTokensInput>
+}
+
+export type userUpdateWithoutPushTokensInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  fname?: Prisma.StringFieldUpdateOperationsInput | string
+  lname?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  role?: Prisma.StringFieldUpdateOperationsInput | string
+  tags?: Prisma.userUpdatetagsInput | string[]
+  language?: Prisma.StringFieldUpdateOperationsInput | string
+  password?: Prisma.StringFieldUpdateOperationsInput | string
+  accountCurrency?: Prisma.StringFieldUpdateOperationsInput | string
+  theme?: Prisma.StringFieldUpdateOperationsInput | string
+  rules?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  timezone?: Prisma.StringFieldUpdateOperationsInput | string
+  togglePipValue?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  deleteScheduledFor?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  emailVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  emailVerificationToken?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  emailVerificationTokenExpiry?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  journalEntries?: Prisma.journalUpdateManyWithoutAuthorNestedInput
+  trade?: Prisma.tradeUpdateManyWithoutUserNestedInput
+  refreshTokens?: Prisma.RefreshTokenUpdateManyWithoutUserNestedInput
+  auditLogs?: Prisma.auditLogUpdateManyWithoutUserNestedInput
+  riskProfile?: Prisma.riskProfileUpdateOneWithoutUserNestedInput
+  drawdownState?: Prisma.drawdownStateUpdateOneWithoutUserNestedInput
+  governanceLogs?: Prisma.governanceLogUpdateManyWithoutUserNestedInput
+  notificationPreference?: Prisma.notificationPreferenceUpdateOneWithoutUserNestedInput
+}
+
+export type userUncheckedUpdateWithoutPushTokensInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  fname?: Prisma.StringFieldUpdateOperationsInput | string
+  lname?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  role?: Prisma.StringFieldUpdateOperationsInput | string
+  tags?: Prisma.userUpdatetagsInput | string[]
+  language?: Prisma.StringFieldUpdateOperationsInput | string
+  password?: Prisma.StringFieldUpdateOperationsInput | string
+  accountCurrency?: Prisma.StringFieldUpdateOperationsInput | string
+  theme?: Prisma.StringFieldUpdateOperationsInput | string
+  rules?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  timezone?: Prisma.StringFieldUpdateOperationsInput | string
+  togglePipValue?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  deleteScheduledFor?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  emailVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  emailVerificationToken?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  emailVerificationTokenExpiry?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  journalEntries?: Prisma.journalUncheckedUpdateManyWithoutAuthorNestedInput
+  trade?: Prisma.tradeUncheckedUpdateManyWithoutUserNestedInput
+  refreshTokens?: Prisma.RefreshTokenUncheckedUpdateManyWithoutUserNestedInput
+  auditLogs?: Prisma.auditLogUncheckedUpdateManyWithoutUserNestedInput
+  riskProfile?: Prisma.riskProfileUncheckedUpdateOneWithoutUserNestedInput
+  drawdownState?: Prisma.drawdownStateUncheckedUpdateOneWithoutUserNestedInput
+  governanceLogs?: Prisma.governanceLogUncheckedUpdateManyWithoutUserNestedInput
+  notificationPreference?: Prisma.notificationPreferenceUncheckedUpdateOneWithoutUserNestedInput
+}
+
+export type userCreateWithoutNotificationPreferenceInput = {
+  id?: string
+  fname: string
+  lname: string
+  email: string
+  role: string
+  tags?: Prisma.userCreatetagsInput | string[]
+  language: string
+  password: string
+  accountCurrency: string
+  theme?: string
+  rules: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  timezone?: string
+  togglePipValue?: boolean
+  deletedAt?: Date | string | null
+  deleteScheduledFor?: Date | string | null
+  emailVerified?: boolean
+  emailVerificationToken?: string | null
+  emailVerificationTokenExpiry?: Date | string | null
+  journalEntries?: Prisma.journalCreateNestedManyWithoutAuthorInput
+  trade?: Prisma.tradeCreateNestedManyWithoutUserInput
+  refreshTokens?: Prisma.RefreshTokenCreateNestedManyWithoutUserInput
+  auditLogs?: Prisma.auditLogCreateNestedManyWithoutUserInput
+  riskProfile?: Prisma.riskProfileCreateNestedOneWithoutUserInput
+  drawdownState?: Prisma.drawdownStateCreateNestedOneWithoutUserInput
+  governanceLogs?: Prisma.governanceLogCreateNestedManyWithoutUserInput
+  pushTokens?: Prisma.pushTokenCreateNestedManyWithoutUserInput
+}
+
+export type userUncheckedCreateWithoutNotificationPreferenceInput = {
+  id?: string
+  fname: string
+  lname: string
+  email: string
+  role: string
+  tags?: Prisma.userCreatetagsInput | string[]
+  language: string
+  password: string
+  accountCurrency: string
+  theme?: string
+  rules: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  timezone?: string
+  togglePipValue?: boolean
+  deletedAt?: Date | string | null
+  deleteScheduledFor?: Date | string | null
+  emailVerified?: boolean
+  emailVerificationToken?: string | null
+  emailVerificationTokenExpiry?: Date | string | null
+  journalEntries?: Prisma.journalUncheckedCreateNestedManyWithoutAuthorInput
+  trade?: Prisma.tradeUncheckedCreateNestedManyWithoutUserInput
+  refreshTokens?: Prisma.RefreshTokenUncheckedCreateNestedManyWithoutUserInput
+  auditLogs?: Prisma.auditLogUncheckedCreateNestedManyWithoutUserInput
+  riskProfile?: Prisma.riskProfileUncheckedCreateNestedOneWithoutUserInput
+  drawdownState?: Prisma.drawdownStateUncheckedCreateNestedOneWithoutUserInput
+  governanceLogs?: Prisma.governanceLogUncheckedCreateNestedManyWithoutUserInput
+  pushTokens?: Prisma.pushTokenUncheckedCreateNestedManyWithoutUserInput
+}
+
+export type userCreateOrConnectWithoutNotificationPreferenceInput = {
+  where: Prisma.userWhereUniqueInput
+  create: Prisma.XOR<Prisma.userCreateWithoutNotificationPreferenceInput, Prisma.userUncheckedCreateWithoutNotificationPreferenceInput>
+}
+
+export type userUpsertWithoutNotificationPreferenceInput = {
+  update: Prisma.XOR<Prisma.userUpdateWithoutNotificationPreferenceInput, Prisma.userUncheckedUpdateWithoutNotificationPreferenceInput>
+  create: Prisma.XOR<Prisma.userCreateWithoutNotificationPreferenceInput, Prisma.userUncheckedCreateWithoutNotificationPreferenceInput>
+  where?: Prisma.userWhereInput
+}
+
+export type userUpdateToOneWithWhereWithoutNotificationPreferenceInput = {
+  where?: Prisma.userWhereInput
+  data: Prisma.XOR<Prisma.userUpdateWithoutNotificationPreferenceInput, Prisma.userUncheckedUpdateWithoutNotificationPreferenceInput>
+}
+
+export type userUpdateWithoutNotificationPreferenceInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  fname?: Prisma.StringFieldUpdateOperationsInput | string
+  lname?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  role?: Prisma.StringFieldUpdateOperationsInput | string
+  tags?: Prisma.userUpdatetagsInput | string[]
+  language?: Prisma.StringFieldUpdateOperationsInput | string
+  password?: Prisma.StringFieldUpdateOperationsInput | string
+  accountCurrency?: Prisma.StringFieldUpdateOperationsInput | string
+  theme?: Prisma.StringFieldUpdateOperationsInput | string
+  rules?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  timezone?: Prisma.StringFieldUpdateOperationsInput | string
+  togglePipValue?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  deleteScheduledFor?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  emailVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  emailVerificationToken?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  emailVerificationTokenExpiry?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  journalEntries?: Prisma.journalUpdateManyWithoutAuthorNestedInput
+  trade?: Prisma.tradeUpdateManyWithoutUserNestedInput
+  refreshTokens?: Prisma.RefreshTokenUpdateManyWithoutUserNestedInput
+  auditLogs?: Prisma.auditLogUpdateManyWithoutUserNestedInput
+  riskProfile?: Prisma.riskProfileUpdateOneWithoutUserNestedInput
+  drawdownState?: Prisma.drawdownStateUpdateOneWithoutUserNestedInput
+  governanceLogs?: Prisma.governanceLogUpdateManyWithoutUserNestedInput
+  pushTokens?: Prisma.pushTokenUpdateManyWithoutUserNestedInput
+}
+
+export type userUncheckedUpdateWithoutNotificationPreferenceInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  fname?: Prisma.StringFieldUpdateOperationsInput | string
+  lname?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  role?: Prisma.StringFieldUpdateOperationsInput | string
+  tags?: Prisma.userUpdatetagsInput | string[]
+  language?: Prisma.StringFieldUpdateOperationsInput | string
+  password?: Prisma.StringFieldUpdateOperationsInput | string
+  accountCurrency?: Prisma.StringFieldUpdateOperationsInput | string
+  theme?: Prisma.StringFieldUpdateOperationsInput | string
+  rules?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  timezone?: Prisma.StringFieldUpdateOperationsInput | string
+  togglePipValue?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  deleteScheduledFor?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  emailVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  emailVerificationToken?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  emailVerificationTokenExpiry?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  journalEntries?: Prisma.journalUncheckedUpdateManyWithoutAuthorNestedInput
+  trade?: Prisma.tradeUncheckedUpdateManyWithoutUserNestedInput
+  refreshTokens?: Prisma.RefreshTokenUncheckedUpdateManyWithoutUserNestedInput
+  auditLogs?: Prisma.auditLogUncheckedUpdateManyWithoutUserNestedInput
+  riskProfile?: Prisma.riskProfileUncheckedUpdateOneWithoutUserNestedInput
+  drawdownState?: Prisma.drawdownStateUncheckedUpdateOneWithoutUserNestedInput
+  governanceLogs?: Prisma.governanceLogUncheckedUpdateManyWithoutUserNestedInput
+  pushTokens?: Prisma.pushTokenUncheckedUpdateManyWithoutUserNestedInput
 }
 
 export type userCreateWithoutRefreshTokensInput = {
@@ -1478,6 +1840,8 @@ export type userCreateWithoutRefreshTokensInput = {
   riskProfile?: Prisma.riskProfileCreateNestedOneWithoutUserInput
   drawdownState?: Prisma.drawdownStateCreateNestedOneWithoutUserInput
   governanceLogs?: Prisma.governanceLogCreateNestedManyWithoutUserInput
+  pushTokens?: Prisma.pushTokenCreateNestedManyWithoutUserInput
+  notificationPreference?: Prisma.notificationPreferenceCreateNestedOneWithoutUserInput
 }
 
 export type userUncheckedCreateWithoutRefreshTokensInput = {
@@ -1507,6 +1871,8 @@ export type userUncheckedCreateWithoutRefreshTokensInput = {
   riskProfile?: Prisma.riskProfileUncheckedCreateNestedOneWithoutUserInput
   drawdownState?: Prisma.drawdownStateUncheckedCreateNestedOneWithoutUserInput
   governanceLogs?: Prisma.governanceLogUncheckedCreateNestedManyWithoutUserInput
+  pushTokens?: Prisma.pushTokenUncheckedCreateNestedManyWithoutUserInput
+  notificationPreference?: Prisma.notificationPreferenceUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type userCreateOrConnectWithoutRefreshTokensInput = {
@@ -1552,6 +1918,8 @@ export type userUpdateWithoutRefreshTokensInput = {
   riskProfile?: Prisma.riskProfileUpdateOneWithoutUserNestedInput
   drawdownState?: Prisma.drawdownStateUpdateOneWithoutUserNestedInput
   governanceLogs?: Prisma.governanceLogUpdateManyWithoutUserNestedInput
+  pushTokens?: Prisma.pushTokenUpdateManyWithoutUserNestedInput
+  notificationPreference?: Prisma.notificationPreferenceUpdateOneWithoutUserNestedInput
 }
 
 export type userUncheckedUpdateWithoutRefreshTokensInput = {
@@ -1581,6 +1949,8 @@ export type userUncheckedUpdateWithoutRefreshTokensInput = {
   riskProfile?: Prisma.riskProfileUncheckedUpdateOneWithoutUserNestedInput
   drawdownState?: Prisma.drawdownStateUncheckedUpdateOneWithoutUserNestedInput
   governanceLogs?: Prisma.governanceLogUncheckedUpdateManyWithoutUserNestedInput
+  pushTokens?: Prisma.pushTokenUncheckedUpdateManyWithoutUserNestedInput
+  notificationPreference?: Prisma.notificationPreferenceUncheckedUpdateOneWithoutUserNestedInput
 }
 
 export type userCreateWithoutAuditLogsInput = {
@@ -1610,6 +1980,8 @@ export type userCreateWithoutAuditLogsInput = {
   riskProfile?: Prisma.riskProfileCreateNestedOneWithoutUserInput
   drawdownState?: Prisma.drawdownStateCreateNestedOneWithoutUserInput
   governanceLogs?: Prisma.governanceLogCreateNestedManyWithoutUserInput
+  pushTokens?: Prisma.pushTokenCreateNestedManyWithoutUserInput
+  notificationPreference?: Prisma.notificationPreferenceCreateNestedOneWithoutUserInput
 }
 
 export type userUncheckedCreateWithoutAuditLogsInput = {
@@ -1639,6 +2011,8 @@ export type userUncheckedCreateWithoutAuditLogsInput = {
   riskProfile?: Prisma.riskProfileUncheckedCreateNestedOneWithoutUserInput
   drawdownState?: Prisma.drawdownStateUncheckedCreateNestedOneWithoutUserInput
   governanceLogs?: Prisma.governanceLogUncheckedCreateNestedManyWithoutUserInput
+  pushTokens?: Prisma.pushTokenUncheckedCreateNestedManyWithoutUserInput
+  notificationPreference?: Prisma.notificationPreferenceUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type userCreateOrConnectWithoutAuditLogsInput = {
@@ -1684,6 +2058,8 @@ export type userUpdateWithoutAuditLogsInput = {
   riskProfile?: Prisma.riskProfileUpdateOneWithoutUserNestedInput
   drawdownState?: Prisma.drawdownStateUpdateOneWithoutUserNestedInput
   governanceLogs?: Prisma.governanceLogUpdateManyWithoutUserNestedInput
+  pushTokens?: Prisma.pushTokenUpdateManyWithoutUserNestedInput
+  notificationPreference?: Prisma.notificationPreferenceUpdateOneWithoutUserNestedInput
 }
 
 export type userUncheckedUpdateWithoutAuditLogsInput = {
@@ -1713,6 +2089,8 @@ export type userUncheckedUpdateWithoutAuditLogsInput = {
   riskProfile?: Prisma.riskProfileUncheckedUpdateOneWithoutUserNestedInput
   drawdownState?: Prisma.drawdownStateUncheckedUpdateOneWithoutUserNestedInput
   governanceLogs?: Prisma.governanceLogUncheckedUpdateManyWithoutUserNestedInput
+  pushTokens?: Prisma.pushTokenUncheckedUpdateManyWithoutUserNestedInput
+  notificationPreference?: Prisma.notificationPreferenceUncheckedUpdateOneWithoutUserNestedInput
 }
 
 
@@ -1726,6 +2104,7 @@ export type UserCountOutputType = {
   refreshTokens: number
   auditLogs: number
   governanceLogs: number
+  pushTokens: number
 }
 
 export type UserCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
@@ -1734,6 +2113,7 @@ export type UserCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.I
   refreshTokens?: boolean | UserCountOutputTypeCountRefreshTokensArgs
   auditLogs?: boolean | UserCountOutputTypeCountAuditLogsArgs
   governanceLogs?: boolean | UserCountOutputTypeCountGovernanceLogsArgs
+  pushTokens?: boolean | UserCountOutputTypeCountPushTokensArgs
 }
 
 /**
@@ -1781,6 +2161,13 @@ export type UserCountOutputTypeCountGovernanceLogsArgs<ExtArgs extends runtime.T
   where?: Prisma.governanceLogWhereInput
 }
 
+/**
+ * UserCountOutputType without action
+ */
+export type UserCountOutputTypeCountPushTokensArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.pushTokenWhereInput
+}
+
 
 export type userSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   id?: boolean
@@ -1810,6 +2197,8 @@ export type userSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = r
   riskProfile?: boolean | Prisma.user$riskProfileArgs<ExtArgs>
   drawdownState?: boolean | Prisma.user$drawdownStateArgs<ExtArgs>
   governanceLogs?: boolean | Prisma.user$governanceLogsArgs<ExtArgs>
+  pushTokens?: boolean | Prisma.user$pushTokensArgs<ExtArgs>
+  notificationPreference?: boolean | Prisma.user$notificationPreferenceArgs<ExtArgs>
   _count?: boolean | Prisma.UserCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["user"]>
 
@@ -1891,6 +2280,8 @@ export type userInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = 
   riskProfile?: boolean | Prisma.user$riskProfileArgs<ExtArgs>
   drawdownState?: boolean | Prisma.user$drawdownStateArgs<ExtArgs>
   governanceLogs?: boolean | Prisma.user$governanceLogsArgs<ExtArgs>
+  pushTokens?: boolean | Prisma.user$pushTokensArgs<ExtArgs>
+  notificationPreference?: boolean | Prisma.user$notificationPreferenceArgs<ExtArgs>
   _count?: boolean | Prisma.UserCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type userIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {}
@@ -1906,6 +2297,8 @@ export type $userPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs =
     riskProfile: Prisma.$riskProfilePayload<ExtArgs> | null
     drawdownState: Prisma.$drawdownStatePayload<ExtArgs> | null
     governanceLogs: Prisma.$governanceLogPayload<ExtArgs>[]
+    pushTokens: Prisma.$pushTokenPayload<ExtArgs>[]
+    notificationPreference: Prisma.$notificationPreferencePayload<ExtArgs> | null
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
@@ -2329,6 +2722,8 @@ export interface Prisma__userClient<T, Null = never, ExtArgs extends runtime.Typ
   riskProfile<T extends Prisma.user$riskProfileArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.user$riskProfileArgs<ExtArgs>>): Prisma.Prisma__riskProfileClient<runtime.Types.Result.GetResult<Prisma.$riskProfilePayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
   drawdownState<T extends Prisma.user$drawdownStateArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.user$drawdownStateArgs<ExtArgs>>): Prisma.Prisma__drawdownStateClient<runtime.Types.Result.GetResult<Prisma.$drawdownStatePayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
   governanceLogs<T extends Prisma.user$governanceLogsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.user$governanceLogsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$governanceLogPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  pushTokens<T extends Prisma.user$pushTokensArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.user$pushTokensArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$pushTokenPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  notificationPreference<T extends Prisma.user$notificationPreferenceArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.user$notificationPreferenceArgs<ExtArgs>>): Prisma.Prisma__notificationPreferenceClient<runtime.Types.Result.GetResult<Prisma.$notificationPreferencePayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -2921,6 +3316,49 @@ export type user$governanceLogsArgs<ExtArgs extends runtime.Types.Extensions.Int
   take?: number
   skip?: number
   distinct?: Prisma.GovernanceLogScalarFieldEnum | Prisma.GovernanceLogScalarFieldEnum[]
+}
+
+/**
+ * user.pushTokens
+ */
+export type user$pushTokensArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the pushToken
+   */
+  select?: Prisma.pushTokenSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the pushToken
+   */
+  omit?: Prisma.pushTokenOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.pushTokenInclude<ExtArgs> | null
+  where?: Prisma.pushTokenWhereInput
+  orderBy?: Prisma.pushTokenOrderByWithRelationInput | Prisma.pushTokenOrderByWithRelationInput[]
+  cursor?: Prisma.pushTokenWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.PushTokenScalarFieldEnum | Prisma.PushTokenScalarFieldEnum[]
+}
+
+/**
+ * user.notificationPreference
+ */
+export type user$notificationPreferenceArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the notificationPreference
+   */
+  select?: Prisma.notificationPreferenceSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the notificationPreference
+   */
+  omit?: Prisma.notificationPreferenceOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.notificationPreferenceInclude<ExtArgs> | null
+  where?: Prisma.notificationPreferenceWhereInput
 }
 
 /**

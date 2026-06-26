@@ -16,6 +16,7 @@ import { mapDatabaseUrl } from './config/database.config';
 import { FeedbackModule } from './feedback/feedback.module';
 import { AuditModule } from './audit/audit.module';
 import { EmailModule } from './email/email.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { SentryModule, SentryGlobalFilter } from '@sentry/nestjs/setup';
 import { APP_FILTER } from '@nestjs/core';
 
@@ -60,6 +61,7 @@ function getEnvFilePath(): string[] {
     FeedbackModule,
     AuditModule,
     EmailModule,
+    NotificationsModule,
     SentryModule.forRoot(),
     BullModule.forRootAsync({
       inject: [ConfigService],

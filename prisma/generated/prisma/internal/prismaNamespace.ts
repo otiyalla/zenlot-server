@@ -390,6 +390,8 @@ export const ModelName = {
   governanceLog: 'governanceLog',
   journal: 'journal',
   user: 'user',
+  pushToken: 'pushToken',
+  notificationPreference: 'notificationPreference',
   RefreshToken: 'RefreshToken',
   auditLog: 'auditLog',
   feedback: 'feedback'
@@ -408,7 +410,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "trade" | "riskProfile" | "drawdownState" | "governanceLog" | "journal" | "user" | "refreshToken" | "auditLog" | "feedback"
+    modelProps: "trade" | "riskProfile" | "drawdownState" | "governanceLog" | "journal" | "user" | "pushToken" | "notificationPreference" | "refreshToken" | "auditLog" | "feedback"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -856,6 +858,154 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    pushToken: {
+      payload: Prisma.$pushTokenPayload<ExtArgs>
+      fields: Prisma.pushTokenFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.pushTokenFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$pushTokenPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.pushTokenFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$pushTokenPayload>
+        }
+        findFirst: {
+          args: Prisma.pushTokenFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$pushTokenPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.pushTokenFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$pushTokenPayload>
+        }
+        findMany: {
+          args: Prisma.pushTokenFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$pushTokenPayload>[]
+        }
+        create: {
+          args: Prisma.pushTokenCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$pushTokenPayload>
+        }
+        createMany: {
+          args: Prisma.pushTokenCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.pushTokenCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$pushTokenPayload>[]
+        }
+        delete: {
+          args: Prisma.pushTokenDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$pushTokenPayload>
+        }
+        update: {
+          args: Prisma.pushTokenUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$pushTokenPayload>
+        }
+        deleteMany: {
+          args: Prisma.pushTokenDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.pushTokenUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.pushTokenUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$pushTokenPayload>[]
+        }
+        upsert: {
+          args: Prisma.pushTokenUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$pushTokenPayload>
+        }
+        aggregate: {
+          args: Prisma.PushTokenAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregatePushToken>
+        }
+        groupBy: {
+          args: Prisma.pushTokenGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.PushTokenGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.pushTokenCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.PushTokenCountAggregateOutputType> | number
+        }
+      }
+    }
+    notificationPreference: {
+      payload: Prisma.$notificationPreferencePayload<ExtArgs>
+      fields: Prisma.notificationPreferenceFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.notificationPreferenceFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$notificationPreferencePayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.notificationPreferenceFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$notificationPreferencePayload>
+        }
+        findFirst: {
+          args: Prisma.notificationPreferenceFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$notificationPreferencePayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.notificationPreferenceFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$notificationPreferencePayload>
+        }
+        findMany: {
+          args: Prisma.notificationPreferenceFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$notificationPreferencePayload>[]
+        }
+        create: {
+          args: Prisma.notificationPreferenceCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$notificationPreferencePayload>
+        }
+        createMany: {
+          args: Prisma.notificationPreferenceCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.notificationPreferenceCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$notificationPreferencePayload>[]
+        }
+        delete: {
+          args: Prisma.notificationPreferenceDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$notificationPreferencePayload>
+        }
+        update: {
+          args: Prisma.notificationPreferenceUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$notificationPreferencePayload>
+        }
+        deleteMany: {
+          args: Prisma.notificationPreferenceDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.notificationPreferenceUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.notificationPreferenceUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$notificationPreferencePayload>[]
+        }
+        upsert: {
+          args: Prisma.notificationPreferenceUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$notificationPreferencePayload>
+        }
+        aggregate: {
+          args: Prisma.NotificationPreferenceAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateNotificationPreference>
+        }
+        groupBy: {
+          args: Prisma.notificationPreferenceGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.NotificationPreferenceGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.notificationPreferenceCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.NotificationPreferenceCountAggregateOutputType> | number
+        }
+      }
+    }
     RefreshToken: {
       payload: Prisma.$RefreshTokenPayload<ExtArgs>
       fields: Prisma.RefreshTokenFieldRefs
@@ -1257,6 +1407,43 @@ export const UserScalarFieldEnum = {
 export type UserScalarFieldEnum = (typeof UserScalarFieldEnum)[keyof typeof UserScalarFieldEnum]
 
 
+export const PushTokenScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  token: 'token',
+  platform: 'platform',
+  deviceId: 'deviceId',
+  deviceName: 'deviceName',
+  enabled: 'enabled',
+  lastErrorAt: 'lastErrorAt',
+  lastError: 'lastError',
+  lastUsedAt: 'lastUsedAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type PushTokenScalarFieldEnum = (typeof PushTokenScalarFieldEnum)[keyof typeof PushTokenScalarFieldEnum]
+
+
+export const NotificationPreferenceScalarFieldEnum = {
+  userId: 'userId',
+  pushEnabled: 'pushEnabled',
+  tradeClosed: 'tradeClosed',
+  coachingReady: 'coachingReady',
+  drawdownAlerts: 'drawdownAlerts',
+  governanceAlerts: 'governanceAlerts',
+  journalReminders: 'journalReminders',
+  quietHoursStart: 'quietHoursStart',
+  quietHoursEnd: 'quietHoursEnd',
+  reminderHour: 'reminderHour',
+  lastReminderLocalDate: 'lastReminderLocalDate',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type NotificationPreferenceScalarFieldEnum = (typeof NotificationPreferenceScalarFieldEnum)[keyof typeof NotificationPreferenceScalarFieldEnum]
+
+
 export const RefreshTokenScalarFieldEnum = {
   id: 'id',
   token: 'token',
@@ -1544,6 +1731,8 @@ export type GlobalOmitConfig = {
   governanceLog?: Prisma.governanceLogOmit
   journal?: Prisma.journalOmit
   user?: Prisma.userOmit
+  pushToken?: Prisma.pushTokenOmit
+  notificationPreference?: Prisma.notificationPreferenceOmit
   refreshToken?: Prisma.RefreshTokenOmit
   auditLog?: Prisma.auditLogOmit
   feedback?: Prisma.feedbackOmit

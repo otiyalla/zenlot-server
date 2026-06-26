@@ -8,6 +8,10 @@ import { SearchTradeDto } from './dto/search-trade.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma, trade } from '../../prisma/generated/prisma/client';
 import { RiskCalculationService } from '../risk/risk-calculation.service';
+import {
+  SETTLED_STATUSES,
+  TradeLogService,
+} from '../risk/trade-log.service';
 
 /**
  * Fields whose change alters a trade's capital exposure or reward sizing, so a
@@ -29,6 +33,7 @@ export class TradeService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly riskCalculation: RiskCalculationService,
+    private readonly tradeLog: TradeLogService,
   ) {}
 
   async create(createTradeDto: CreateTradeDto) {
@@ -226,14 +231,12 @@ export class TradeService {
     });
   }
 
-  async update(
-    id: string,
-    updateTradeDto: UpdateTradeDto,
-    riskPatch?: Prisma.tradeUpdateInput,
-  ) {
-    // Remove read-only / server-controlled fields that clients cannot set.
-    // `isAutoClosed` is owned by the auto-close job (which updates it directly),
-    // never by a client request.
+  /**
+   * Strips the read-only / server-controlled fields a client cannot set and
+   * shapes the rest into Prisma update data. `isAutoClosed` is owned by the
+   * auto-close job (which updates it directly), never by a client request.
+   */
+  private toUpdateData(updateTradeDto: UpdateTradeDto): Prisma.tradeUpdateInput {
     const {
       id: _,
       createdAt,
@@ -243,13 +246,22 @@ export class TradeService {
       ...updateData
     } = updateTradeDto;
 
-    // Build the data object, only including defined (non-undefined) fields.
-    // `riskPatch` (server-recomputed exposure/sizing) is applied last so it wins
-    // over the client-sent stop/target/lot values it derives from.
-    const data: Prisma.tradeUpdateInput = {
+    return {
       ...updateData,
       stopLoss: updateData.stopLoss as unknown as Prisma.InputJsonValue,
       takeProfit: updateData.takeProfit as unknown as Prisma.InputJsonValue,
+    };
+  }
+
+  async update(
+    id: string,
+    updateTradeDto: UpdateTradeDto,
+    riskPatch?: Prisma.tradeUpdateInput,
+  ) {
+    // `riskPatch` (server-recomputed exposure/sizing) is applied last so it wins
+    // over the client-sent stop/target/lot values it derives from.
+    const data: Prisma.tradeUpdateInput = {
+      ...this.toUpdateData(updateTradeDto),
       ...(riskPatch ?? {}),
     };
     return this.prisma.trade.update({ where: { id }, data });
@@ -261,6 +273,23 @@ export class TradeService {
     updateTradeDto: UpdateTradeDto,
   ) {
     const existing = await this.findOneForUser(id, userId);
+
+    // An open trade moving to a PnL-settling status (closed_in_profit/
+    // closed_in_loss/reached_tp/reached_sl) is a realized close. Delegate to the
+    // risk module so PnL is computed and balance + drawdown settle atomically
+    // with the close — the generic update path never settles. The neutral
+    // 'closed' status is intentionally not in SETTLED_STATUSES, so a neutral
+    // close still flows through the plain update below (no settlement, by design).
+    const finalStatus = updateTradeDto.status ?? existing.status;
+    if (existing.status === 'open' && SETTLED_STATUSES.has(finalStatus)) {
+      return this.tradeLog.settleManualClose(
+        userId,
+        existing,
+        this.toUpdateData(updateTradeDto),
+        updateTradeDto.closedPrice ?? 0,
+      );
+    }
+
     const riskPatch = await this.buildRiskRecompute(
       userId,
       existing,
@@ -273,7 +302,7 @@ export class TradeService {
    * When an open, risk-engine-tracked trade has its entry / stop / target / lot
    * (or execution / symbol) edited, re-size it server-side so its stored capital
    * exposure stays accurate. The portfolio exposure snapshot
-   * ({@link PortfolioService.getSnapshot}) sums each open trade's stored
+   * ({@link PortfolioService#getSnapshot}) sums each open trade's stored
    * `capitalExposure`/`capitalExposurePct`; without this recompute those figures
    * go stale on edit and the snapshot reports wrong exposure.
    *

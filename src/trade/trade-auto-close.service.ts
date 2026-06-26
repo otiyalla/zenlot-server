@@ -8,6 +8,8 @@ import { QuoteService } from '../quote/quote.service';
 import { DrawdownService } from '../risk/drawdown.service';
 import { calculatePnL, calculateRMultiple } from '../risk/engine';
 import { executionToDirection } from '../risk/risk.mapper';
+import { NotificationsService } from '../notifications/notifications.service';
+import { DrawdownPeriod } from '../notifications/notification.copy';
 
 export const TRADE_AUTO_CLOSE_QUEUE = 'trade-auto-close';
 export const SCAN_OPEN_TRADES_JOB = 'scan-open-trades';
@@ -43,6 +45,12 @@ interface Trigger {
   status: ClosedStatus;
 }
 
+interface BreachFlags {
+  dailyBreached: boolean;
+  weeklyBreached: boolean;
+  monthlyBreached: boolean;
+}
+
 @Injectable()
 export class TradeAutoCloseService implements OnModuleInit {
   private readonly logger = new Logger(TradeAutoCloseService.name);
@@ -52,6 +60,7 @@ export class TradeAutoCloseService implements OnModuleInit {
     private readonly quoteService: QuoteService,
     private readonly quoteGateway: QuoteGateway,
     private readonly drawdownService: DrawdownService,
+    private readonly notifications: NotificationsService,
     @InjectQueue(TRADE_AUTO_CLOSE_QUEUE)
     private readonly autoCloseQueue: Queue,
   ) {}
@@ -217,7 +226,7 @@ export class TradeAutoCloseService implements OnModuleInit {
           )
         : null;
 
-    const settled = await this.prisma.$transaction(async (tx) => {
+    const settlement = await this.prisma.$transaction(async (tx) => {
       const { count } = await tx.trade.updateMany({
         where: { id: trade.id, status: 'open' },
         data: {
@@ -232,15 +241,33 @@ export class TradeAutoCloseService implements OnModuleInit {
         },
       });
       if (count === 0) {
-        return false;
+        return null;
       }
+      // Snapshot the circuit-breaker flags before settlement so we can tell which
+      // (if any) this close newly tripped, then push a drawdown alert for those.
+      const before = await tx.drawdownState.findUnique({
+        where: { userId: trade.userId },
+        select: {
+          dailyBreached: true,
+          weeklyBreached: true,
+          monthlyBreached: true,
+        },
+      });
       // Reflect the realized PnL on the account balance + drawdown (no-op if the
       // user has no risk profile). Atomic with the trade close.
       await this.drawdownService.settleRealizedPnL(tx, trade.userId, pnl);
-      return true;
+      const after = await tx.drawdownState.findUnique({
+        where: { userId: trade.userId },
+        select: {
+          dailyBreached: true,
+          weeklyBreached: true,
+          monthlyBreached: true,
+        },
+      });
+      return { before, after };
     });
 
-    if (!settled) {
+    if (!settlement) {
       return;
     }
 
@@ -255,6 +282,38 @@ export class TradeAutoCloseService implements OnModuleInit {
     }
 
     this.quoteGateway.emitTradeClosed(trade.userId, updatedTrade);
+
+    // Push: trade auto-closed (profit/loss). Best-effort — never blocks the close.
+    void this.notifications.notifyTradeClosed(trade.userId, {
+      tradeId: trade.id,
+      symbol: trade.symbol,
+      pnl: pnl ?? 0,
+      accountCurrency: trade.accountCurrency,
+      closedReason: trigger.status,
+    });
+
+    // Push: drawdown circuit breaker(s) this close newly tripped.
+    for (const period of this.newlyBreachedPeriods(
+      settlement.before,
+      settlement.after,
+    )) {
+      void this.notifications.notifyDrawdownBreach(trade.userId, period);
+    }
+  }
+
+  /** Periods whose breach flag flipped false→true between two snapshots. */
+  private newlyBreachedPeriods(
+    before: BreachFlags | null,
+    after: BreachFlags | null,
+  ): DrawdownPeriod[] {
+    if (!after) return [];
+    const periods: DrawdownPeriod[] = [];
+    if (after.dailyBreached && !before?.dailyBreached) periods.push('daily');
+    if (after.weeklyBreached && !before?.weeklyBreached) periods.push('weekly');
+    if (after.monthlyBreached && !before?.monthlyBreached) {
+      periods.push('monthly');
+    }
+    return periods;
   }
 
   private async getClosedExchangeRate(trade: MonitoredTrade): Promise<number> {

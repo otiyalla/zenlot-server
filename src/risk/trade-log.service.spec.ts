@@ -11,6 +11,7 @@ import { RateResolverService } from './rate-resolver.service';
 import { DrawdownService } from './drawdown.service';
 import { RiskProfileService } from './risk-profile.service';
 import { RiskCalculationView } from './risk.mapper';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const view: RiskCalculationView = {
   symbol: 'EURUSD',
@@ -84,6 +85,14 @@ function makeService(opts: {
   const tx = {
     trade: { update: txUpdate, delete: txDelete },
     riskProfile: { update: profileUpdate, findUnique: profileFindUnique },
+    // closeTrade snapshots breach flags before/after settlement for a drawdown push.
+    drawdownState: {
+      findUnique: jest.fn().mockResolvedValue({
+        dailyBreached: false,
+        weeklyBreached: false,
+        monthlyBreached: false,
+      }),
+    },
   };
   const prisma = {
     trade: {
@@ -118,12 +127,19 @@ function makeService(opts: {
 
   const coachingQueue = { add: queueAdd } as unknown as Queue;
 
+  const notifications = {
+    notifyTradeClosed: jest.fn().mockResolvedValue(undefined),
+    notifyGovernanceViolation: jest.fn().mockResolvedValue(undefined),
+    notifyDrawdownBreach: jest.fn().mockResolvedValue(undefined),
+  } as unknown as NotificationsService;
+
   const service = new TradeLogService(
     prisma,
     riskCalc,
     rateResolver,
     drawdown,
     profile,
+    notifications,
     coachingQueue,
   );
   return {
