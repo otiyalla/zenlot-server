@@ -40,6 +40,7 @@ export type TradeAvgAggregateOutputType = {
   capitalExposurePct: number | null
   pnl: number | null
   rMultiple: number | null
+  suggestedLot: number | null
 }
 
 export type TradeSumAggregateOutputType = {
@@ -56,6 +57,7 @@ export type TradeSumAggregateOutputType = {
   capitalExposurePct: number | null
   pnl: number | null
   rMultiple: number | null
+  suggestedLot: number | null
 }
 
 export type TradeMinAggregateOutputType = {
@@ -85,6 +87,7 @@ export type TradeMinAggregateOutputType = {
   overridden: boolean | null
   pnl: number | null
   rMultiple: number | null
+  suggestedLot: number | null
   createdAt: Date | null
   updatedAt: Date | null
 }
@@ -116,6 +119,7 @@ export type TradeMaxAggregateOutputType = {
   overridden: boolean | null
   pnl: number | null
   rMultiple: number | null
+  suggestedLot: number | null
   createdAt: Date | null
   updatedAt: Date | null
 }
@@ -150,6 +154,8 @@ export type TradeCountAggregateOutputType = {
   overridden: number
   pnl: number
   rMultiple: number
+  stopAdjustments: number
+  suggestedLot: number
   createdAt: number
   updatedAt: number
   _all: number
@@ -170,6 +176,7 @@ export type TradeAvgAggregateInputType = {
   capitalExposurePct?: true
   pnl?: true
   rMultiple?: true
+  suggestedLot?: true
 }
 
 export type TradeSumAggregateInputType = {
@@ -186,6 +193,7 @@ export type TradeSumAggregateInputType = {
   capitalExposurePct?: true
   pnl?: true
   rMultiple?: true
+  suggestedLot?: true
 }
 
 export type TradeMinAggregateInputType = {
@@ -215,6 +223,7 @@ export type TradeMinAggregateInputType = {
   overridden?: true
   pnl?: true
   rMultiple?: true
+  suggestedLot?: true
   createdAt?: true
   updatedAt?: true
 }
@@ -246,6 +255,7 @@ export type TradeMaxAggregateInputType = {
   overridden?: true
   pnl?: true
   rMultiple?: true
+  suggestedLot?: true
   createdAt?: true
   updatedAt?: true
 }
@@ -280,6 +290,8 @@ export type TradeCountAggregateInputType = {
   overridden?: true
   pnl?: true
   rMultiple?: true
+  stopAdjustments?: true
+  suggestedLot?: true
   createdAt?: true
   updatedAt?: true
   _all?: true
@@ -401,6 +413,8 @@ export type TradeGroupByOutputType = {
   overridden: boolean
   pnl: number | null
   rMultiple: number | null
+  stopAdjustments: runtime.JsonValue
+  suggestedLot: number | null
   createdAt: Date
   updatedAt: Date
   _count: TradeCountAggregateOutputType | null
@@ -458,10 +472,16 @@ export type tradeWhereInput = {
   overridden?: Prisma.BoolFilter<"trade"> | boolean
   pnl?: Prisma.FloatNullableFilter<"trade"> | number | null
   rMultiple?: Prisma.FloatNullableFilter<"trade"> | number | null
+  stopAdjustments?: Prisma.JsonFilter<"trade">
+  suggestedLot?: Prisma.FloatNullableFilter<"trade"> | number | null
   createdAt?: Prisma.DateTimeFilter<"trade"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"trade"> | Date | string
   user?: Prisma.XOR<Prisma.UserScalarRelationFilter, Prisma.userWhereInput>
   journal?: Prisma.JournalListRelationFilter
+  preTradeChecklists?: Prisma.PreTradeChecklistListRelationFilter
+  preTradeEvaluations?: Prisma.PreTradeEvaluationListRelationFilter
+  executionGrades?: Prisma.ExecutionGradeListRelationFilter
+  tradeVerdicts?: Prisma.TradeVerdictListRelationFilter
 }
 
 export type tradeOrderByWithRelationInput = {
@@ -494,10 +514,16 @@ export type tradeOrderByWithRelationInput = {
   overridden?: Prisma.SortOrder
   pnl?: Prisma.SortOrderInput | Prisma.SortOrder
   rMultiple?: Prisma.SortOrderInput | Prisma.SortOrder
+  stopAdjustments?: Prisma.SortOrder
+  suggestedLot?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   user?: Prisma.userOrderByWithRelationInput
   journal?: Prisma.journalOrderByRelationAggregateInput
+  preTradeChecklists?: Prisma.preTradeChecklistOrderByRelationAggregateInput
+  preTradeEvaluations?: Prisma.preTradeEvaluationOrderByRelationAggregateInput
+  executionGrades?: Prisma.executionGradeOrderByRelationAggregateInput
+  tradeVerdicts?: Prisma.tradeVerdictOrderByRelationAggregateInput
 }
 
 export type tradeWhereUniqueInput = Prisma.AtLeast<{
@@ -533,10 +559,16 @@ export type tradeWhereUniqueInput = Prisma.AtLeast<{
   overridden?: Prisma.BoolFilter<"trade"> | boolean
   pnl?: Prisma.FloatNullableFilter<"trade"> | number | null
   rMultiple?: Prisma.FloatNullableFilter<"trade"> | number | null
+  stopAdjustments?: Prisma.JsonFilter<"trade">
+  suggestedLot?: Prisma.FloatNullableFilter<"trade"> | number | null
   createdAt?: Prisma.DateTimeFilter<"trade"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"trade"> | Date | string
   user?: Prisma.XOR<Prisma.UserScalarRelationFilter, Prisma.userWhereInput>
   journal?: Prisma.JournalListRelationFilter
+  preTradeChecklists?: Prisma.PreTradeChecklistListRelationFilter
+  preTradeEvaluations?: Prisma.PreTradeEvaluationListRelationFilter
+  executionGrades?: Prisma.ExecutionGradeListRelationFilter
+  tradeVerdicts?: Prisma.TradeVerdictListRelationFilter
 }, "id">
 
 export type tradeOrderByWithAggregationInput = {
@@ -569,6 +601,8 @@ export type tradeOrderByWithAggregationInput = {
   overridden?: Prisma.SortOrder
   pnl?: Prisma.SortOrderInput | Prisma.SortOrder
   rMultiple?: Prisma.SortOrderInput | Prisma.SortOrder
+  stopAdjustments?: Prisma.SortOrder
+  suggestedLot?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   _count?: Prisma.tradeCountOrderByAggregateInput
@@ -611,6 +645,8 @@ export type tradeScalarWhereWithAggregatesInput = {
   overridden?: Prisma.BoolWithAggregatesFilter<"trade"> | boolean
   pnl?: Prisma.FloatNullableWithAggregatesFilter<"trade"> | number | null
   rMultiple?: Prisma.FloatNullableWithAggregatesFilter<"trade"> | number | null
+  stopAdjustments?: Prisma.JsonWithAggregatesFilter<"trade">
+  suggestedLot?: Prisma.FloatNullableWithAggregatesFilter<"trade"> | number | null
   createdAt?: Prisma.DateTimeWithAggregatesFilter<"trade"> | Date | string
   updatedAt?: Prisma.DateTimeWithAggregatesFilter<"trade"> | Date | string
 }
@@ -644,10 +680,16 @@ export type tradeCreateInput = {
   overridden?: boolean
   pnl?: number | null
   rMultiple?: number | null
+  stopAdjustments?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  suggestedLot?: number | null
   createdAt?: Date | string
   updatedAt?: Date | string
   user: Prisma.userCreateNestedOneWithoutTradeInput
   journal?: Prisma.journalCreateNestedManyWithoutTradeInput
+  preTradeChecklists?: Prisma.preTradeChecklistCreateNestedManyWithoutTradeInput
+  preTradeEvaluations?: Prisma.preTradeEvaluationCreateNestedManyWithoutTradeInput
+  executionGrades?: Prisma.executionGradeCreateNestedManyWithoutTradeInput
+  tradeVerdicts?: Prisma.tradeVerdictCreateNestedManyWithoutTradeInput
 }
 
 export type tradeUncheckedCreateInput = {
@@ -680,9 +722,15 @@ export type tradeUncheckedCreateInput = {
   overridden?: boolean
   pnl?: number | null
   rMultiple?: number | null
+  stopAdjustments?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  suggestedLot?: number | null
   createdAt?: Date | string
   updatedAt?: Date | string
   journal?: Prisma.journalUncheckedCreateNestedManyWithoutTradeInput
+  preTradeChecklists?: Prisma.preTradeChecklistUncheckedCreateNestedManyWithoutTradeInput
+  preTradeEvaluations?: Prisma.preTradeEvaluationUncheckedCreateNestedManyWithoutTradeInput
+  executionGrades?: Prisma.executionGradeUncheckedCreateNestedManyWithoutTradeInput
+  tradeVerdicts?: Prisma.tradeVerdictUncheckedCreateNestedManyWithoutTradeInput
 }
 
 export type tradeUpdateInput = {
@@ -714,10 +762,16 @@ export type tradeUpdateInput = {
   overridden?: Prisma.BoolFieldUpdateOperationsInput | boolean
   pnl?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   rMultiple?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  stopAdjustments?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  suggestedLot?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   user?: Prisma.userUpdateOneRequiredWithoutTradeNestedInput
   journal?: Prisma.journalUpdateManyWithoutTradeNestedInput
+  preTradeChecklists?: Prisma.preTradeChecklistUpdateManyWithoutTradeNestedInput
+  preTradeEvaluations?: Prisma.preTradeEvaluationUpdateManyWithoutTradeNestedInput
+  executionGrades?: Prisma.executionGradeUpdateManyWithoutTradeNestedInput
+  tradeVerdicts?: Prisma.tradeVerdictUpdateManyWithoutTradeNestedInput
 }
 
 export type tradeUncheckedUpdateInput = {
@@ -750,9 +804,15 @@ export type tradeUncheckedUpdateInput = {
   overridden?: Prisma.BoolFieldUpdateOperationsInput | boolean
   pnl?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   rMultiple?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  stopAdjustments?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  suggestedLot?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   journal?: Prisma.journalUncheckedUpdateManyWithoutTradeNestedInput
+  preTradeChecklists?: Prisma.preTradeChecklistUncheckedUpdateManyWithoutTradeNestedInput
+  preTradeEvaluations?: Prisma.preTradeEvaluationUncheckedUpdateManyWithoutTradeNestedInput
+  executionGrades?: Prisma.executionGradeUncheckedUpdateManyWithoutTradeNestedInput
+  tradeVerdicts?: Prisma.tradeVerdictUncheckedUpdateManyWithoutTradeNestedInput
 }
 
 export type tradeCreateManyInput = {
@@ -785,6 +845,8 @@ export type tradeCreateManyInput = {
   overridden?: boolean
   pnl?: number | null
   rMultiple?: number | null
+  stopAdjustments?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  suggestedLot?: number | null
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -818,6 +880,8 @@ export type tradeUpdateManyMutationInput = {
   overridden?: Prisma.BoolFieldUpdateOperationsInput | boolean
   pnl?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   rMultiple?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  stopAdjustments?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  suggestedLot?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -852,6 +916,8 @@ export type tradeUncheckedUpdateManyInput = {
   overridden?: Prisma.BoolFieldUpdateOperationsInput | boolean
   pnl?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   rMultiple?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  stopAdjustments?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  suggestedLot?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -894,6 +960,8 @@ export type tradeCountOrderByAggregateInput = {
   overridden?: Prisma.SortOrder
   pnl?: Prisma.SortOrder
   rMultiple?: Prisma.SortOrder
+  stopAdjustments?: Prisma.SortOrder
+  suggestedLot?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -912,6 +980,7 @@ export type tradeAvgOrderByAggregateInput = {
   capitalExposurePct?: Prisma.SortOrder
   pnl?: Prisma.SortOrder
   rMultiple?: Prisma.SortOrder
+  suggestedLot?: Prisma.SortOrder
 }
 
 export type tradeMaxOrderByAggregateInput = {
@@ -941,6 +1010,7 @@ export type tradeMaxOrderByAggregateInput = {
   overridden?: Prisma.SortOrder
   pnl?: Prisma.SortOrder
   rMultiple?: Prisma.SortOrder
+  suggestedLot?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -972,6 +1042,7 @@ export type tradeMinOrderByAggregateInput = {
   overridden?: Prisma.SortOrder
   pnl?: Prisma.SortOrder
   rMultiple?: Prisma.SortOrder
+  suggestedLot?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -990,6 +1061,7 @@ export type tradeSumOrderByAggregateInput = {
   capitalExposurePct?: Prisma.SortOrder
   pnl?: Prisma.SortOrder
   rMultiple?: Prisma.SortOrder
+  suggestedLot?: Prisma.SortOrder
 }
 
 export type TradeNullableScalarRelationFilter = {
@@ -1005,6 +1077,11 @@ export type TradeListRelationFilter = {
 
 export type tradeOrderByRelationAggregateInput = {
   _count?: Prisma.SortOrder
+}
+
+export type TradeScalarRelationFilter = {
+  is?: Prisma.tradeWhereInput
+  isNot?: Prisma.tradeWhereInput
 }
 
 export type tradeCreatetagsInput = {
@@ -1110,6 +1187,66 @@ export type tradeUncheckedUpdateManyWithoutUserNestedInput = {
   deleteMany?: Prisma.tradeScalarWhereInput | Prisma.tradeScalarWhereInput[]
 }
 
+export type tradeCreateNestedOneWithoutPreTradeChecklistsInput = {
+  create?: Prisma.XOR<Prisma.tradeCreateWithoutPreTradeChecklistsInput, Prisma.tradeUncheckedCreateWithoutPreTradeChecklistsInput>
+  connectOrCreate?: Prisma.tradeCreateOrConnectWithoutPreTradeChecklistsInput
+  connect?: Prisma.tradeWhereUniqueInput
+}
+
+export type tradeUpdateOneWithoutPreTradeChecklistsNestedInput = {
+  create?: Prisma.XOR<Prisma.tradeCreateWithoutPreTradeChecklistsInput, Prisma.tradeUncheckedCreateWithoutPreTradeChecklistsInput>
+  connectOrCreate?: Prisma.tradeCreateOrConnectWithoutPreTradeChecklistsInput
+  upsert?: Prisma.tradeUpsertWithoutPreTradeChecklistsInput
+  disconnect?: Prisma.tradeWhereInput | boolean
+  delete?: Prisma.tradeWhereInput | boolean
+  connect?: Prisma.tradeWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.tradeUpdateToOneWithWhereWithoutPreTradeChecklistsInput, Prisma.tradeUpdateWithoutPreTradeChecklistsInput>, Prisma.tradeUncheckedUpdateWithoutPreTradeChecklistsInput>
+}
+
+export type tradeCreateNestedOneWithoutPreTradeEvaluationsInput = {
+  create?: Prisma.XOR<Prisma.tradeCreateWithoutPreTradeEvaluationsInput, Prisma.tradeUncheckedCreateWithoutPreTradeEvaluationsInput>
+  connectOrCreate?: Prisma.tradeCreateOrConnectWithoutPreTradeEvaluationsInput
+  connect?: Prisma.tradeWhereUniqueInput
+}
+
+export type tradeUpdateOneWithoutPreTradeEvaluationsNestedInput = {
+  create?: Prisma.XOR<Prisma.tradeCreateWithoutPreTradeEvaluationsInput, Prisma.tradeUncheckedCreateWithoutPreTradeEvaluationsInput>
+  connectOrCreate?: Prisma.tradeCreateOrConnectWithoutPreTradeEvaluationsInput
+  upsert?: Prisma.tradeUpsertWithoutPreTradeEvaluationsInput
+  disconnect?: Prisma.tradeWhereInput | boolean
+  delete?: Prisma.tradeWhereInput | boolean
+  connect?: Prisma.tradeWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.tradeUpdateToOneWithWhereWithoutPreTradeEvaluationsInput, Prisma.tradeUpdateWithoutPreTradeEvaluationsInput>, Prisma.tradeUncheckedUpdateWithoutPreTradeEvaluationsInput>
+}
+
+export type tradeCreateNestedOneWithoutExecutionGradesInput = {
+  create?: Prisma.XOR<Prisma.tradeCreateWithoutExecutionGradesInput, Prisma.tradeUncheckedCreateWithoutExecutionGradesInput>
+  connectOrCreate?: Prisma.tradeCreateOrConnectWithoutExecutionGradesInput
+  connect?: Prisma.tradeWhereUniqueInput
+}
+
+export type tradeUpdateOneRequiredWithoutExecutionGradesNestedInput = {
+  create?: Prisma.XOR<Prisma.tradeCreateWithoutExecutionGradesInput, Prisma.tradeUncheckedCreateWithoutExecutionGradesInput>
+  connectOrCreate?: Prisma.tradeCreateOrConnectWithoutExecutionGradesInput
+  upsert?: Prisma.tradeUpsertWithoutExecutionGradesInput
+  connect?: Prisma.tradeWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.tradeUpdateToOneWithWhereWithoutExecutionGradesInput, Prisma.tradeUpdateWithoutExecutionGradesInput>, Prisma.tradeUncheckedUpdateWithoutExecutionGradesInput>
+}
+
+export type tradeCreateNestedOneWithoutTradeVerdictsInput = {
+  create?: Prisma.XOR<Prisma.tradeCreateWithoutTradeVerdictsInput, Prisma.tradeUncheckedCreateWithoutTradeVerdictsInput>
+  connectOrCreate?: Prisma.tradeCreateOrConnectWithoutTradeVerdictsInput
+  connect?: Prisma.tradeWhereUniqueInput
+}
+
+export type tradeUpdateOneRequiredWithoutTradeVerdictsNestedInput = {
+  create?: Prisma.XOR<Prisma.tradeCreateWithoutTradeVerdictsInput, Prisma.tradeUncheckedCreateWithoutTradeVerdictsInput>
+  connectOrCreate?: Prisma.tradeCreateOrConnectWithoutTradeVerdictsInput
+  upsert?: Prisma.tradeUpsertWithoutTradeVerdictsInput
+  connect?: Prisma.tradeWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.tradeUpdateToOneWithWhereWithoutTradeVerdictsInput, Prisma.tradeUpdateWithoutTradeVerdictsInput>, Prisma.tradeUncheckedUpdateWithoutTradeVerdictsInput>
+}
+
 export type tradeCreateWithoutJournalInput = {
   id?: string
   symbol: string
@@ -1139,9 +1276,15 @@ export type tradeCreateWithoutJournalInput = {
   overridden?: boolean
   pnl?: number | null
   rMultiple?: number | null
+  stopAdjustments?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  suggestedLot?: number | null
   createdAt?: Date | string
   updatedAt?: Date | string
   user: Prisma.userCreateNestedOneWithoutTradeInput
+  preTradeChecklists?: Prisma.preTradeChecklistCreateNestedManyWithoutTradeInput
+  preTradeEvaluations?: Prisma.preTradeEvaluationCreateNestedManyWithoutTradeInput
+  executionGrades?: Prisma.executionGradeCreateNestedManyWithoutTradeInput
+  tradeVerdicts?: Prisma.tradeVerdictCreateNestedManyWithoutTradeInput
 }
 
 export type tradeUncheckedCreateWithoutJournalInput = {
@@ -1174,8 +1317,14 @@ export type tradeUncheckedCreateWithoutJournalInput = {
   overridden?: boolean
   pnl?: number | null
   rMultiple?: number | null
+  stopAdjustments?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  suggestedLot?: number | null
   createdAt?: Date | string
   updatedAt?: Date | string
+  preTradeChecklists?: Prisma.preTradeChecklistUncheckedCreateNestedManyWithoutTradeInput
+  preTradeEvaluations?: Prisma.preTradeEvaluationUncheckedCreateNestedManyWithoutTradeInput
+  executionGrades?: Prisma.executionGradeUncheckedCreateNestedManyWithoutTradeInput
+  tradeVerdicts?: Prisma.tradeVerdictUncheckedCreateNestedManyWithoutTradeInput
 }
 
 export type tradeCreateOrConnectWithoutJournalInput = {
@@ -1223,9 +1372,15 @@ export type tradeUpdateWithoutJournalInput = {
   overridden?: Prisma.BoolFieldUpdateOperationsInput | boolean
   pnl?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   rMultiple?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  stopAdjustments?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  suggestedLot?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   user?: Prisma.userUpdateOneRequiredWithoutTradeNestedInput
+  preTradeChecklists?: Prisma.preTradeChecklistUpdateManyWithoutTradeNestedInput
+  preTradeEvaluations?: Prisma.preTradeEvaluationUpdateManyWithoutTradeNestedInput
+  executionGrades?: Prisma.executionGradeUpdateManyWithoutTradeNestedInput
+  tradeVerdicts?: Prisma.tradeVerdictUpdateManyWithoutTradeNestedInput
 }
 
 export type tradeUncheckedUpdateWithoutJournalInput = {
@@ -1258,8 +1413,14 @@ export type tradeUncheckedUpdateWithoutJournalInput = {
   overridden?: Prisma.BoolFieldUpdateOperationsInput | boolean
   pnl?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   rMultiple?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  stopAdjustments?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  suggestedLot?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  preTradeChecklists?: Prisma.preTradeChecklistUncheckedUpdateManyWithoutTradeNestedInput
+  preTradeEvaluations?: Prisma.preTradeEvaluationUncheckedUpdateManyWithoutTradeNestedInput
+  executionGrades?: Prisma.executionGradeUncheckedUpdateManyWithoutTradeNestedInput
+  tradeVerdicts?: Prisma.tradeVerdictUncheckedUpdateManyWithoutTradeNestedInput
 }
 
 export type tradeCreateWithoutUserInput = {
@@ -1291,9 +1452,15 @@ export type tradeCreateWithoutUserInput = {
   overridden?: boolean
   pnl?: number | null
   rMultiple?: number | null
+  stopAdjustments?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  suggestedLot?: number | null
   createdAt?: Date | string
   updatedAt?: Date | string
   journal?: Prisma.journalCreateNestedManyWithoutTradeInput
+  preTradeChecklists?: Prisma.preTradeChecklistCreateNestedManyWithoutTradeInput
+  preTradeEvaluations?: Prisma.preTradeEvaluationCreateNestedManyWithoutTradeInput
+  executionGrades?: Prisma.executionGradeCreateNestedManyWithoutTradeInput
+  tradeVerdicts?: Prisma.tradeVerdictCreateNestedManyWithoutTradeInput
 }
 
 export type tradeUncheckedCreateWithoutUserInput = {
@@ -1325,9 +1492,15 @@ export type tradeUncheckedCreateWithoutUserInput = {
   overridden?: boolean
   pnl?: number | null
   rMultiple?: number | null
+  stopAdjustments?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  suggestedLot?: number | null
   createdAt?: Date | string
   updatedAt?: Date | string
   journal?: Prisma.journalUncheckedCreateNestedManyWithoutTradeInput
+  preTradeChecklists?: Prisma.preTradeChecklistUncheckedCreateNestedManyWithoutTradeInput
+  preTradeEvaluations?: Prisma.preTradeEvaluationUncheckedCreateNestedManyWithoutTradeInput
+  executionGrades?: Prisma.executionGradeUncheckedCreateNestedManyWithoutTradeInput
+  tradeVerdicts?: Prisma.tradeVerdictUncheckedCreateNestedManyWithoutTradeInput
 }
 
 export type tradeCreateOrConnectWithoutUserInput = {
@@ -1389,8 +1562,714 @@ export type tradeScalarWhereInput = {
   overridden?: Prisma.BoolFilter<"trade"> | boolean
   pnl?: Prisma.FloatNullableFilter<"trade"> | number | null
   rMultiple?: Prisma.FloatNullableFilter<"trade"> | number | null
+  stopAdjustments?: Prisma.JsonFilter<"trade">
+  suggestedLot?: Prisma.FloatNullableFilter<"trade"> | number | null
   createdAt?: Prisma.DateTimeFilter<"trade"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"trade"> | Date | string
+}
+
+export type tradeCreateWithoutPreTradeChecklistsInput = {
+  id?: string
+  symbol: string
+  entry: number
+  lot: number
+  pips: number
+  execution: string
+  accountCurrency: string
+  exchangeRate: number
+  rr: number
+  risk: number
+  reward: number
+  tags?: Prisma.tradeCreatetagsInput | string[]
+  stopLoss: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  takeProfit: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  plainText?: string | null
+  editorState?: string | null
+  status?: string
+  closedAt?: Date | string | null
+  closedPrice?: number | null
+  closedExchangeRate?: number | null
+  closedReason?: string | null
+  isAutoClosed?: boolean
+  capitalExposure?: number | null
+  capitalExposurePct?: number | null
+  governanceStatus?: string | null
+  overridden?: boolean
+  pnl?: number | null
+  rMultiple?: number | null
+  stopAdjustments?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  suggestedLot?: number | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  user: Prisma.userCreateNestedOneWithoutTradeInput
+  journal?: Prisma.journalCreateNestedManyWithoutTradeInput
+  preTradeEvaluations?: Prisma.preTradeEvaluationCreateNestedManyWithoutTradeInput
+  executionGrades?: Prisma.executionGradeCreateNestedManyWithoutTradeInput
+  tradeVerdicts?: Prisma.tradeVerdictCreateNestedManyWithoutTradeInput
+}
+
+export type tradeUncheckedCreateWithoutPreTradeChecklistsInput = {
+  id?: string
+  symbol: string
+  userId: string
+  entry: number
+  lot: number
+  pips: number
+  execution: string
+  accountCurrency: string
+  exchangeRate: number
+  rr: number
+  risk: number
+  reward: number
+  tags?: Prisma.tradeCreatetagsInput | string[]
+  stopLoss: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  takeProfit: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  plainText?: string | null
+  editorState?: string | null
+  status?: string
+  closedAt?: Date | string | null
+  closedPrice?: number | null
+  closedExchangeRate?: number | null
+  closedReason?: string | null
+  isAutoClosed?: boolean
+  capitalExposure?: number | null
+  capitalExposurePct?: number | null
+  governanceStatus?: string | null
+  overridden?: boolean
+  pnl?: number | null
+  rMultiple?: number | null
+  stopAdjustments?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  suggestedLot?: number | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  journal?: Prisma.journalUncheckedCreateNestedManyWithoutTradeInput
+  preTradeEvaluations?: Prisma.preTradeEvaluationUncheckedCreateNestedManyWithoutTradeInput
+  executionGrades?: Prisma.executionGradeUncheckedCreateNestedManyWithoutTradeInput
+  tradeVerdicts?: Prisma.tradeVerdictUncheckedCreateNestedManyWithoutTradeInput
+}
+
+export type tradeCreateOrConnectWithoutPreTradeChecklistsInput = {
+  where: Prisma.tradeWhereUniqueInput
+  create: Prisma.XOR<Prisma.tradeCreateWithoutPreTradeChecklistsInput, Prisma.tradeUncheckedCreateWithoutPreTradeChecklistsInput>
+}
+
+export type tradeUpsertWithoutPreTradeChecklistsInput = {
+  update: Prisma.XOR<Prisma.tradeUpdateWithoutPreTradeChecklistsInput, Prisma.tradeUncheckedUpdateWithoutPreTradeChecklistsInput>
+  create: Prisma.XOR<Prisma.tradeCreateWithoutPreTradeChecklistsInput, Prisma.tradeUncheckedCreateWithoutPreTradeChecklistsInput>
+  where?: Prisma.tradeWhereInput
+}
+
+export type tradeUpdateToOneWithWhereWithoutPreTradeChecklistsInput = {
+  where?: Prisma.tradeWhereInput
+  data: Prisma.XOR<Prisma.tradeUpdateWithoutPreTradeChecklistsInput, Prisma.tradeUncheckedUpdateWithoutPreTradeChecklistsInput>
+}
+
+export type tradeUpdateWithoutPreTradeChecklistsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  symbol?: Prisma.StringFieldUpdateOperationsInput | string
+  entry?: Prisma.FloatFieldUpdateOperationsInput | number
+  lot?: Prisma.FloatFieldUpdateOperationsInput | number
+  pips?: Prisma.FloatFieldUpdateOperationsInput | number
+  execution?: Prisma.StringFieldUpdateOperationsInput | string
+  accountCurrency?: Prisma.StringFieldUpdateOperationsInput | string
+  exchangeRate?: Prisma.FloatFieldUpdateOperationsInput | number
+  rr?: Prisma.FloatFieldUpdateOperationsInput | number
+  risk?: Prisma.FloatFieldUpdateOperationsInput | number
+  reward?: Prisma.FloatFieldUpdateOperationsInput | number
+  tags?: Prisma.tradeUpdatetagsInput | string[]
+  stopLoss?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  takeProfit?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  plainText?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  editorState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  status?: Prisma.StringFieldUpdateOperationsInput | string
+  closedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  closedPrice?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  closedExchangeRate?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  closedReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  isAutoClosed?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  capitalExposure?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  capitalExposurePct?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  governanceStatus?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  overridden?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  pnl?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  rMultiple?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  stopAdjustments?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  suggestedLot?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  user?: Prisma.userUpdateOneRequiredWithoutTradeNestedInput
+  journal?: Prisma.journalUpdateManyWithoutTradeNestedInput
+  preTradeEvaluations?: Prisma.preTradeEvaluationUpdateManyWithoutTradeNestedInput
+  executionGrades?: Prisma.executionGradeUpdateManyWithoutTradeNestedInput
+  tradeVerdicts?: Prisma.tradeVerdictUpdateManyWithoutTradeNestedInput
+}
+
+export type tradeUncheckedUpdateWithoutPreTradeChecklistsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  symbol?: Prisma.StringFieldUpdateOperationsInput | string
+  userId?: Prisma.StringFieldUpdateOperationsInput | string
+  entry?: Prisma.FloatFieldUpdateOperationsInput | number
+  lot?: Prisma.FloatFieldUpdateOperationsInput | number
+  pips?: Prisma.FloatFieldUpdateOperationsInput | number
+  execution?: Prisma.StringFieldUpdateOperationsInput | string
+  accountCurrency?: Prisma.StringFieldUpdateOperationsInput | string
+  exchangeRate?: Prisma.FloatFieldUpdateOperationsInput | number
+  rr?: Prisma.FloatFieldUpdateOperationsInput | number
+  risk?: Prisma.FloatFieldUpdateOperationsInput | number
+  reward?: Prisma.FloatFieldUpdateOperationsInput | number
+  tags?: Prisma.tradeUpdatetagsInput | string[]
+  stopLoss?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  takeProfit?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  plainText?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  editorState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  status?: Prisma.StringFieldUpdateOperationsInput | string
+  closedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  closedPrice?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  closedExchangeRate?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  closedReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  isAutoClosed?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  capitalExposure?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  capitalExposurePct?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  governanceStatus?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  overridden?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  pnl?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  rMultiple?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  stopAdjustments?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  suggestedLot?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  journal?: Prisma.journalUncheckedUpdateManyWithoutTradeNestedInput
+  preTradeEvaluations?: Prisma.preTradeEvaluationUncheckedUpdateManyWithoutTradeNestedInput
+  executionGrades?: Prisma.executionGradeUncheckedUpdateManyWithoutTradeNestedInput
+  tradeVerdicts?: Prisma.tradeVerdictUncheckedUpdateManyWithoutTradeNestedInput
+}
+
+export type tradeCreateWithoutPreTradeEvaluationsInput = {
+  id?: string
+  symbol: string
+  entry: number
+  lot: number
+  pips: number
+  execution: string
+  accountCurrency: string
+  exchangeRate: number
+  rr: number
+  risk: number
+  reward: number
+  tags?: Prisma.tradeCreatetagsInput | string[]
+  stopLoss: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  takeProfit: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  plainText?: string | null
+  editorState?: string | null
+  status?: string
+  closedAt?: Date | string | null
+  closedPrice?: number | null
+  closedExchangeRate?: number | null
+  closedReason?: string | null
+  isAutoClosed?: boolean
+  capitalExposure?: number | null
+  capitalExposurePct?: number | null
+  governanceStatus?: string | null
+  overridden?: boolean
+  pnl?: number | null
+  rMultiple?: number | null
+  stopAdjustments?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  suggestedLot?: number | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  user: Prisma.userCreateNestedOneWithoutTradeInput
+  journal?: Prisma.journalCreateNestedManyWithoutTradeInput
+  preTradeChecklists?: Prisma.preTradeChecklistCreateNestedManyWithoutTradeInput
+  executionGrades?: Prisma.executionGradeCreateNestedManyWithoutTradeInput
+  tradeVerdicts?: Prisma.tradeVerdictCreateNestedManyWithoutTradeInput
+}
+
+export type tradeUncheckedCreateWithoutPreTradeEvaluationsInput = {
+  id?: string
+  symbol: string
+  userId: string
+  entry: number
+  lot: number
+  pips: number
+  execution: string
+  accountCurrency: string
+  exchangeRate: number
+  rr: number
+  risk: number
+  reward: number
+  tags?: Prisma.tradeCreatetagsInput | string[]
+  stopLoss: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  takeProfit: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  plainText?: string | null
+  editorState?: string | null
+  status?: string
+  closedAt?: Date | string | null
+  closedPrice?: number | null
+  closedExchangeRate?: number | null
+  closedReason?: string | null
+  isAutoClosed?: boolean
+  capitalExposure?: number | null
+  capitalExposurePct?: number | null
+  governanceStatus?: string | null
+  overridden?: boolean
+  pnl?: number | null
+  rMultiple?: number | null
+  stopAdjustments?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  suggestedLot?: number | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  journal?: Prisma.journalUncheckedCreateNestedManyWithoutTradeInput
+  preTradeChecklists?: Prisma.preTradeChecklistUncheckedCreateNestedManyWithoutTradeInput
+  executionGrades?: Prisma.executionGradeUncheckedCreateNestedManyWithoutTradeInput
+  tradeVerdicts?: Prisma.tradeVerdictUncheckedCreateNestedManyWithoutTradeInput
+}
+
+export type tradeCreateOrConnectWithoutPreTradeEvaluationsInput = {
+  where: Prisma.tradeWhereUniqueInput
+  create: Prisma.XOR<Prisma.tradeCreateWithoutPreTradeEvaluationsInput, Prisma.tradeUncheckedCreateWithoutPreTradeEvaluationsInput>
+}
+
+export type tradeUpsertWithoutPreTradeEvaluationsInput = {
+  update: Prisma.XOR<Prisma.tradeUpdateWithoutPreTradeEvaluationsInput, Prisma.tradeUncheckedUpdateWithoutPreTradeEvaluationsInput>
+  create: Prisma.XOR<Prisma.tradeCreateWithoutPreTradeEvaluationsInput, Prisma.tradeUncheckedCreateWithoutPreTradeEvaluationsInput>
+  where?: Prisma.tradeWhereInput
+}
+
+export type tradeUpdateToOneWithWhereWithoutPreTradeEvaluationsInput = {
+  where?: Prisma.tradeWhereInput
+  data: Prisma.XOR<Prisma.tradeUpdateWithoutPreTradeEvaluationsInput, Prisma.tradeUncheckedUpdateWithoutPreTradeEvaluationsInput>
+}
+
+export type tradeUpdateWithoutPreTradeEvaluationsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  symbol?: Prisma.StringFieldUpdateOperationsInput | string
+  entry?: Prisma.FloatFieldUpdateOperationsInput | number
+  lot?: Prisma.FloatFieldUpdateOperationsInput | number
+  pips?: Prisma.FloatFieldUpdateOperationsInput | number
+  execution?: Prisma.StringFieldUpdateOperationsInput | string
+  accountCurrency?: Prisma.StringFieldUpdateOperationsInput | string
+  exchangeRate?: Prisma.FloatFieldUpdateOperationsInput | number
+  rr?: Prisma.FloatFieldUpdateOperationsInput | number
+  risk?: Prisma.FloatFieldUpdateOperationsInput | number
+  reward?: Prisma.FloatFieldUpdateOperationsInput | number
+  tags?: Prisma.tradeUpdatetagsInput | string[]
+  stopLoss?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  takeProfit?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  plainText?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  editorState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  status?: Prisma.StringFieldUpdateOperationsInput | string
+  closedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  closedPrice?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  closedExchangeRate?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  closedReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  isAutoClosed?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  capitalExposure?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  capitalExposurePct?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  governanceStatus?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  overridden?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  pnl?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  rMultiple?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  stopAdjustments?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  suggestedLot?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  user?: Prisma.userUpdateOneRequiredWithoutTradeNestedInput
+  journal?: Prisma.journalUpdateManyWithoutTradeNestedInput
+  preTradeChecklists?: Prisma.preTradeChecklistUpdateManyWithoutTradeNestedInput
+  executionGrades?: Prisma.executionGradeUpdateManyWithoutTradeNestedInput
+  tradeVerdicts?: Prisma.tradeVerdictUpdateManyWithoutTradeNestedInput
+}
+
+export type tradeUncheckedUpdateWithoutPreTradeEvaluationsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  symbol?: Prisma.StringFieldUpdateOperationsInput | string
+  userId?: Prisma.StringFieldUpdateOperationsInput | string
+  entry?: Prisma.FloatFieldUpdateOperationsInput | number
+  lot?: Prisma.FloatFieldUpdateOperationsInput | number
+  pips?: Prisma.FloatFieldUpdateOperationsInput | number
+  execution?: Prisma.StringFieldUpdateOperationsInput | string
+  accountCurrency?: Prisma.StringFieldUpdateOperationsInput | string
+  exchangeRate?: Prisma.FloatFieldUpdateOperationsInput | number
+  rr?: Prisma.FloatFieldUpdateOperationsInput | number
+  risk?: Prisma.FloatFieldUpdateOperationsInput | number
+  reward?: Prisma.FloatFieldUpdateOperationsInput | number
+  tags?: Prisma.tradeUpdatetagsInput | string[]
+  stopLoss?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  takeProfit?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  plainText?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  editorState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  status?: Prisma.StringFieldUpdateOperationsInput | string
+  closedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  closedPrice?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  closedExchangeRate?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  closedReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  isAutoClosed?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  capitalExposure?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  capitalExposurePct?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  governanceStatus?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  overridden?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  pnl?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  rMultiple?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  stopAdjustments?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  suggestedLot?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  journal?: Prisma.journalUncheckedUpdateManyWithoutTradeNestedInput
+  preTradeChecklists?: Prisma.preTradeChecklistUncheckedUpdateManyWithoutTradeNestedInput
+  executionGrades?: Prisma.executionGradeUncheckedUpdateManyWithoutTradeNestedInput
+  tradeVerdicts?: Prisma.tradeVerdictUncheckedUpdateManyWithoutTradeNestedInput
+}
+
+export type tradeCreateWithoutExecutionGradesInput = {
+  id?: string
+  symbol: string
+  entry: number
+  lot: number
+  pips: number
+  execution: string
+  accountCurrency: string
+  exchangeRate: number
+  rr: number
+  risk: number
+  reward: number
+  tags?: Prisma.tradeCreatetagsInput | string[]
+  stopLoss: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  takeProfit: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  plainText?: string | null
+  editorState?: string | null
+  status?: string
+  closedAt?: Date | string | null
+  closedPrice?: number | null
+  closedExchangeRate?: number | null
+  closedReason?: string | null
+  isAutoClosed?: boolean
+  capitalExposure?: number | null
+  capitalExposurePct?: number | null
+  governanceStatus?: string | null
+  overridden?: boolean
+  pnl?: number | null
+  rMultiple?: number | null
+  stopAdjustments?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  suggestedLot?: number | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  user: Prisma.userCreateNestedOneWithoutTradeInput
+  journal?: Prisma.journalCreateNestedManyWithoutTradeInput
+  preTradeChecklists?: Prisma.preTradeChecklistCreateNestedManyWithoutTradeInput
+  preTradeEvaluations?: Prisma.preTradeEvaluationCreateNestedManyWithoutTradeInput
+  tradeVerdicts?: Prisma.tradeVerdictCreateNestedManyWithoutTradeInput
+}
+
+export type tradeUncheckedCreateWithoutExecutionGradesInput = {
+  id?: string
+  symbol: string
+  userId: string
+  entry: number
+  lot: number
+  pips: number
+  execution: string
+  accountCurrency: string
+  exchangeRate: number
+  rr: number
+  risk: number
+  reward: number
+  tags?: Prisma.tradeCreatetagsInput | string[]
+  stopLoss: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  takeProfit: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  plainText?: string | null
+  editorState?: string | null
+  status?: string
+  closedAt?: Date | string | null
+  closedPrice?: number | null
+  closedExchangeRate?: number | null
+  closedReason?: string | null
+  isAutoClosed?: boolean
+  capitalExposure?: number | null
+  capitalExposurePct?: number | null
+  governanceStatus?: string | null
+  overridden?: boolean
+  pnl?: number | null
+  rMultiple?: number | null
+  stopAdjustments?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  suggestedLot?: number | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  journal?: Prisma.journalUncheckedCreateNestedManyWithoutTradeInput
+  preTradeChecklists?: Prisma.preTradeChecklistUncheckedCreateNestedManyWithoutTradeInput
+  preTradeEvaluations?: Prisma.preTradeEvaluationUncheckedCreateNestedManyWithoutTradeInput
+  tradeVerdicts?: Prisma.tradeVerdictUncheckedCreateNestedManyWithoutTradeInput
+}
+
+export type tradeCreateOrConnectWithoutExecutionGradesInput = {
+  where: Prisma.tradeWhereUniqueInput
+  create: Prisma.XOR<Prisma.tradeCreateWithoutExecutionGradesInput, Prisma.tradeUncheckedCreateWithoutExecutionGradesInput>
+}
+
+export type tradeUpsertWithoutExecutionGradesInput = {
+  update: Prisma.XOR<Prisma.tradeUpdateWithoutExecutionGradesInput, Prisma.tradeUncheckedUpdateWithoutExecutionGradesInput>
+  create: Prisma.XOR<Prisma.tradeCreateWithoutExecutionGradesInput, Prisma.tradeUncheckedCreateWithoutExecutionGradesInput>
+  where?: Prisma.tradeWhereInput
+}
+
+export type tradeUpdateToOneWithWhereWithoutExecutionGradesInput = {
+  where?: Prisma.tradeWhereInput
+  data: Prisma.XOR<Prisma.tradeUpdateWithoutExecutionGradesInput, Prisma.tradeUncheckedUpdateWithoutExecutionGradesInput>
+}
+
+export type tradeUpdateWithoutExecutionGradesInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  symbol?: Prisma.StringFieldUpdateOperationsInput | string
+  entry?: Prisma.FloatFieldUpdateOperationsInput | number
+  lot?: Prisma.FloatFieldUpdateOperationsInput | number
+  pips?: Prisma.FloatFieldUpdateOperationsInput | number
+  execution?: Prisma.StringFieldUpdateOperationsInput | string
+  accountCurrency?: Prisma.StringFieldUpdateOperationsInput | string
+  exchangeRate?: Prisma.FloatFieldUpdateOperationsInput | number
+  rr?: Prisma.FloatFieldUpdateOperationsInput | number
+  risk?: Prisma.FloatFieldUpdateOperationsInput | number
+  reward?: Prisma.FloatFieldUpdateOperationsInput | number
+  tags?: Prisma.tradeUpdatetagsInput | string[]
+  stopLoss?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  takeProfit?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  plainText?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  editorState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  status?: Prisma.StringFieldUpdateOperationsInput | string
+  closedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  closedPrice?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  closedExchangeRate?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  closedReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  isAutoClosed?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  capitalExposure?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  capitalExposurePct?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  governanceStatus?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  overridden?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  pnl?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  rMultiple?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  stopAdjustments?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  suggestedLot?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  user?: Prisma.userUpdateOneRequiredWithoutTradeNestedInput
+  journal?: Prisma.journalUpdateManyWithoutTradeNestedInput
+  preTradeChecklists?: Prisma.preTradeChecklistUpdateManyWithoutTradeNestedInput
+  preTradeEvaluations?: Prisma.preTradeEvaluationUpdateManyWithoutTradeNestedInput
+  tradeVerdicts?: Prisma.tradeVerdictUpdateManyWithoutTradeNestedInput
+}
+
+export type tradeUncheckedUpdateWithoutExecutionGradesInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  symbol?: Prisma.StringFieldUpdateOperationsInput | string
+  userId?: Prisma.StringFieldUpdateOperationsInput | string
+  entry?: Prisma.FloatFieldUpdateOperationsInput | number
+  lot?: Prisma.FloatFieldUpdateOperationsInput | number
+  pips?: Prisma.FloatFieldUpdateOperationsInput | number
+  execution?: Prisma.StringFieldUpdateOperationsInput | string
+  accountCurrency?: Prisma.StringFieldUpdateOperationsInput | string
+  exchangeRate?: Prisma.FloatFieldUpdateOperationsInput | number
+  rr?: Prisma.FloatFieldUpdateOperationsInput | number
+  risk?: Prisma.FloatFieldUpdateOperationsInput | number
+  reward?: Prisma.FloatFieldUpdateOperationsInput | number
+  tags?: Prisma.tradeUpdatetagsInput | string[]
+  stopLoss?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  takeProfit?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  plainText?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  editorState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  status?: Prisma.StringFieldUpdateOperationsInput | string
+  closedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  closedPrice?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  closedExchangeRate?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  closedReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  isAutoClosed?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  capitalExposure?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  capitalExposurePct?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  governanceStatus?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  overridden?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  pnl?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  rMultiple?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  stopAdjustments?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  suggestedLot?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  journal?: Prisma.journalUncheckedUpdateManyWithoutTradeNestedInput
+  preTradeChecklists?: Prisma.preTradeChecklistUncheckedUpdateManyWithoutTradeNestedInput
+  preTradeEvaluations?: Prisma.preTradeEvaluationUncheckedUpdateManyWithoutTradeNestedInput
+  tradeVerdicts?: Prisma.tradeVerdictUncheckedUpdateManyWithoutTradeNestedInput
+}
+
+export type tradeCreateWithoutTradeVerdictsInput = {
+  id?: string
+  symbol: string
+  entry: number
+  lot: number
+  pips: number
+  execution: string
+  accountCurrency: string
+  exchangeRate: number
+  rr: number
+  risk: number
+  reward: number
+  tags?: Prisma.tradeCreatetagsInput | string[]
+  stopLoss: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  takeProfit: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  plainText?: string | null
+  editorState?: string | null
+  status?: string
+  closedAt?: Date | string | null
+  closedPrice?: number | null
+  closedExchangeRate?: number | null
+  closedReason?: string | null
+  isAutoClosed?: boolean
+  capitalExposure?: number | null
+  capitalExposurePct?: number | null
+  governanceStatus?: string | null
+  overridden?: boolean
+  pnl?: number | null
+  rMultiple?: number | null
+  stopAdjustments?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  suggestedLot?: number | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  user: Prisma.userCreateNestedOneWithoutTradeInput
+  journal?: Prisma.journalCreateNestedManyWithoutTradeInput
+  preTradeChecklists?: Prisma.preTradeChecklistCreateNestedManyWithoutTradeInput
+  preTradeEvaluations?: Prisma.preTradeEvaluationCreateNestedManyWithoutTradeInput
+  executionGrades?: Prisma.executionGradeCreateNestedManyWithoutTradeInput
+}
+
+export type tradeUncheckedCreateWithoutTradeVerdictsInput = {
+  id?: string
+  symbol: string
+  userId: string
+  entry: number
+  lot: number
+  pips: number
+  execution: string
+  accountCurrency: string
+  exchangeRate: number
+  rr: number
+  risk: number
+  reward: number
+  tags?: Prisma.tradeCreatetagsInput | string[]
+  stopLoss: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  takeProfit: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  plainText?: string | null
+  editorState?: string | null
+  status?: string
+  closedAt?: Date | string | null
+  closedPrice?: number | null
+  closedExchangeRate?: number | null
+  closedReason?: string | null
+  isAutoClosed?: boolean
+  capitalExposure?: number | null
+  capitalExposurePct?: number | null
+  governanceStatus?: string | null
+  overridden?: boolean
+  pnl?: number | null
+  rMultiple?: number | null
+  stopAdjustments?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  suggestedLot?: number | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  journal?: Prisma.journalUncheckedCreateNestedManyWithoutTradeInput
+  preTradeChecklists?: Prisma.preTradeChecklistUncheckedCreateNestedManyWithoutTradeInput
+  preTradeEvaluations?: Prisma.preTradeEvaluationUncheckedCreateNestedManyWithoutTradeInput
+  executionGrades?: Prisma.executionGradeUncheckedCreateNestedManyWithoutTradeInput
+}
+
+export type tradeCreateOrConnectWithoutTradeVerdictsInput = {
+  where: Prisma.tradeWhereUniqueInput
+  create: Prisma.XOR<Prisma.tradeCreateWithoutTradeVerdictsInput, Prisma.tradeUncheckedCreateWithoutTradeVerdictsInput>
+}
+
+export type tradeUpsertWithoutTradeVerdictsInput = {
+  update: Prisma.XOR<Prisma.tradeUpdateWithoutTradeVerdictsInput, Prisma.tradeUncheckedUpdateWithoutTradeVerdictsInput>
+  create: Prisma.XOR<Prisma.tradeCreateWithoutTradeVerdictsInput, Prisma.tradeUncheckedCreateWithoutTradeVerdictsInput>
+  where?: Prisma.tradeWhereInput
+}
+
+export type tradeUpdateToOneWithWhereWithoutTradeVerdictsInput = {
+  where?: Prisma.tradeWhereInput
+  data: Prisma.XOR<Prisma.tradeUpdateWithoutTradeVerdictsInput, Prisma.tradeUncheckedUpdateWithoutTradeVerdictsInput>
+}
+
+export type tradeUpdateWithoutTradeVerdictsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  symbol?: Prisma.StringFieldUpdateOperationsInput | string
+  entry?: Prisma.FloatFieldUpdateOperationsInput | number
+  lot?: Prisma.FloatFieldUpdateOperationsInput | number
+  pips?: Prisma.FloatFieldUpdateOperationsInput | number
+  execution?: Prisma.StringFieldUpdateOperationsInput | string
+  accountCurrency?: Prisma.StringFieldUpdateOperationsInput | string
+  exchangeRate?: Prisma.FloatFieldUpdateOperationsInput | number
+  rr?: Prisma.FloatFieldUpdateOperationsInput | number
+  risk?: Prisma.FloatFieldUpdateOperationsInput | number
+  reward?: Prisma.FloatFieldUpdateOperationsInput | number
+  tags?: Prisma.tradeUpdatetagsInput | string[]
+  stopLoss?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  takeProfit?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  plainText?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  editorState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  status?: Prisma.StringFieldUpdateOperationsInput | string
+  closedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  closedPrice?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  closedExchangeRate?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  closedReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  isAutoClosed?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  capitalExposure?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  capitalExposurePct?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  governanceStatus?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  overridden?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  pnl?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  rMultiple?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  stopAdjustments?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  suggestedLot?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  user?: Prisma.userUpdateOneRequiredWithoutTradeNestedInput
+  journal?: Prisma.journalUpdateManyWithoutTradeNestedInput
+  preTradeChecklists?: Prisma.preTradeChecklistUpdateManyWithoutTradeNestedInput
+  preTradeEvaluations?: Prisma.preTradeEvaluationUpdateManyWithoutTradeNestedInput
+  executionGrades?: Prisma.executionGradeUpdateManyWithoutTradeNestedInput
+}
+
+export type tradeUncheckedUpdateWithoutTradeVerdictsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  symbol?: Prisma.StringFieldUpdateOperationsInput | string
+  userId?: Prisma.StringFieldUpdateOperationsInput | string
+  entry?: Prisma.FloatFieldUpdateOperationsInput | number
+  lot?: Prisma.FloatFieldUpdateOperationsInput | number
+  pips?: Prisma.FloatFieldUpdateOperationsInput | number
+  execution?: Prisma.StringFieldUpdateOperationsInput | string
+  accountCurrency?: Prisma.StringFieldUpdateOperationsInput | string
+  exchangeRate?: Prisma.FloatFieldUpdateOperationsInput | number
+  rr?: Prisma.FloatFieldUpdateOperationsInput | number
+  risk?: Prisma.FloatFieldUpdateOperationsInput | number
+  reward?: Prisma.FloatFieldUpdateOperationsInput | number
+  tags?: Prisma.tradeUpdatetagsInput | string[]
+  stopLoss?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  takeProfit?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  plainText?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  editorState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  status?: Prisma.StringFieldUpdateOperationsInput | string
+  closedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  closedPrice?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  closedExchangeRate?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  closedReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  isAutoClosed?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  capitalExposure?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  capitalExposurePct?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  governanceStatus?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  overridden?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  pnl?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  rMultiple?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  stopAdjustments?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  suggestedLot?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  journal?: Prisma.journalUncheckedUpdateManyWithoutTradeNestedInput
+  preTradeChecklists?: Prisma.preTradeChecklistUncheckedUpdateManyWithoutTradeNestedInput
+  preTradeEvaluations?: Prisma.preTradeEvaluationUncheckedUpdateManyWithoutTradeNestedInput
+  executionGrades?: Prisma.executionGradeUncheckedUpdateManyWithoutTradeNestedInput
 }
 
 export type tradeCreateManyUserInput = {
@@ -1422,6 +2301,8 @@ export type tradeCreateManyUserInput = {
   overridden?: boolean
   pnl?: number | null
   rMultiple?: number | null
+  stopAdjustments?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  suggestedLot?: number | null
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -1455,9 +2336,15 @@ export type tradeUpdateWithoutUserInput = {
   overridden?: Prisma.BoolFieldUpdateOperationsInput | boolean
   pnl?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   rMultiple?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  stopAdjustments?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  suggestedLot?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   journal?: Prisma.journalUpdateManyWithoutTradeNestedInput
+  preTradeChecklists?: Prisma.preTradeChecklistUpdateManyWithoutTradeNestedInput
+  preTradeEvaluations?: Prisma.preTradeEvaluationUpdateManyWithoutTradeNestedInput
+  executionGrades?: Prisma.executionGradeUpdateManyWithoutTradeNestedInput
+  tradeVerdicts?: Prisma.tradeVerdictUpdateManyWithoutTradeNestedInput
 }
 
 export type tradeUncheckedUpdateWithoutUserInput = {
@@ -1489,9 +2376,15 @@ export type tradeUncheckedUpdateWithoutUserInput = {
   overridden?: Prisma.BoolFieldUpdateOperationsInput | boolean
   pnl?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   rMultiple?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  stopAdjustments?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  suggestedLot?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   journal?: Prisma.journalUncheckedUpdateManyWithoutTradeNestedInput
+  preTradeChecklists?: Prisma.preTradeChecklistUncheckedUpdateManyWithoutTradeNestedInput
+  preTradeEvaluations?: Prisma.preTradeEvaluationUncheckedUpdateManyWithoutTradeNestedInput
+  executionGrades?: Prisma.executionGradeUncheckedUpdateManyWithoutTradeNestedInput
+  tradeVerdicts?: Prisma.tradeVerdictUncheckedUpdateManyWithoutTradeNestedInput
 }
 
 export type tradeUncheckedUpdateManyWithoutUserInput = {
@@ -1523,6 +2416,8 @@ export type tradeUncheckedUpdateManyWithoutUserInput = {
   overridden?: Prisma.BoolFieldUpdateOperationsInput | boolean
   pnl?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   rMultiple?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  stopAdjustments?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  suggestedLot?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -1534,10 +2429,18 @@ export type tradeUncheckedUpdateManyWithoutUserInput = {
 
 export type TradeCountOutputType = {
   journal: number
+  preTradeChecklists: number
+  preTradeEvaluations: number
+  executionGrades: number
+  tradeVerdicts: number
 }
 
 export type TradeCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   journal?: boolean | TradeCountOutputTypeCountJournalArgs
+  preTradeChecklists?: boolean | TradeCountOutputTypeCountPreTradeChecklistsArgs
+  preTradeEvaluations?: boolean | TradeCountOutputTypeCountPreTradeEvaluationsArgs
+  executionGrades?: boolean | TradeCountOutputTypeCountExecutionGradesArgs
+  tradeVerdicts?: boolean | TradeCountOutputTypeCountTradeVerdictsArgs
 }
 
 /**
@@ -1555,6 +2458,34 @@ export type TradeCountOutputTypeDefaultArgs<ExtArgs extends runtime.Types.Extens
  */
 export type TradeCountOutputTypeCountJournalArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   where?: Prisma.journalWhereInput
+}
+
+/**
+ * TradeCountOutputType without action
+ */
+export type TradeCountOutputTypeCountPreTradeChecklistsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.preTradeChecklistWhereInput
+}
+
+/**
+ * TradeCountOutputType without action
+ */
+export type TradeCountOutputTypeCountPreTradeEvaluationsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.preTradeEvaluationWhereInput
+}
+
+/**
+ * TradeCountOutputType without action
+ */
+export type TradeCountOutputTypeCountExecutionGradesArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.executionGradeWhereInput
+}
+
+/**
+ * TradeCountOutputType without action
+ */
+export type TradeCountOutputTypeCountTradeVerdictsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.tradeVerdictWhereInput
 }
 
 
@@ -1588,10 +2519,16 @@ export type tradeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = 
   overridden?: boolean
   pnl?: boolean
   rMultiple?: boolean
+  stopAdjustments?: boolean
+  suggestedLot?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   user?: boolean | Prisma.userDefaultArgs<ExtArgs>
   journal?: boolean | Prisma.trade$journalArgs<ExtArgs>
+  preTradeChecklists?: boolean | Prisma.trade$preTradeChecklistsArgs<ExtArgs>
+  preTradeEvaluations?: boolean | Prisma.trade$preTradeEvaluationsArgs<ExtArgs>
+  executionGrades?: boolean | Prisma.trade$executionGradesArgs<ExtArgs>
+  tradeVerdicts?: boolean | Prisma.trade$tradeVerdictsArgs<ExtArgs>
   _count?: boolean | Prisma.TradeCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["trade"]>
 
@@ -1625,6 +2562,8 @@ export type tradeSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensi
   overridden?: boolean
   pnl?: boolean
   rMultiple?: boolean
+  stopAdjustments?: boolean
+  suggestedLot?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   user?: boolean | Prisma.userDefaultArgs<ExtArgs>
@@ -1660,6 +2599,8 @@ export type tradeSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensi
   overridden?: boolean
   pnl?: boolean
   rMultiple?: boolean
+  stopAdjustments?: boolean
+  suggestedLot?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   user?: boolean | Prisma.userDefaultArgs<ExtArgs>
@@ -1695,14 +2636,20 @@ export type tradeSelectScalar = {
   overridden?: boolean
   pnl?: boolean
   rMultiple?: boolean
+  stopAdjustments?: boolean
+  suggestedLot?: boolean
   createdAt?: boolean
   updatedAt?: boolean
 }
 
-export type tradeOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "symbol" | "userId" | "entry" | "lot" | "pips" | "execution" | "accountCurrency" | "exchangeRate" | "rr" | "risk" | "reward" | "tags" | "stopLoss" | "takeProfit" | "plainText" | "editorState" | "status" | "closedAt" | "closedPrice" | "closedExchangeRate" | "closedReason" | "isAutoClosed" | "capitalExposure" | "capitalExposurePct" | "governanceStatus" | "overridden" | "pnl" | "rMultiple" | "createdAt" | "updatedAt", ExtArgs["result"]["trade"]>
+export type tradeOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "symbol" | "userId" | "entry" | "lot" | "pips" | "execution" | "accountCurrency" | "exchangeRate" | "rr" | "risk" | "reward" | "tags" | "stopLoss" | "takeProfit" | "plainText" | "editorState" | "status" | "closedAt" | "closedPrice" | "closedExchangeRate" | "closedReason" | "isAutoClosed" | "capitalExposure" | "capitalExposurePct" | "governanceStatus" | "overridden" | "pnl" | "rMultiple" | "stopAdjustments" | "suggestedLot" | "createdAt" | "updatedAt", ExtArgs["result"]["trade"]>
 export type tradeInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   user?: boolean | Prisma.userDefaultArgs<ExtArgs>
   journal?: boolean | Prisma.trade$journalArgs<ExtArgs>
+  preTradeChecklists?: boolean | Prisma.trade$preTradeChecklistsArgs<ExtArgs>
+  preTradeEvaluations?: boolean | Prisma.trade$preTradeEvaluationsArgs<ExtArgs>
+  executionGrades?: boolean | Prisma.trade$executionGradesArgs<ExtArgs>
+  tradeVerdicts?: boolean | Prisma.trade$tradeVerdictsArgs<ExtArgs>
   _count?: boolean | Prisma.TradeCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type tradeIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
@@ -1717,6 +2664,10 @@ export type $tradePayload<ExtArgs extends runtime.Types.Extensions.InternalArgs 
   objects: {
     user: Prisma.$userPayload<ExtArgs>
     journal: Prisma.$journalPayload<ExtArgs>[]
+    preTradeChecklists: Prisma.$preTradeChecklistPayload<ExtArgs>[]
+    preTradeEvaluations: Prisma.$preTradeEvaluationPayload<ExtArgs>[]
+    executionGrades: Prisma.$executionGradePayload<ExtArgs>[]
+    tradeVerdicts: Prisma.$tradeVerdictPayload<ExtArgs>[]
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
@@ -1748,6 +2699,8 @@ export type $tradePayload<ExtArgs extends runtime.Types.Extensions.InternalArgs 
     overridden: boolean
     pnl: number | null
     rMultiple: number | null
+    stopAdjustments: runtime.JsonValue
+    suggestedLot: number | null
     createdAt: Date
     updatedAt: Date
   }, ExtArgs["result"]["trade"]>
@@ -2146,6 +3099,10 @@ export interface Prisma__tradeClient<T, Null = never, ExtArgs extends runtime.Ty
   readonly [Symbol.toStringTag]: "PrismaPromise"
   user<T extends Prisma.userDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.userDefaultArgs<ExtArgs>>): Prisma.Prisma__userClient<runtime.Types.Result.GetResult<Prisma.$userPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
   journal<T extends Prisma.trade$journalArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.trade$journalArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$journalPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  preTradeChecklists<T extends Prisma.trade$preTradeChecklistsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.trade$preTradeChecklistsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$preTradeChecklistPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  preTradeEvaluations<T extends Prisma.trade$preTradeEvaluationsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.trade$preTradeEvaluationsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$preTradeEvaluationPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  executionGrades<T extends Prisma.trade$executionGradesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.trade$executionGradesArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$executionGradePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  tradeVerdicts<T extends Prisma.trade$tradeVerdictsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.trade$tradeVerdictsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$tradeVerdictPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -2204,6 +3161,8 @@ export interface tradeFieldRefs {
   readonly overridden: Prisma.FieldRef<"trade", 'Boolean'>
   readonly pnl: Prisma.FieldRef<"trade", 'Float'>
   readonly rMultiple: Prisma.FieldRef<"trade", 'Float'>
+  readonly stopAdjustments: Prisma.FieldRef<"trade", 'Json'>
+  readonly suggestedLot: Prisma.FieldRef<"trade", 'Float'>
   readonly createdAt: Prisma.FieldRef<"trade", 'DateTime'>
   readonly updatedAt: Prisma.FieldRef<"trade", 'DateTime'>
 }
@@ -2623,6 +3582,102 @@ export type trade$journalArgs<ExtArgs extends runtime.Types.Extensions.InternalA
   take?: number
   skip?: number
   distinct?: Prisma.JournalScalarFieldEnum | Prisma.JournalScalarFieldEnum[]
+}
+
+/**
+ * trade.preTradeChecklists
+ */
+export type trade$preTradeChecklistsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the preTradeChecklist
+   */
+  select?: Prisma.preTradeChecklistSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the preTradeChecklist
+   */
+  omit?: Prisma.preTradeChecklistOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.preTradeChecklistInclude<ExtArgs> | null
+  where?: Prisma.preTradeChecklistWhereInput
+  orderBy?: Prisma.preTradeChecklistOrderByWithRelationInput | Prisma.preTradeChecklistOrderByWithRelationInput[]
+  cursor?: Prisma.preTradeChecklistWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.PreTradeChecklistScalarFieldEnum | Prisma.PreTradeChecklistScalarFieldEnum[]
+}
+
+/**
+ * trade.preTradeEvaluations
+ */
+export type trade$preTradeEvaluationsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the preTradeEvaluation
+   */
+  select?: Prisma.preTradeEvaluationSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the preTradeEvaluation
+   */
+  omit?: Prisma.preTradeEvaluationOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.preTradeEvaluationInclude<ExtArgs> | null
+  where?: Prisma.preTradeEvaluationWhereInput
+  orderBy?: Prisma.preTradeEvaluationOrderByWithRelationInput | Prisma.preTradeEvaluationOrderByWithRelationInput[]
+  cursor?: Prisma.preTradeEvaluationWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.PreTradeEvaluationScalarFieldEnum | Prisma.PreTradeEvaluationScalarFieldEnum[]
+}
+
+/**
+ * trade.executionGrades
+ */
+export type trade$executionGradesArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the executionGrade
+   */
+  select?: Prisma.executionGradeSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the executionGrade
+   */
+  omit?: Prisma.executionGradeOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.executionGradeInclude<ExtArgs> | null
+  where?: Prisma.executionGradeWhereInput
+  orderBy?: Prisma.executionGradeOrderByWithRelationInput | Prisma.executionGradeOrderByWithRelationInput[]
+  cursor?: Prisma.executionGradeWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.ExecutionGradeScalarFieldEnum | Prisma.ExecutionGradeScalarFieldEnum[]
+}
+
+/**
+ * trade.tradeVerdicts
+ */
+export type trade$tradeVerdictsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the tradeVerdict
+   */
+  select?: Prisma.tradeVerdictSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the tradeVerdict
+   */
+  omit?: Prisma.tradeVerdictOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.tradeVerdictInclude<ExtArgs> | null
+  where?: Prisma.tradeVerdictWhereInput
+  orderBy?: Prisma.tradeVerdictOrderByWithRelationInput | Prisma.tradeVerdictOrderByWithRelationInput[]
+  cursor?: Prisma.tradeVerdictWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.TradeVerdictScalarFieldEnum | Prisma.TradeVerdictScalarFieldEnum[]
 }
 
 /**

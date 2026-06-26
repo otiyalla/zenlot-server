@@ -61,7 +61,13 @@ export const ModelName = {
   notificationPreference: 'notificationPreference',
   RefreshToken: 'RefreshToken',
   auditLog: 'auditLog',
-  feedback: 'feedback'
+  feedback: 'feedback',
+  tradingPlan: 'tradingPlan',
+  preTradeChecklist: 'preTradeChecklist',
+  preTradeEvaluation: 'preTradeEvaluation',
+  executionGrade: 'executionGrade',
+  tradeVerdict: 'tradeVerdict',
+  behavioralReport: 'behavioralReport'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -110,6 +116,8 @@ export const TradeScalarFieldEnum = {
   overridden: 'overridden',
   pnl: 'pnl',
   rMultiple: 'rMultiple',
+  stopAdjustments: 'stopAdjustments',
+  suggestedLot: 'suggestedLot',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const
@@ -297,6 +305,99 @@ export const FeedbackScalarFieldEnum = {
 } as const
 
 export type FeedbackScalarFieldEnum = (typeof FeedbackScalarFieldEnum)[keyof typeof FeedbackScalarFieldEnum]
+
+
+export const TradingPlanScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  version: 'version',
+  entryConditions: 'entryConditions',
+  stopRules: 'stopRules',
+  exitRules: 'exitRules',
+  sessionRules: 'sessionRules',
+  isCurrent: 'isCurrent',
+  createdAt: 'createdAt'
+} as const
+
+export type TradingPlanScalarFieldEnum = (typeof TradingPlanScalarFieldEnum)[keyof typeof TradingPlanScalarFieldEnum]
+
+
+export const PreTradeChecklistScalarFieldEnum = {
+  id: 'id',
+  tradeId: 'tradeId',
+  userId: 'userId',
+  checklist: 'checklist',
+  skipped: 'skipped',
+  submittedAt: 'submittedAt'
+} as const
+
+export type PreTradeChecklistScalarFieldEnum = (typeof PreTradeChecklistScalarFieldEnum)[keyof typeof PreTradeChecklistScalarFieldEnum]
+
+
+export const PreTradeEvaluationScalarFieldEnum = {
+  id: 'id',
+  tradeId: 'tradeId',
+  userId: 'userId',
+  setupQualityTotal: 'setupQualityTotal',
+  setupQualityGrade: 'setupQualityGrade',
+  setupBreakdown: 'setupBreakdown',
+  planAdherenceTotal: 'planAdherenceTotal',
+  planAdherenceGrade: 'planAdherenceGrade',
+  planViolations: 'planViolations',
+  recommendation: 'recommendation',
+  aiCoaching: 'aiCoaching',
+  evaluatedAt: 'evaluatedAt'
+} as const
+
+export type PreTradeEvaluationScalarFieldEnum = (typeof PreTradeEvaluationScalarFieldEnum)[keyof typeof PreTradeEvaluationScalarFieldEnum]
+
+
+export const ExecutionGradeScalarFieldEnum = {
+  id: 'id',
+  tradeId: 'tradeId',
+  userId: 'userId',
+  entryQualityScore: 'entryQualityScore',
+  stopQualityScore: 'stopQualityScore',
+  stopLogic: 'stopLogic',
+  exitQualityScore: 'exitQualityScore',
+  exitType: 'exitType',
+  overallExecutionScore: 'overallExecutionScore',
+  gradedAt: 'gradedAt'
+} as const
+
+export type ExecutionGradeScalarFieldEnum = (typeof ExecutionGradeScalarFieldEnum)[keyof typeof ExecutionGradeScalarFieldEnum]
+
+
+export const TradeVerdictScalarFieldEnum = {
+  id: 'id',
+  tradeId: 'tradeId',
+  userId: 'userId',
+  verdict: 'verdict',
+  lucky: 'lucky',
+  processScore: 'processScore',
+  outcome: 'outcome',
+  matrix: 'matrix',
+  aiCoaching: 'aiCoaching',
+  coachingFocus: 'coachingFocus',
+  createdAt: 'createdAt'
+} as const
+
+export type TradeVerdictScalarFieldEnum = (typeof TradeVerdictScalarFieldEnum)[keyof typeof TradeVerdictScalarFieldEnum]
+
+
+export const BehavioralReportScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  tradesAnalyzed: 'tradesAnalyzed',
+  periodDays: 'periodDays',
+  patterns: 'patterns',
+  stats: 'stats',
+  topPriority: 'topPriority',
+  aiSummary: 'aiSummary',
+  generatedAt: 'generatedAt'
+} as const
+
+export type BehavioralReportScalarFieldEnum = (typeof BehavioralReportScalarFieldEnum)[keyof typeof BehavioralReportScalarFieldEnum]
 
 
 export const SortOrder = {

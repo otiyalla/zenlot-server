@@ -394,7 +394,13 @@ export const ModelName = {
   notificationPreference: 'notificationPreference',
   RefreshToken: 'RefreshToken',
   auditLog: 'auditLog',
-  feedback: 'feedback'
+  feedback: 'feedback',
+  tradingPlan: 'tradingPlan',
+  preTradeChecklist: 'preTradeChecklist',
+  preTradeEvaluation: 'preTradeEvaluation',
+  executionGrade: 'executionGrade',
+  tradeVerdict: 'tradeVerdict',
+  behavioralReport: 'behavioralReport'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -410,7 +416,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "trade" | "riskProfile" | "drawdownState" | "governanceLog" | "journal" | "user" | "pushToken" | "notificationPreference" | "refreshToken" | "auditLog" | "feedback"
+    modelProps: "trade" | "riskProfile" | "drawdownState" | "governanceLog" | "journal" | "user" | "pushToken" | "notificationPreference" | "refreshToken" | "auditLog" | "feedback" | "tradingPlan" | "preTradeChecklist" | "preTradeEvaluation" | "executionGrade" | "tradeVerdict" | "behavioralReport"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -1228,6 +1234,450 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    tradingPlan: {
+      payload: Prisma.$tradingPlanPayload<ExtArgs>
+      fields: Prisma.tradingPlanFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.tradingPlanFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$tradingPlanPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.tradingPlanFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$tradingPlanPayload>
+        }
+        findFirst: {
+          args: Prisma.tradingPlanFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$tradingPlanPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.tradingPlanFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$tradingPlanPayload>
+        }
+        findMany: {
+          args: Prisma.tradingPlanFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$tradingPlanPayload>[]
+        }
+        create: {
+          args: Prisma.tradingPlanCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$tradingPlanPayload>
+        }
+        createMany: {
+          args: Prisma.tradingPlanCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.tradingPlanCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$tradingPlanPayload>[]
+        }
+        delete: {
+          args: Prisma.tradingPlanDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$tradingPlanPayload>
+        }
+        update: {
+          args: Prisma.tradingPlanUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$tradingPlanPayload>
+        }
+        deleteMany: {
+          args: Prisma.tradingPlanDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.tradingPlanUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.tradingPlanUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$tradingPlanPayload>[]
+        }
+        upsert: {
+          args: Prisma.tradingPlanUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$tradingPlanPayload>
+        }
+        aggregate: {
+          args: Prisma.TradingPlanAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateTradingPlan>
+        }
+        groupBy: {
+          args: Prisma.tradingPlanGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.TradingPlanGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.tradingPlanCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.TradingPlanCountAggregateOutputType> | number
+        }
+      }
+    }
+    preTradeChecklist: {
+      payload: Prisma.$preTradeChecklistPayload<ExtArgs>
+      fields: Prisma.preTradeChecklistFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.preTradeChecklistFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$preTradeChecklistPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.preTradeChecklistFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$preTradeChecklistPayload>
+        }
+        findFirst: {
+          args: Prisma.preTradeChecklistFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$preTradeChecklistPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.preTradeChecklistFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$preTradeChecklistPayload>
+        }
+        findMany: {
+          args: Prisma.preTradeChecklistFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$preTradeChecklistPayload>[]
+        }
+        create: {
+          args: Prisma.preTradeChecklistCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$preTradeChecklistPayload>
+        }
+        createMany: {
+          args: Prisma.preTradeChecklistCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.preTradeChecklistCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$preTradeChecklistPayload>[]
+        }
+        delete: {
+          args: Prisma.preTradeChecklistDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$preTradeChecklistPayload>
+        }
+        update: {
+          args: Prisma.preTradeChecklistUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$preTradeChecklistPayload>
+        }
+        deleteMany: {
+          args: Prisma.preTradeChecklistDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.preTradeChecklistUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.preTradeChecklistUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$preTradeChecklistPayload>[]
+        }
+        upsert: {
+          args: Prisma.preTradeChecklistUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$preTradeChecklistPayload>
+        }
+        aggregate: {
+          args: Prisma.PreTradeChecklistAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregatePreTradeChecklist>
+        }
+        groupBy: {
+          args: Prisma.preTradeChecklistGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.PreTradeChecklistGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.preTradeChecklistCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.PreTradeChecklistCountAggregateOutputType> | number
+        }
+      }
+    }
+    preTradeEvaluation: {
+      payload: Prisma.$preTradeEvaluationPayload<ExtArgs>
+      fields: Prisma.preTradeEvaluationFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.preTradeEvaluationFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$preTradeEvaluationPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.preTradeEvaluationFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$preTradeEvaluationPayload>
+        }
+        findFirst: {
+          args: Prisma.preTradeEvaluationFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$preTradeEvaluationPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.preTradeEvaluationFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$preTradeEvaluationPayload>
+        }
+        findMany: {
+          args: Prisma.preTradeEvaluationFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$preTradeEvaluationPayload>[]
+        }
+        create: {
+          args: Prisma.preTradeEvaluationCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$preTradeEvaluationPayload>
+        }
+        createMany: {
+          args: Prisma.preTradeEvaluationCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.preTradeEvaluationCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$preTradeEvaluationPayload>[]
+        }
+        delete: {
+          args: Prisma.preTradeEvaluationDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$preTradeEvaluationPayload>
+        }
+        update: {
+          args: Prisma.preTradeEvaluationUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$preTradeEvaluationPayload>
+        }
+        deleteMany: {
+          args: Prisma.preTradeEvaluationDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.preTradeEvaluationUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.preTradeEvaluationUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$preTradeEvaluationPayload>[]
+        }
+        upsert: {
+          args: Prisma.preTradeEvaluationUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$preTradeEvaluationPayload>
+        }
+        aggregate: {
+          args: Prisma.PreTradeEvaluationAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregatePreTradeEvaluation>
+        }
+        groupBy: {
+          args: Prisma.preTradeEvaluationGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.PreTradeEvaluationGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.preTradeEvaluationCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.PreTradeEvaluationCountAggregateOutputType> | number
+        }
+      }
+    }
+    executionGrade: {
+      payload: Prisma.$executionGradePayload<ExtArgs>
+      fields: Prisma.executionGradeFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.executionGradeFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$executionGradePayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.executionGradeFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$executionGradePayload>
+        }
+        findFirst: {
+          args: Prisma.executionGradeFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$executionGradePayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.executionGradeFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$executionGradePayload>
+        }
+        findMany: {
+          args: Prisma.executionGradeFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$executionGradePayload>[]
+        }
+        create: {
+          args: Prisma.executionGradeCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$executionGradePayload>
+        }
+        createMany: {
+          args: Prisma.executionGradeCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.executionGradeCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$executionGradePayload>[]
+        }
+        delete: {
+          args: Prisma.executionGradeDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$executionGradePayload>
+        }
+        update: {
+          args: Prisma.executionGradeUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$executionGradePayload>
+        }
+        deleteMany: {
+          args: Prisma.executionGradeDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.executionGradeUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.executionGradeUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$executionGradePayload>[]
+        }
+        upsert: {
+          args: Prisma.executionGradeUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$executionGradePayload>
+        }
+        aggregate: {
+          args: Prisma.ExecutionGradeAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateExecutionGrade>
+        }
+        groupBy: {
+          args: Prisma.executionGradeGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.ExecutionGradeGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.executionGradeCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.ExecutionGradeCountAggregateOutputType> | number
+        }
+      }
+    }
+    tradeVerdict: {
+      payload: Prisma.$tradeVerdictPayload<ExtArgs>
+      fields: Prisma.tradeVerdictFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.tradeVerdictFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$tradeVerdictPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.tradeVerdictFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$tradeVerdictPayload>
+        }
+        findFirst: {
+          args: Prisma.tradeVerdictFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$tradeVerdictPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.tradeVerdictFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$tradeVerdictPayload>
+        }
+        findMany: {
+          args: Prisma.tradeVerdictFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$tradeVerdictPayload>[]
+        }
+        create: {
+          args: Prisma.tradeVerdictCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$tradeVerdictPayload>
+        }
+        createMany: {
+          args: Prisma.tradeVerdictCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.tradeVerdictCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$tradeVerdictPayload>[]
+        }
+        delete: {
+          args: Prisma.tradeVerdictDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$tradeVerdictPayload>
+        }
+        update: {
+          args: Prisma.tradeVerdictUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$tradeVerdictPayload>
+        }
+        deleteMany: {
+          args: Prisma.tradeVerdictDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.tradeVerdictUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.tradeVerdictUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$tradeVerdictPayload>[]
+        }
+        upsert: {
+          args: Prisma.tradeVerdictUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$tradeVerdictPayload>
+        }
+        aggregate: {
+          args: Prisma.TradeVerdictAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateTradeVerdict>
+        }
+        groupBy: {
+          args: Prisma.tradeVerdictGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.TradeVerdictGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.tradeVerdictCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.TradeVerdictCountAggregateOutputType> | number
+        }
+      }
+    }
+    behavioralReport: {
+      payload: Prisma.$behavioralReportPayload<ExtArgs>
+      fields: Prisma.behavioralReportFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.behavioralReportFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$behavioralReportPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.behavioralReportFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$behavioralReportPayload>
+        }
+        findFirst: {
+          args: Prisma.behavioralReportFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$behavioralReportPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.behavioralReportFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$behavioralReportPayload>
+        }
+        findMany: {
+          args: Prisma.behavioralReportFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$behavioralReportPayload>[]
+        }
+        create: {
+          args: Prisma.behavioralReportCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$behavioralReportPayload>
+        }
+        createMany: {
+          args: Prisma.behavioralReportCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.behavioralReportCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$behavioralReportPayload>[]
+        }
+        delete: {
+          args: Prisma.behavioralReportDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$behavioralReportPayload>
+        }
+        update: {
+          args: Prisma.behavioralReportUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$behavioralReportPayload>
+        }
+        deleteMany: {
+          args: Prisma.behavioralReportDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.behavioralReportUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.behavioralReportUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$behavioralReportPayload>[]
+        }
+        upsert: {
+          args: Prisma.behavioralReportUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$behavioralReportPayload>
+        }
+        aggregate: {
+          args: Prisma.BehavioralReportAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateBehavioralReport>
+        }
+        groupBy: {
+          args: Prisma.behavioralReportGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.BehavioralReportGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.behavioralReportCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.BehavioralReportCountAggregateOutputType> | number
+        }
+      }
+    }
   }
 } & {
   other: {
@@ -1297,6 +1747,8 @@ export const TradeScalarFieldEnum = {
   overridden: 'overridden',
   pnl: 'pnl',
   rMultiple: 'rMultiple',
+  stopAdjustments: 'stopAdjustments',
+  suggestedLot: 'suggestedLot',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const
@@ -1484,6 +1936,99 @@ export const FeedbackScalarFieldEnum = {
 } as const
 
 export type FeedbackScalarFieldEnum = (typeof FeedbackScalarFieldEnum)[keyof typeof FeedbackScalarFieldEnum]
+
+
+export const TradingPlanScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  version: 'version',
+  entryConditions: 'entryConditions',
+  stopRules: 'stopRules',
+  exitRules: 'exitRules',
+  sessionRules: 'sessionRules',
+  isCurrent: 'isCurrent',
+  createdAt: 'createdAt'
+} as const
+
+export type TradingPlanScalarFieldEnum = (typeof TradingPlanScalarFieldEnum)[keyof typeof TradingPlanScalarFieldEnum]
+
+
+export const PreTradeChecklistScalarFieldEnum = {
+  id: 'id',
+  tradeId: 'tradeId',
+  userId: 'userId',
+  checklist: 'checklist',
+  skipped: 'skipped',
+  submittedAt: 'submittedAt'
+} as const
+
+export type PreTradeChecklistScalarFieldEnum = (typeof PreTradeChecklistScalarFieldEnum)[keyof typeof PreTradeChecklistScalarFieldEnum]
+
+
+export const PreTradeEvaluationScalarFieldEnum = {
+  id: 'id',
+  tradeId: 'tradeId',
+  userId: 'userId',
+  setupQualityTotal: 'setupQualityTotal',
+  setupQualityGrade: 'setupQualityGrade',
+  setupBreakdown: 'setupBreakdown',
+  planAdherenceTotal: 'planAdherenceTotal',
+  planAdherenceGrade: 'planAdherenceGrade',
+  planViolations: 'planViolations',
+  recommendation: 'recommendation',
+  aiCoaching: 'aiCoaching',
+  evaluatedAt: 'evaluatedAt'
+} as const
+
+export type PreTradeEvaluationScalarFieldEnum = (typeof PreTradeEvaluationScalarFieldEnum)[keyof typeof PreTradeEvaluationScalarFieldEnum]
+
+
+export const ExecutionGradeScalarFieldEnum = {
+  id: 'id',
+  tradeId: 'tradeId',
+  userId: 'userId',
+  entryQualityScore: 'entryQualityScore',
+  stopQualityScore: 'stopQualityScore',
+  stopLogic: 'stopLogic',
+  exitQualityScore: 'exitQualityScore',
+  exitType: 'exitType',
+  overallExecutionScore: 'overallExecutionScore',
+  gradedAt: 'gradedAt'
+} as const
+
+export type ExecutionGradeScalarFieldEnum = (typeof ExecutionGradeScalarFieldEnum)[keyof typeof ExecutionGradeScalarFieldEnum]
+
+
+export const TradeVerdictScalarFieldEnum = {
+  id: 'id',
+  tradeId: 'tradeId',
+  userId: 'userId',
+  verdict: 'verdict',
+  lucky: 'lucky',
+  processScore: 'processScore',
+  outcome: 'outcome',
+  matrix: 'matrix',
+  aiCoaching: 'aiCoaching',
+  coachingFocus: 'coachingFocus',
+  createdAt: 'createdAt'
+} as const
+
+export type TradeVerdictScalarFieldEnum = (typeof TradeVerdictScalarFieldEnum)[keyof typeof TradeVerdictScalarFieldEnum]
+
+
+export const BehavioralReportScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  tradesAnalyzed: 'tradesAnalyzed',
+  periodDays: 'periodDays',
+  patterns: 'patterns',
+  stats: 'stats',
+  topPriority: 'topPriority',
+  aiSummary: 'aiSummary',
+  generatedAt: 'generatedAt'
+} as const
+
+export type BehavioralReportScalarFieldEnum = (typeof BehavioralReportScalarFieldEnum)[keyof typeof BehavioralReportScalarFieldEnum]
 
 
 export const SortOrder = {
@@ -1736,6 +2281,12 @@ export type GlobalOmitConfig = {
   refreshToken?: Prisma.RefreshTokenOmit
   auditLog?: Prisma.auditLogOmit
   feedback?: Prisma.feedbackOmit
+  tradingPlan?: Prisma.tradingPlanOmit
+  preTradeChecklist?: Prisma.preTradeChecklistOmit
+  preTradeEvaluation?: Prisma.preTradeEvaluationOmit
+  executionGrade?: Prisma.executionGradeOmit
+  tradeVerdict?: Prisma.tradeVerdictOmit
+  behavioralReport?: Prisma.behavioralReportOmit
 }
 
 /* Types for Logging */

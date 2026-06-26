@@ -80,3 +80,33 @@ export type auditLog = Prisma.auditLogModel
  * 
  */
 export type feedback = Prisma.feedbackModel
+/**
+ * Model tradingPlan
+ * 
+ */
+export type tradingPlan = Prisma.tradingPlanModel
+/**
+ * Model preTradeChecklist
+ * 
+ */
+export type preTradeChecklist = Prisma.preTradeChecklistModel
+/**
+ * Model preTradeEvaluation
+ * 
+ */
+export type preTradeEvaluation = Prisma.preTradeEvaluationModel
+/**
+ * Model executionGrade
+ * 
+ */
+export type executionGrade = Prisma.executionGradeModel
+/**
+ * Model tradeVerdict
+ * 
+ */
+export type tradeVerdict = Prisma.tradeVerdictModel
+/**
+ * Model behavioralReport
+ * 
+ */
+export type behavioralReport = Prisma.behavioralReportModel
