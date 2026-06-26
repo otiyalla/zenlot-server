@@ -81,23 +81,42 @@ function chronological(trades: EvaluatedTrade[]): EvaluatedTrade[] {
   );
 }
 
-/** The most recent trade (by openedAt) that opened strictly before `t`. */
-function getImmediatelyPrecedingTrade(
-  t: EvaluatedTrade,
+/**
+ * Maps each trade to the most recent OTHER trade that opened strictly before it
+ * (by openedAt). Computed in one O(n log n) pass instead of an O(n) scan per
+ * trade (which made any caller O(n²)). Ties (equal openedAt) are NOT treated as
+ * preceding, matching the original strict-less-than semantics.
+ */
+function buildPrecedingTradeMap(
   trades: EvaluatedTrade[],
-): EvaluatedTrade | undefined {
-  const tOpen = new Date(t.openedAt).getTime();
-  let best: EvaluatedTrade | undefined;
-  let bestOpen = -Infinity;
-  for (const other of trades) {
-    if (other.tradeId === t.tradeId) continue;
-    const open = new Date(other.openedAt).getTime();
-    if (open < tOpen && open > bestOpen) {
-      best = other;
-      bestOpen = open;
+): Map<string, EvaluatedTrade | undefined> {
+  const sorted = [...trades].sort(
+    (a, b) => new Date(a.openedAt).getTime() - new Date(b.openedAt).getTime(),
+  );
+  const map = new Map<string, EvaluatedTrade | undefined>();
+  // `lastStrictlyBefore` is the latest trade whose openedAt is < the current
+  // trade's openedAt. Because the list is sorted, we only advance it past trades
+  // that opened strictly earlier than the current one (handling equal-timestamp
+  // ties correctly).
+  let i = 0;
+  for (let j = 0; j < sorted.length; j++) {
+    const jOpen = new Date(sorted[j].openedAt).getTime();
+    // Advance the boundary to the last trade opened strictly before sorted[j].
+    while (i < j && new Date(sorted[i].openedAt).getTime() < jOpen) i++;
+    // i now points at the first trade NOT strictly before; the preceding one is
+    // at i-1, unless it is sorted[j] itself (skip-self via tradeId check).
+    let k = i - 1;
+    let preceding: EvaluatedTrade | undefined;
+    while (k >= 0) {
+      if (sorted[k].tradeId !== sorted[j].tradeId) {
+        preceding = sorted[k];
+        break;
+      }
+      k--;
     }
+    map.set(sorted[j].tradeId, preceding);
   }
-  return best;
+  return map;
 }
 
 function timeDiffHours(fromIso: string, toIso: string): number {
@@ -161,8 +180,9 @@ export function detectRevengeTrading(
     return t.preEval.planAdherence?.total ?? 100;
   };
 
+  const precedingMap = buildPrecedingTradeMap(trades);
   const postLossTrades = trades.filter((t) => {
-    const prev = getImmediatelyPrecedingTrade(t, trades);
+    const prev = precedingMap.get(t.tradeId);
     return (
       prev?.outcome === 'loss' &&
       prev.closedAt !== null &&
