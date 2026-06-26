@@ -11,6 +11,7 @@ import { JobsModule } from './jobs/jobs.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { TradeModule } from './trade/trade.module';
 import { RiskModule } from './risk/risk.module';
+import { EvaluationModule } from './evaluation/evaluation.module';
 import { QuoteModule } from './quote/quote.module';
 import { mapDatabaseUrl } from './config/database.config';
 import { FeedbackModule } from './feedback/feedback.module';
@@ -58,6 +59,7 @@ function getEnvFilePath(): string[] {
     PrismaModule,
     TradeModule,
     RiskModule,
+    EvaluationModule,
     FeedbackModule,
     AuditModule,
     EmailModule,

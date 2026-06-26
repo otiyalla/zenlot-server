@@ -12,6 +12,7 @@ import { DrawdownService } from './drawdown.service';
 import { RiskProfileService } from './risk-profile.service';
 import { RiskCalculationView } from './risk.mapper';
 import { NotificationsService } from '../notifications/notifications.service';
+import { EvaluationService } from '../evaluation/evaluation.service';
 
 const view: RiskCalculationView = {
   symbol: 'EURUSD',
@@ -56,6 +57,8 @@ function makeService(opts: {
   profileUpdate?: jest.Mock;
   profileFindUnique?: jest.Mock;
   getProfile?: jest.Mock;
+  linkChecklistToTrade?: jest.Mock;
+  markChecklistSkipped?: jest.Mock;
 }) {
   const calculate =
     opts.calculate ??
@@ -127,6 +130,15 @@ function makeService(opts: {
 
   const coachingQueue = { add: queueAdd } as unknown as Queue;
 
+  const linkChecklistToTrade =
+    opts.linkChecklistToTrade ?? jest.fn().mockResolvedValue(true);
+  const markChecklistSkipped =
+    opts.markChecklistSkipped ?? jest.fn().mockResolvedValue(undefined);
+  const evaluationService = {
+    linkChecklistToTrade,
+    markChecklistSkipped,
+  } as unknown as EvaluationService;
+
   const notifications = {
     notifyTradeClosed: jest.fn().mockResolvedValue(undefined),
     notifyGovernanceViolation: jest.fn().mockResolvedValue(undefined),
@@ -140,6 +152,7 @@ function makeService(opts: {
     drawdown,
     profile,
     notifications,
+    evaluationService,
     coachingQueue,
   );
   return {
@@ -153,6 +166,8 @@ function makeService(opts: {
     profileFindUnique,
     settleRealizedPnL,
     applyBalanceDelta,
+    linkChecklistToTrade,
+    markChecklistSkipped,
   };
 }
 
@@ -298,6 +313,47 @@ describe('TradeLogService.logTrade', () => {
       BadRequestException,
     );
     expect(tradeCreate).not.toHaveBeenCalled();
+  });
+
+  // ─── Phase 2 soft-gate (decision #2 — warn, never block) ──────────────────
+
+  it('links the pre-trade checklist to the new trade when a checklistId is supplied', async () => {
+    const { service, linkChecklistToTrade, markChecklistSkipped } = makeService(
+      {},
+    );
+    await service.logTrade('u1', 'USD', { ...setup, checklistId: 'chk-1' });
+
+    expect(linkChecklistToTrade).toHaveBeenCalledWith('u1', 't1', 'chk-1');
+    expect(markChecklistSkipped).not.toHaveBeenCalled();
+  });
+
+  it('marks the checklist skipped when no checklistId is supplied', async () => {
+    const { service, linkChecklistToTrade, markChecklistSkipped } = makeService(
+      {},
+    );
+    await service.logTrade('u1', 'USD', setup);
+
+    expect(linkChecklistToTrade).not.toHaveBeenCalled();
+    expect(markChecklistSkipped).toHaveBeenCalledWith('u1', 't1');
+  });
+
+  it('falls back to marking skipped when the supplied checklist is not linkable', async () => {
+    const { service, markChecklistSkipped } = makeService({
+      linkChecklistToTrade: jest.fn().mockResolvedValue(false),
+    });
+    await service.logTrade('u1', 'USD', { ...setup, checklistId: 'chk-x' });
+
+    expect(markChecklistSkipped).toHaveBeenCalledWith('u1', 't1');
+  });
+
+  it('never fails the trade log when the soft-gate wiring throws', async () => {
+    const { service } = makeService({
+      markChecklistSkipped: jest.fn().mockRejectedValue(new Error('boom')),
+    });
+    // No checklistId → markChecklistSkipped path; its rejection must be swallowed.
+    await expect(service.logTrade('u1', 'USD', setup)).resolves.toEqual({
+      id: 't1',
+    });
   });
 });
 

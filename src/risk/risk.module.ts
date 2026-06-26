@@ -28,12 +28,14 @@ import { createFailoverCoachingProvider } from './coaching/coaching.provider-fac
 import { AuditModule } from '../audit/audit.module';
 import { QuoteModule } from '../quote/quote.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { EvaluationModule } from '../evaluation/evaluation.module';
 
 @Module({
   imports: [
     AuditModule,
     QuoteModule,
     NotificationsModule,
+    EvaluationModule,
     BullModule.registerQueue(
       { name: DRAWDOWN_RESET_QUEUE },
       { name: COACHING_QUEUE },

@@ -24,6 +24,7 @@ import {
 } from './coaching/coaching.processor';
 import { NotificationsService } from '../notifications/notifications.service';
 import { DrawdownPeriod } from '../notifications/notification.copy';
+import { EvaluationService } from '../evaluation/evaluation.service';
 
 /**
  * Trade statuses whose close settled realized PnL onto the account balance +
@@ -50,6 +51,7 @@ export class TradeLogService {
     private readonly drawdownService: DrawdownService,
     private readonly riskProfileService: RiskProfileService,
     private readonly notifications: NotificationsService,
+    private readonly evaluationService: EvaluationService,
     @InjectQueue(COACHING_QUEUE) private readonly coachingQueue: Queue,
   ) {}
 
@@ -176,6 +178,39 @@ export class TradeLogService {
         overrideReason: overridden ? (dto.overrideReason ?? null) : null,
       },
     });
+
+    // Phase 2 soft-gate (decision #2 — warn, never block). If the client passed
+    // a pre-trade checklistId, link that checklist + its evaluation to this
+    // trade; otherwise record that the checklist was SKIPPED (a behavioral
+    // signal that maps to EvaluatedTrade.checklistSkipped). Best-effort: a
+    // failure here must never fail the trade log.
+    try {
+      if (dto.checklistId) {
+        const linked = await this.evaluationService.linkChecklistToTrade(
+          userId,
+          created.id,
+          dto.checklistId,
+        );
+        if (!linked) {
+          // The supplied checklist was not linkable (unknown / not owned /
+          // already bound) — treat the trade as having skipped its checklist.
+          await this.evaluationService.markChecklistSkipped(userId, created.id);
+        }
+      } else {
+        await this.evaluationService.markChecklistSkipped(userId, created.id);
+      }
+    } catch (error) {
+      this.logger.error(
+        'Failed to wire pre-trade checklist soft-gate',
+        error as Error,
+      );
+      Sentry.captureException(error, {
+        extra: {
+          tradeId: created.id,
+          context: 'TradeLogService.logTrade.softGate',
+        },
+      });
+    }
 
     // Fire async AI coaching (non-blocking — failure must not fail the log).
     try {
