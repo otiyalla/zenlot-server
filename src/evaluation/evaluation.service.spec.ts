@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TradingPlanService } from './trading-plan.service';
 import { SubmitChecklistDto } from './dto/submit-checklist.dto';
 import { TradingPlan } from './engine';
+import { EvaluationCoachingEnqueueService } from './coaching/coaching-enqueue.service';
 
 const USER_ID = 'u1';
 
@@ -99,7 +100,16 @@ function makeService(opts: {
     getCurrentPlan: opts.getCurrentPlan ?? jest.fn().mockResolvedValue(null),
   } as unknown as TradingPlanService;
 
-  const service = new EvaluationService(prisma, tradingPlanService);
+  const enqueuePreTradeCoaching = jest.fn().mockResolvedValue(undefined);
+  const coachingEnqueue = {
+    enqueuePreTradeCoaching,
+  } as unknown as EvaluationCoachingEnqueueService;
+
+  const service = new EvaluationService(
+    prisma,
+    tradingPlanService,
+    coachingEnqueue,
+  );
   return {
     service,
     checklistCreate,
@@ -108,6 +118,7 @@ function makeService(opts: {
     checklistUpdate,
     evalFindFirst,
     evalUpdateMany,
+    enqueuePreTradeCoaching,
   };
 }
 
@@ -146,6 +157,28 @@ describe('EvaluationService.submitChecklist', () => {
     };
     expect(arg.data.planAdherenceTotal).toBeNull();
     expect(arg.data.recommendation).toBe('proceed');
+  });
+
+  it('fires pre-trade coaching enqueue (fire-and-forget) with the finished result', async () => {
+    const { service, enqueuePreTradeCoaching } = makeService({});
+    await service.submitChecklist(USER_ID, strongChecklist, 'fr');
+
+    expect(enqueuePreTradeCoaching).toHaveBeenCalledTimes(1);
+    const [evaluationId, evaluation, language] =
+      enqueuePreTradeCoaching.mock.calls[0];
+    expect(evaluationId).toBe('eval-1');
+    expect(language).toBe('fr');
+    expect(evaluation.recommendation).toBe('proceed');
+    expect(evaluation.aiCoaching).toBeNull();
+  });
+
+  it('does not let a coaching enqueue failure fail checklist submission', async () => {
+    const { service, enqueuePreTradeCoaching } = makeService({});
+    // enqueue is fire-and-forget; even a rejected promise must not surface.
+    enqueuePreTradeCoaching.mockRejectedValueOnce(new Error('redis down'));
+    await expect(
+      service.submitChecklist(USER_ID, strongChecklist, 'en'),
+    ).resolves.toBeDefined();
   });
 
   it('scores plan adherence when a current plan exists', async () => {

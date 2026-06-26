@@ -17,6 +17,7 @@ import {
 } from './engine';
 import { TradingPlanService } from './trading-plan.service';
 import { SubmitChecklistDto } from './dto/submit-checklist.dto';
+import { EvaluationCoachingEnqueueService } from './coaching/coaching-enqueue.service';
 
 /**
  * Pre-trade evaluation persistence + orchestration (spec Section 5).
@@ -37,6 +38,7 @@ export class EvaluationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tradingPlanService: TradingPlanService,
+    private readonly coachingEnqueue: EvaluationCoachingEnqueueService,
   ) {}
 
   /**
@@ -83,16 +85,26 @@ export class EvaluationService {
       },
     });
 
-    // ─── Future async pre-trade coaching enqueue hook ───────────────────────
-    // The next increment (AI Engineer run) wires a BullMQ queue here to generate
-    // `aiCoaching` from the finished scores, mirroring the Phase 1 risk-coaching
-    // flow (TradeLogService → coachingQueue.add). It MUST be best-effort: a
-    // failed/absent enqueue must never fail checklist submission, and the
-    // response below intentionally returns aiCoaching: null regardless.
-    // e.g.:
-    //   await this.preTradeCoachingQueue.add(GENERATE_PRE_TRADE_COACHING_JOB, {
-    //     evaluationId: evaluationRow.id, userId, language,
-    //   }, { removeOnComplete: true });
+    // ─── Async pre-trade coaching enqueue (spec Section 9) ───────────────────
+    // Fire-and-forget: the engine has finished every score above, so we hand the
+    // finished PreTradeEvaluationResult to the coaching queue, which fills in
+    // `aiCoaching` asynchronously. The enqueue service swallows all errors, so a
+    // queue outage can never fail checklist submission — the response below
+    // intentionally returns aiCoaching: null and the client renders that null.
+    void this.coachingEnqueue
+      .enqueuePreTradeCoaching(
+        evaluationRow.id,
+        {
+          tradeId: evaluationRow.tradeId ?? '',
+          evaluatedAt: evaluationRow.evaluatedAt.toISOString(),
+          setupQuality,
+          planAdherence,
+          recommendation,
+          aiCoaching: null,
+        },
+        language,
+      )
+      .catch(() => undefined); // best-effort: a rejected enqueue must never surface
 
     return this.toResult(evaluationRow, checklistRow.id);
   }
