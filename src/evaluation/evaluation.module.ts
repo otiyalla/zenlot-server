@@ -5,6 +5,7 @@ import { EntitlementsService } from './entitlements/entitlements.service';
 import { EvaluationController } from './evaluation.controller';
 import { TradingPlanService } from './trading-plan.service';
 import { EvaluationService } from './evaluation.service';
+import { PostTradeGradingService } from './post-trade-grading.service';
 import {
   EVALUATION_COACHING_QUEUE,
   EvaluationCoachingProcessor,
@@ -42,6 +43,7 @@ import {
     EntitlementsService,
     TradingPlanService,
     EvaluationService,
+    PostTradeGradingService,
     EvaluationCoachingService,
     EvaluationCoachingProcessor,
     EvaluationCoachingEnqueueService,
@@ -71,6 +73,7 @@ import {
   exports: [
     EntitlementsService,
     EvaluationService,
+    PostTradeGradingService,
     EvaluationCoachingEnqueueService,
   ],
 })

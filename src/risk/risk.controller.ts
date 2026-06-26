@@ -26,6 +26,7 @@ import { UpdateRiskProfileDto } from './dto/update-risk-profile.dto';
 import { CalculateRiskDto } from './dto/calculate-risk.dto';
 import { LogTradeDto } from './dto/log-trade.dto';
 import { CloseTradeDto } from './dto/close-trade.dto';
+import { AdjustStopDto } from './dto/adjust-stop.dto';
 import { AuthenticatedRequest } from '../user/interfaces/authenticated-request.interface';
 
 @ApiTags('Risk')
@@ -149,6 +150,37 @@ export class RiskController {
     @Body() dto: CloseTradeDto,
     @Request() req: AuthenticatedRequest,
   ) {
-    return this.tradeLogService.closeTrade(req.user.id, id, dto.exitPrice);
+    return this.tradeLogService.closeTrade(
+      req.user.id,
+      id,
+      dto.exitPrice,
+      req.user.language,
+    );
+  }
+
+  @Patch('trades/:id/stop')
+  @ApiOperation({
+    summary:
+      'Log a stop adjustment for an open trade (spec 13.2). Appends ' +
+      '{ ts, oldStop, newStop, reason } to stopAdjustments and moves the ' +
+      'active stop. Reason is required.',
+  })
+  @ApiParam({ name: 'id', required: true, description: 'Trade id' })
+  @ApiResponse({
+    status: 200,
+    description: 'The updated trade with the appended stop adjustment.',
+  })
+  @ApiResponse({ status: 404, description: 'Trade not found.' })
+  adjustStop(
+    @Param('id') id: string,
+    @Body() dto: AdjustStopDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.tradeLogService.applyStopAdjustment(
+      req.user.id,
+      id,
+      dto.stopPrice,
+      dto.reason,
+    );
   }
 }

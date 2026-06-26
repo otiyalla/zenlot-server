@@ -17,6 +17,7 @@ import {
 import { AuthenticatedRequest } from '../user/interfaces/authenticated-request.interface';
 import { TradingPlanService } from './trading-plan.service';
 import { EvaluationService } from './evaluation.service';
+import { PostTradeGradingService } from './post-trade-grading.service';
 import { UpsertTradingPlanDto } from './dto/upsert-trading-plan.dto';
 import { SubmitChecklistDto } from './dto/submit-checklist.dto';
 
@@ -36,6 +37,7 @@ export class EvaluationController {
   constructor(
     private readonly tradingPlanService: TradingPlanService,
     private readonly evaluationService: EvaluationService,
+    private readonly postTradeGrading: PostTradeGradingService,
   ) {}
 
   @Get('plan')
@@ -102,5 +104,41 @@ export class EvaluationController {
     @Request() req: AuthenticatedRequest,
   ) {
     return this.evaluationService.getPreEvalForTrade(req.user.id, tradeId);
+  }
+
+  @Get('trades/:tradeId/execution')
+  @ApiOperation({
+    summary:
+      'Get the post-trade execution grade for a trade (populated after close)',
+  })
+  @ApiParam({ name: 'tradeId', required: true, description: 'Trade id' })
+  @ApiResponse({ status: 200, description: 'The execution grade.' })
+  @ApiResponse({
+    status: 404,
+    description: 'The trade has not been graded yet.',
+  })
+  getExecution(
+    @Param('tradeId') tradeId: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.postTradeGrading.getExecutionForTrade(req.user.id, tradeId);
+  }
+
+  @Get('trades/:tradeId/verdict')
+  @ApiOperation({
+    summary:
+      'Get the process-vs-outcome verdict for a trade (populated after close)',
+  })
+  @ApiParam({ name: 'tradeId', required: true, description: 'Trade id' })
+  @ApiResponse({
+    status: 200,
+    description: 'The trade verdict. ai_coaching may be null until async fill.',
+  })
+  @ApiResponse({ status: 404, description: 'No verdict for this trade.' })
+  getVerdict(
+    @Param('tradeId') tradeId: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.postTradeGrading.getVerdictForTrade(req.user.id, tradeId);
   }
 }

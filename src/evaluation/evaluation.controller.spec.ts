@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { EvaluationController } from './evaluation.controller';
 import { TradingPlanService } from './trading-plan.service';
 import { EvaluationService } from './evaluation.service';
+import { PostTradeGradingService } from './post-trade-grading.service';
 import { AuthenticatedRequest } from '../user/interfaces/authenticated-request.interface';
 import { SubmitChecklistDto } from './dto/submit-checklist.dto';
 import { UpsertTradingPlanDto } from './dto/upsert-trading-plan.dto';
@@ -16,12 +17,16 @@ describe('EvaluationController', () => {
   let savePlan: jest.Mock;
   let submitChecklist: jest.Mock;
   let getPreEvalForTrade: jest.Mock;
+  let getExecutionForTrade: jest.Mock;
+  let getVerdictForTrade: jest.Mock;
 
   beforeEach(async () => {
     getCurrentPlan = jest.fn().mockResolvedValue(null);
     savePlan = jest.fn().mockResolvedValue({ version: 2 });
     submitChecklist = jest.fn().mockResolvedValue({ checklistId: 'chk-1' });
     getPreEvalForTrade = jest.fn().mockResolvedValue({ tradeId: 't1' });
+    getExecutionForTrade = jest.fn().mockResolvedValue({ tradeId: 't1' });
+    getVerdictForTrade = jest.fn().mockResolvedValue({ verdict: 'good_trade' });
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [EvaluationController],
@@ -30,6 +35,10 @@ describe('EvaluationController', () => {
         {
           provide: EvaluationService,
           useValue: { submitChecklist, getPreEvalForTrade },
+        },
+        {
+          provide: PostTradeGradingService,
+          useValue: { getExecutionForTrade, getVerdictForTrade },
         },
       ],
     }).compile();
@@ -57,5 +66,15 @@ describe('EvaluationController', () => {
   it('GET /trades/:tradeId/pre-eval delegates to getPreEvalForTrade', async () => {
     await controller.getPreEval('t1', req);
     expect(getPreEvalForTrade).toHaveBeenCalledWith('u1', 't1');
+  });
+
+  it('GET /trades/:tradeId/execution delegates to getExecutionForTrade', async () => {
+    await controller.getExecution('t1', req);
+    expect(getExecutionForTrade).toHaveBeenCalledWith('u1', 't1');
+  });
+
+  it('GET /trades/:tradeId/verdict delegates to getVerdictForTrade', async () => {
+    await controller.getVerdict('t1', req);
+    expect(getVerdictForTrade).toHaveBeenCalledWith('u1', 't1');
   });
 });

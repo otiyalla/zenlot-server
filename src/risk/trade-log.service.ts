@@ -25,6 +25,8 @@ import {
 import { NotificationsService } from '../notifications/notifications.service';
 import { DrawdownPeriod } from '../notifications/notification.copy';
 import { EvaluationService } from '../evaluation/evaluation.service';
+import { PostTradeGradingService } from '../evaluation/post-trade-grading.service';
+import { StopAdjustment } from '../evaluation/engine';
 
 /**
  * Trade statuses whose close settled realized PnL onto the account balance +
@@ -52,6 +54,7 @@ export class TradeLogService {
     private readonly riskProfileService: RiskProfileService,
     private readonly notifications: NotificationsService,
     private readonly evaluationService: EvaluationService,
+    private readonly postTradeGrading: PostTradeGradingService,
     @InjectQueue(COACHING_QUEUE) private readonly coachingQueue: Queue,
   ) {}
 
@@ -259,6 +262,7 @@ export class TradeLogService {
     userId: string,
     tradeId: string,
     exitPrice: number,
+    language: string = 'en',
   ): Promise<trade> {
     const existing = await this.prisma.trade.findUnique({
       where: { id: tradeId },
@@ -342,7 +346,70 @@ export class TradeLogService {
       void this.notifications.notifyDrawdownBreach(userId, period);
     }
 
+    // Phase 2 post-trade grading (spec Sections 6 & 7). Runs AFTER the close
+    // transaction has committed and is fully best-effort — gradeClosedTrade
+    // never throws, but we void + .catch defensively so it can never affect the
+    // close response either.
+    void this.postTradeGrading
+      .gradeClosedTrade(userId, tradeId, language)
+      .catch(() => undefined);
+
     return updated;
+  }
+
+  /**
+   * Logs a stop adjustment for an open trade (spec Section 13.2). Appends
+   * { ts, oldStop, newStop, reason } to the trade's `stopAdjustments` array AND
+   * updates the active `stopLoss` level to the new price. The append is what
+   * lets the execution grader detect widened/tightened stops, so logging is
+   * kept frictionless — only a positive price and a non-empty reason are
+   * required (validated at the DTO).
+   */
+  async applyStopAdjustment(
+    userId: string,
+    tradeId: string,
+    newStop: number,
+    reason: string,
+  ): Promise<trade> {
+    const existing = await this.prisma.trade.findFirst({
+      where: { id: tradeId, userId },
+    });
+    if (!existing) {
+      throw new NotFoundException('Trade not found');
+    }
+    if (existing.status !== 'open') {
+      throw new BadRequestException('Trade is not open');
+    }
+
+    const stopLossJson =
+      (existing.stopLoss as { value?: number; pips?: number } | null) ?? {};
+    const oldStop =
+      typeof stopLossJson.value === 'number' ? stopLossJson.value : 0;
+
+    const adjustment: StopAdjustment = {
+      ts: new Date().toISOString(),
+      oldStop,
+      newStop,
+      reason,
+    };
+    const adjustments = [
+      ...(Array.isArray(existing.stopAdjustments)
+        ? (existing.stopAdjustments as unknown as StopAdjustment[])
+        : []),
+      adjustment,
+    ];
+
+    return this.prisma.trade.update({
+      where: { id: tradeId },
+      data: {
+        // Preserve the original pips metadata; only the active value moves.
+        stopLoss: {
+          ...stopLossJson,
+          value: newStop,
+        } as unknown as Prisma.InputJsonValue,
+        stopAdjustments: adjustments as unknown as Prisma.InputJsonValue,
+      },
+    });
   }
 
   /**
@@ -366,6 +433,7 @@ export class TradeLogService {
     existing: trade,
     data: Prisma.tradeUpdateInput,
     exitPrice: number,
+    language: string = 'en',
   ): Promise<trade> {
     const status =
       typeof data.status === 'string' ? data.status : existing.status;
@@ -455,6 +523,11 @@ export class TradeLogService {
     for (const period of newlyBreachedPeriods(before, after)) {
       void this.notifications.notifyDrawdownBreach(userId, period);
     }
+
+    // Phase 2 post-trade grading (spec Sections 6 & 7). Best-effort, post-commit.
+    void this.postTradeGrading
+      .gradeClosedTrade(userId, existing.id, language)
+      .catch(() => undefined);
 
     return updated;
   }

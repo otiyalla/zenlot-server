@@ -4,6 +4,7 @@ import { QuoteGateway } from '../quote/quote.gateway';
 import { QuoteService } from '../quote/quote.service';
 import { DrawdownService } from '../risk/drawdown.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { PostTradeGradingService } from '../evaluation/post-trade-grading.service';
 import {
   SCAN_OPEN_TRADES_JOB,
   TRADE_SCAN_INTERVAL_MS,
@@ -94,12 +95,16 @@ describe('TradeAutoCloseService', () => {
     const queue = {
       add: jest.fn(),
     };
+    const postTradeGrading = {
+      gradeClosedTrade: jest.fn().mockResolvedValue(undefined),
+    };
     const service = new TradeAutoCloseService(
       prisma as unknown as PrismaService,
       quoteService as unknown as QuoteService,
       gateway as unknown as QuoteGateway,
       drawdown as unknown as DrawdownService,
       notifications as unknown as NotificationsService,
+      postTradeGrading as unknown as PostTradeGradingService,
       queue as unknown as Queue,
     );
 
@@ -107,6 +112,7 @@ describe('TradeAutoCloseService', () => {
       drawdown,
       gateway,
       notifications,
+      postTradeGrading,
       prisma,
       queue,
       quoteService,
