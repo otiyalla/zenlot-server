@@ -228,6 +228,8 @@ model notificationPreference {
   drawdownAlerts        Boolean  @default(true)
   governanceAlerts      Boolean  @default(true)
   journalReminders      Boolean  @default(true)
+  // Weekly behavioral-intelligence review push (Phase 2 Inc 3). On by default.
+  behavioralReports     Boolean  @default(true)
   // Optional quiet-hours window in the user's local time, "HH:mm" 24h. When both
   // are set, non-urgent notifications are suppressed inside the window.
   quietHoursStart       String?

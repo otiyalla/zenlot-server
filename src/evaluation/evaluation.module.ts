@@ -6,6 +6,13 @@ import { EvaluationController } from './evaluation.controller';
 import { TradingPlanService } from './trading-plan.service';
 import { EvaluationService } from './evaluation.service';
 import { PostTradeGradingService } from './post-trade-grading.service';
+import { BehavioralReportService } from './behavioral-report.service';
+import { WeeklyBehavioralService } from './weekly-behavioral.service';
+import {
+  WEEKLY_BEHAVIORAL_QUEUE,
+  WeeklyBehavioralProcessor,
+} from './weekly-behavioral.processor';
+import { NotificationsModule } from '../notifications/notifications.module';
 import {
   EVALUATION_COACHING_QUEUE,
   EvaluationCoachingProcessor,
@@ -37,13 +44,20 @@ import {
  * post-trade and behavioral coaching.
  */
 @Module({
-  imports: [BullModule.registerQueue({ name: EVALUATION_COACHING_QUEUE })],
+  imports: [
+    BullModule.registerQueue({ name: EVALUATION_COACHING_QUEUE }),
+    BullModule.registerQueue({ name: WEEKLY_BEHAVIORAL_QUEUE }),
+    NotificationsModule,
+  ],
   controllers: [EvaluationController],
   providers: [
     EntitlementsService,
     TradingPlanService,
     EvaluationService,
     PostTradeGradingService,
+    BehavioralReportService,
+    WeeklyBehavioralService,
+    WeeklyBehavioralProcessor,
     EvaluationCoachingService,
     EvaluationCoachingProcessor,
     EvaluationCoachingEnqueueService,
@@ -74,6 +88,7 @@ import {
     EntitlementsService,
     EvaluationService,
     PostTradeGradingService,
+    BehavioralReportService,
     EvaluationCoachingEnqueueService,
   ],
 })

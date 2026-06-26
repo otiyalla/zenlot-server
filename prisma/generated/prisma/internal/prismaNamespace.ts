@@ -1885,6 +1885,7 @@ export const NotificationPreferenceScalarFieldEnum = {
   drawdownAlerts: 'drawdownAlerts',
   governanceAlerts: 'governanceAlerts',
   journalReminders: 'journalReminders',
+  behavioralReports: 'behavioralReports',
   quietHoursStart: 'quietHoursStart',
   quietHoursEnd: 'quietHoursEnd',
   reminderHour: 'reminderHour',

@@ -2,24 +2,34 @@ import {
   Body,
   Controller,
   Get,
+  HttpStatus,
   Param,
   Post,
   Put,
+  Query,
   Request,
+  Res,
 } from '@nestjs/common';
 import {
   ApiOperation,
   ApiParam,
+  ApiQuery,
   ApiResponse,
   ApiSecurity,
   ApiTags,
 } from '@nestjs/swagger';
+import { FastifyReply } from 'fastify';
 import { AuthenticatedRequest } from '../user/interfaces/authenticated-request.interface';
 import { TradingPlanService } from './trading-plan.service';
 import { EvaluationService } from './evaluation.service';
 import { PostTradeGradingService } from './post-trade-grading.service';
+import {
+  BehavioralReportService,
+  isInsufficientData,
+} from './behavioral-report.service';
 import { UpsertTradingPlanDto } from './dto/upsert-trading-plan.dto';
 import { SubmitChecklistDto } from './dto/submit-checklist.dto';
+import { DEFAULT_PERIOD_DAYS } from './engine';
 
 /**
  * Phase 2 Trade Evaluation API (spec Section 11).
@@ -38,6 +48,7 @@ export class EvaluationController {
     private readonly tradingPlanService: TradingPlanService,
     private readonly evaluationService: EvaluationService,
     private readonly postTradeGrading: PostTradeGradingService,
+    private readonly behavioralReports: BehavioralReportService,
   ) {}
 
   @Get('plan')
@@ -140,5 +151,68 @@ export class EvaluationController {
     @Request() req: AuthenticatedRequest,
   ) {
     return this.postTradeGrading.getVerdictForTrade(req.user.id, tradeId);
+  }
+
+  @Get('behavioral-report')
+  @ApiOperation({
+    summary:
+      'Latest behavioral-intelligence report, regenerating if stale. Returns ' +
+      '204 with an insufficient_data body when the user has < 10 evaluated ' +
+      'trades.',
+  })
+  @ApiQuery({
+    name: 'period_days',
+    required: false,
+    description: 'Rolling analysis window in days (default 90).',
+  })
+  @ApiResponse({ status: 200, description: 'The behavioral report.' })
+  @ApiResponse({
+    status: 204,
+    description:
+      '{ message: "insufficient_data", tradesRequired: 10, tradesEvaluated: N }',
+  })
+  async getBehavioralReport(
+    @Request() req: AuthenticatedRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+    @Query('period_days') periodDays?: string,
+  ) {
+    const window = this.parsePeriodDays(periodDays);
+    const result = await this.behavioralReports.getOrGenerate(
+      req.user.id,
+      window,
+      req.user.language,
+    );
+
+    if (isInsufficientData(result)) {
+      // Spec 11: 204 with a discriminator body. Fastify omits the body on a
+      // standards-compliant 204; the client keys off the status. We still
+      // return the payload so non-stripping clients and tests can read it.
+      reply.status(HttpStatus.NO_CONTENT);
+      return {
+        message: 'insufficient_data',
+        tradesRequired: result.tradesRequired,
+        tradesEvaluated: result.tradesEvaluated,
+      };
+    }
+
+    return result;
+  }
+
+  @Get('stats/summary')
+  @ApiOperation({
+    summary:
+      'Aggregate evaluation stats across ALL of the user’s evaluated trades ' +
+      '(avgProcessScore, goodTradeRate, luckyTradeRate, winRate, avgRMultiple).',
+  })
+  @ApiResponse({ status: 200, description: 'The aggregate stats summary.' })
+  getStatsSummary(@Request() req: AuthenticatedRequest) {
+    return this.behavioralReports.statsSummary(req.user.id);
+  }
+
+  /** Parses the period_days query (positive int) → defaults to 90. */
+  private parsePeriodDays(raw?: string): number {
+    if (!raw) return DEFAULT_PERIOD_DAYS;
+    const n = Number.parseInt(raw, 10);
+    return Number.isFinite(n) && n > 0 ? n : DEFAULT_PERIOD_DAYS;
   }
 }

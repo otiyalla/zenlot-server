@@ -10,6 +10,7 @@ export enum NotificationCategory {
   DrawdownAlert = 'drawdownAlerts',
   GovernanceAlert = 'governanceAlerts',
   JournalReminder = 'journalReminders',
+  BehavioralReport = 'behavioralReports',
 }
 
 /**
@@ -43,4 +44,5 @@ export const CATEGORY_PREFERENCE_KEY: Record<NotificationCategory, string> = {
   [NotificationCategory.DrawdownAlert]: 'drawdownAlerts',
   [NotificationCategory.GovernanceAlert]: 'governanceAlerts',
   [NotificationCategory.JournalReminder]: 'journalReminders',
+  [NotificationCategory.BehavioralReport]: 'behavioralReports',
 };
