@@ -117,6 +117,25 @@ export class EvaluationController {
     return this.evaluationService.getPreEvalForTrade(req.user.id, tradeId);
   }
 
+  @Get('evaluations/:evaluationId')
+  @ApiOperation({
+    summary:
+      'Get a pre-trade evaluation by id (poll for async AI coaching before the trade is logged)',
+  })
+  @ApiParam({
+    name: 'evaluationId',
+    required: true,
+    description: 'Evaluation id',
+  })
+  @ApiResponse({ status: 200, description: 'The pre-trade evaluation.' })
+  @ApiResponse({ status: 404, description: 'No pre-trade evaluation found.' })
+  getEvaluationById(
+    @Param('evaluationId') evaluationId: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.evaluationService.getEvalById(req.user.id, evaluationId);
+  }
+
   @Get('trades/:tradeId/execution')
   @ApiOperation({
     summary:

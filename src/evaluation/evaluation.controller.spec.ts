@@ -18,6 +18,7 @@ describe('EvaluationController', () => {
   let savePlan: jest.Mock;
   let submitChecklist: jest.Mock;
   let getPreEvalForTrade: jest.Mock;
+  let getEvalById: jest.Mock;
   let getExecutionForTrade: jest.Mock;
   let getVerdictForTrade: jest.Mock;
   let getOrGenerate: jest.Mock;
@@ -28,6 +29,7 @@ describe('EvaluationController', () => {
     savePlan = jest.fn().mockResolvedValue({ version: 2 });
     submitChecklist = jest.fn().mockResolvedValue({ checklistId: 'chk-1' });
     getPreEvalForTrade = jest.fn().mockResolvedValue({ tradeId: 't1' });
+    getEvalById = jest.fn().mockResolvedValue({ evaluationId: 'eval-1' });
     getExecutionForTrade = jest.fn().mockResolvedValue({ tradeId: 't1' });
     getVerdictForTrade = jest.fn().mockResolvedValue({ verdict: 'good_trade' });
     getOrGenerate = jest.fn().mockResolvedValue({ id: 'report-1' });
@@ -39,7 +41,7 @@ describe('EvaluationController', () => {
         { provide: TradingPlanService, useValue: { getCurrentPlan, savePlan } },
         {
           provide: EvaluationService,
-          useValue: { submitChecklist, getPreEvalForTrade },
+          useValue: { submitChecklist, getPreEvalForTrade, getEvalById },
         },
         {
           provide: PostTradeGradingService,
@@ -75,6 +77,11 @@ describe('EvaluationController', () => {
   it('GET /trades/:tradeId/pre-eval delegates to getPreEvalForTrade', async () => {
     await controller.getPreEval('t1', req);
     expect(getPreEvalForTrade).toHaveBeenCalledWith('u1', 't1');
+  });
+
+  it('GET /evaluations/:evaluationId delegates to getEvalById with the user id', async () => {
+    await controller.getEvaluationById('eval-1', req);
+    expect(getEvalById).toHaveBeenCalledWith('u1', 'eval-1');
   });
 
   it('GET /trades/:tradeId/execution delegates to getExecutionForTrade', async () => {

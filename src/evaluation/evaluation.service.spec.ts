@@ -239,6 +239,46 @@ describe('EvaluationService.getPreEvalForTrade', () => {
   });
 });
 
+describe('EvaluationService.getEvalById', () => {
+  it('throws NotFound when no evaluation with that id is owned by the user', async () => {
+    const { service } = makeService({
+      evalFindFirst: jest.fn().mockResolvedValue(null),
+    });
+    await expect(
+      service.getEvalById(USER_ID, 'eval-missing'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('returns the evaluation by id incl. evaluationId and the async aiCoaching', async () => {
+    const evalFindFirst = jest.fn().mockResolvedValue({
+      id: 'eval-1',
+      tradeId: null,
+      setupQualityTotal: 88,
+      setupQualityGrade: 'A',
+      setupBreakdown: [],
+      planAdherenceTotal: null,
+      planAdherenceGrade: null,
+      planViolations: null,
+      recommendation: 'proceed',
+      aiCoaching: 'Proceed. Strong confluence across all factors.',
+      evaluatedAt: new Date('2026-06-27T10:00:00Z'),
+    });
+    const { service } = makeService({ evalFindFirst });
+
+    const result = await service.getEvalById(USER_ID, 'eval-1');
+
+    // Scoped to the owning user, looked up by the evaluation's own id.
+    expect(evalFindFirst).toHaveBeenCalledWith({
+      where: { id: 'eval-1', userId: USER_ID },
+    });
+    expect(result.evaluationId).toBe('eval-1');
+    expect(result.tradeId).toBeNull();
+    expect(result.aiCoaching).toBe(
+      'Proceed. Strong confluence across all factors.',
+    );
+  });
+});
+
 describe('EvaluationService soft-gate', () => {
   it('links a checklist + its evaluations to the trade', async () => {
     const { service, checklistUpdate, evalUpdateMany } = makeService({

@@ -132,6 +132,26 @@ export class EvaluationService {
     return this.toResult(evaluationRow, checklistRow?.id ?? null);
   }
 
+  /**
+   * Returns a pre-trade evaluation by its own id, scoped to the user. This is the
+   * pre-trade window retrieval path: the checklist/evaluation are created before
+   * any trade exists (tradeId null), so they cannot yet be fetched by tradeId.
+   * The client polls this after submitting a checklist to pick up the
+   * asynchronously-generated `aiCoaching`. 404 if not found / not owned.
+   */
+  async getEvalById(
+    userId: string,
+    evaluationId: string,
+  ): Promise<PreTradeEvaluationResultWithChecklist> {
+    const evaluationRow = await this.prisma.preTradeEvaluation.findFirst({
+      where: { id: evaluationId, userId },
+    });
+    if (!evaluationRow) {
+      throw new NotFoundException('No pre-trade evaluation found');
+    }
+    return this.toResult(evaluationRow, null);
+  }
+
   // ─── Soft-gate wiring (decision #2 — warn, never block) ────────────────────
 
   /**
@@ -240,6 +260,7 @@ export class EvaluationService {
           };
 
     return {
+      evaluationId: row.id,
       checklistId,
       tradeId: row.tradeId,
       evaluatedAt: row.evaluatedAt.toISOString(),
@@ -262,6 +283,13 @@ export interface PreTradeEvaluationResultWithChecklist extends Omit<
   PreTradeEvaluationResult,
   'tradeId'
 > {
+  /**
+   * The evaluation row's own id. The client polls
+   * `GET /evaluation/evaluations/:evaluationId` with this to retrieve the
+   * asynchronously-generated pre-trade AI coaching during the pre-trade window
+   * (before any trade exists, so it cannot yet be fetched by tradeId).
+   */
+  evaluationId: string;
   checklistId: string | null;
   tradeId: string | null;
 }
