@@ -4,6 +4,8 @@ type BuildWelcomeTemplateParams = {
   fname: string;
   language: string;
   supportEmail: string;
+  /** Destination for the primary call-to-action button (the app entry point). */
+  ctaUrl: string;
 };
 
 type WelcomeTemplate = {
@@ -16,50 +18,61 @@ export const buildWelcomeTemplate = ({
   fname,
   language,
   supportEmail,
+  ctaUrl,
 }: BuildWelcomeTemplateParams): WelcomeTemplate => {
   const supportedLanguage = resolveSupportedEmailLanguage(language);
 
   const copyByLanguage = {
     en: {
-      subject: `You're in! Here's what you can do next with Zenlot ${fname}`,
+      subject: `Welcome to Zenlot, ${fname} — let's build your trading discipline`,
       heroAnimationUrl:
         'https://pub-61217234bef24505baffb476955a8686.r2.dev/zenlot_welcome_hero.gif',
-      heroAlt: 'Track your growth over time',
+      heroAlt: 'Trade with discipline, not emotion',
       heading: `👋 Welcome to Zenlot, ${fname}!`,
       intro:
-        "We're thrilled you're here. Thanks for joining Zenlot - your partner for capturing trades, organizing notes, and tracking performance over time.",
-      milestoneIntro:
-        'Below is your first milestone on the path to clearer, more confident trading:',
+        "Zenlot isn't a signal service or just another trade journal. It's your trading-discipline and risk-management OS — it grades how well you follow your own process, not your P&L. A trade that follows your rules and loses beats one that breaks them and wins.",
+      milestoneIntro: 'Here is what Zenlot does for you from day one:',
       bulletOne:
-        '<strong>Log your trades</strong> with outcomes, strategy tags, and emotion notes',
+        '<strong>Risk engine</strong> — position sizing, exposure limits, and drawdown circuit-breakers that warn you before you over-risk. Advisory only — you always stay in control.',
       bulletTwo:
-        '<strong>Track performance</strong> to spot trends and evolve your edge',
+        '<strong>Pre-trade evaluation</strong> — score your setup quality and check it against your own trading plan before you enter.',
       bulletThree:
-        '<strong>Centralize notes</strong> so your strategy improves with each session',
+        '<strong>Process-vs-outcome verdicts</strong> — see when a win was actually luck, so you never reinforce a habit that will cost you later.',
+      bulletFour:
+        '<strong>Behavioral intelligence</strong> — once you have logged a few trades, Zenlot surfaces the patterns holding you back, with plain-language coaching.',
+      ctaIntro:
+        'Start by setting your risk limits and defining your trading plan:',
+      ctaLabel: 'Open Zenlot',
       supportMessage:
-        'Need help or want to share feedback? Just reply to this email or reach out at',
-      footer: "We're glad you're here - let's grow your trading edge together.",
+        'Questions or feedback? Just reply to this email or reach us at',
+      footer:
+        "Process over outcome — let's build the discipline that compounds.",
     },
     fr: {
-      subject: `Bienvenue sur Zenlot : prochaines etapes pour ${fname}`,
+      subject: `Bienvenue sur Zenlot, ${fname} — bâtissons votre discipline de trading`,
       heroAnimationUrl:
         'https://pub-61217234bef24505baffb476955a8686.r2.dev/zenlot_welcome_hero.gif',
-      heroAlt: 'Suivez votre progression au fil du temps',
+      heroAlt: 'Tradez avec discipline, pas avec émotion',
       heading: `👋 Bienvenue sur Zenlot, ${fname}!`,
       intro:
-        "Nous sommes ravis de vous accueillir. Merci d'avoir rejoint Zenlot - votre partenaire pour enregistrer vos trades, organiser vos notes et suivre vos performances dans le temps.",
+        "Zenlot n'est ni un service de signaux ni un simple journal de trading. C'est votre système de discipline et de gestion du risque — il évalue la manière dont vous suivez votre propre processus, pas votre P&L. Un trade qui respecte vos règles et perd vaut mieux qu'un trade qui les enfreint et gagne.",
       milestoneIntro:
-        'Voici votre premier jalon vers un trading plus clair et plus confiant :',
+        'Voici ce que Zenlot fait pour vous dès le premier jour :',
       bulletOne:
-        '<strong>Enregistrez vos trades</strong> avec les resultats, tags de strategie et notes emotionnelles',
+        "<strong>Moteur de risque</strong> — calcul de la taille de position, limites d'exposition et coupe-circuits de drawdown qui vous alertent avant de trop risquer. À titre indicatif — vous gardez toujours le contrôle.",
       bulletTwo:
-        '<strong>Suivez vos performances</strong> pour identifier les tendances et affiner votre avantage',
+        "<strong>Évaluation avant trade</strong> — notez la qualité de votre setup et confrontez-le à votre propre plan de trading avant d'entrer.",
       bulletThree:
-        '<strong>Centralisez vos notes</strong> pour ameliorer votre strategie a chaque session',
+        "<strong>Verdict processus vs résultat</strong> — repérez quand un gain n'était que de la chance, pour ne jamais renforcer une habitude qui vous coûtera plus tard.",
+      bulletFour:
+        '<strong>Intelligence comportementale</strong> — après quelques trades enregistrés, Zenlot révèle les schémas qui vous freinent, avec un coaching en langage clair.',
+      ctaIntro:
+        'Commencez par définir vos limites de risque et votre plan de trading :',
+      ctaLabel: 'Ouvrir Zenlot',
       supportMessage:
-        'Besoin daide ou envie de partager un retour ? Repondez a cet email ou contactez-nous a',
+        'Une question ou un retour ? Répondez simplement à cet email ou écrivez-nous à',
       footer:
-        'Nous sommes heureux de vous compter parmi nous - faisons progresser votre avantage de trading ensemble.',
+        'Le processus avant le résultat — bâtissons la discipline qui se cumule.',
     },
   };
 
@@ -88,10 +101,25 @@ export const buildWelcomeTemplate = ({
         </p>
 
         <ul style="font-family:Arial, sans-serif; font-size:16px; color:#4A4A4A;">
-          <li>${copy.bulletOne}</li>
-          <li>${copy.bulletTwo}</li>
-          <li>${copy.bulletThree}</li>
+          <li style="margin-bottom:8px;">${copy.bulletOne}</li>
+          <li style="margin-bottom:8px;">${copy.bulletTwo}</li>
+          <li style="margin-bottom:8px;">${copy.bulletThree}</li>
+          <li style="margin-bottom:8px;">${copy.bulletFour}</li>
         </ul>
+
+        <p style="font-family:Arial, sans-serif; font-size:16px; color:#4A4A4A;">
+          ${copy.ctaIntro}
+        </p>
+
+        <!-- Primary call-to-action -->
+        <div style="text-align:center; margin:28px 0;">
+          <a
+            href="${ctaUrl}"
+            style="display:inline-block; background-color:#1A73E8; color:#ffffff; text-decoration:none; font-family:Arial, sans-serif; font-size:16px; font-weight:bold; padding:14px 32px; border-radius:8px;"
+          >
+            ${copy.ctaLabel}
+          </a>
+        </div>
 
         <p style="font-family:Arial, sans-serif; font-size:16px; color:#4A4A4A;">
           ${copy.supportMessage}
