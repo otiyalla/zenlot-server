@@ -67,6 +67,7 @@ export const ModelName = {
   preTradeEvaluation: 'preTradeEvaluation',
   executionGrade: 'executionGrade',
   tradeVerdict: 'tradeVerdict',
+  candle: 'candle',
   behavioralReport: 'behavioralReport'
 } as const
 
@@ -384,6 +385,23 @@ export const TradeVerdictScalarFieldEnum = {
 } as const
 
 export type TradeVerdictScalarFieldEnum = (typeof TradeVerdictScalarFieldEnum)[keyof typeof TradeVerdictScalarFieldEnum]
+
+
+export const CandleScalarFieldEnum = {
+  pair: 'pair',
+  timeframe: 'timeframe',
+  ts: 'ts',
+  open: 'open',
+  high: 'high',
+  low: 'low',
+  close: 'close',
+  volume: 'volume',
+  source: 'source',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type CandleScalarFieldEnum = (typeof CandleScalarFieldEnum)[keyof typeof CandleScalarFieldEnum]
 
 
 export const BehavioralReportScalarFieldEnum = {

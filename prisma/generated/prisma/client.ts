@@ -126,6 +126,11 @@ export type executionGrade = Prisma.executionGradeModel
  */
 export type tradeVerdict = Prisma.tradeVerdictModel
 /**
+ * Model candle
+ * 
+ */
+export type candle = Prisma.candleModel
+/**
  * Model behavioralReport
  * 
  */

@@ -13,6 +13,7 @@ import { TradeModule } from './trade/trade.module';
 import { RiskModule } from './risk/risk.module';
 import { EvaluationModule } from './evaluation/evaluation.module';
 import { QuoteModule } from './quote/quote.module';
+import { CandleModule } from './candle/candle.module';
 import { mapDatabaseUrl } from './config/database.config';
 import { FeedbackModule } from './feedback/feedback.module';
 import { AuditModule } from './audit/audit.module';
@@ -60,6 +61,7 @@ function getEnvFilePath(): string[] {
     TradeModule,
     RiskModule,
     EvaluationModule,
+    CandleModule,
     FeedbackModule,
     AuditModule,
     EmailModule,

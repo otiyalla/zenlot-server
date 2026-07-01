@@ -400,6 +400,7 @@ export const ModelName = {
   preTradeEvaluation: 'preTradeEvaluation',
   executionGrade: 'executionGrade',
   tradeVerdict: 'tradeVerdict',
+  candle: 'candle',
   behavioralReport: 'behavioralReport'
 } as const
 
@@ -416,7 +417,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "trade" | "riskProfile" | "drawdownState" | "governanceLog" | "journal" | "user" | "pushToken" | "notificationPreference" | "refreshToken" | "auditLog" | "feedback" | "tradingPlan" | "preTradeChecklist" | "preTradeEvaluation" | "executionGrade" | "tradeVerdict" | "behavioralReport"
+    modelProps: "trade" | "riskProfile" | "drawdownState" | "governanceLog" | "journal" | "user" | "pushToken" | "notificationPreference" | "refreshToken" | "auditLog" | "feedback" | "tradingPlan" | "preTradeChecklist" | "preTradeEvaluation" | "executionGrade" | "tradeVerdict" | "candle" | "behavioralReport"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -1604,6 +1605,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    candle: {
+      payload: Prisma.$candlePayload<ExtArgs>
+      fields: Prisma.candleFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.candleFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$candlePayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.candleFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$candlePayload>
+        }
+        findFirst: {
+          args: Prisma.candleFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$candlePayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.candleFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$candlePayload>
+        }
+        findMany: {
+          args: Prisma.candleFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$candlePayload>[]
+        }
+        create: {
+          args: Prisma.candleCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$candlePayload>
+        }
+        createMany: {
+          args: Prisma.candleCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.candleCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$candlePayload>[]
+        }
+        delete: {
+          args: Prisma.candleDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$candlePayload>
+        }
+        update: {
+          args: Prisma.candleUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$candlePayload>
+        }
+        deleteMany: {
+          args: Prisma.candleDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.candleUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.candleUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$candlePayload>[]
+        }
+        upsert: {
+          args: Prisma.candleUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$candlePayload>
+        }
+        aggregate: {
+          args: Prisma.CandleAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateCandle>
+        }
+        groupBy: {
+          args: Prisma.candleGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.CandleGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.candleCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.CandleCountAggregateOutputType> | number
+        }
+      }
+    }
     behavioralReport: {
       payload: Prisma.$behavioralReportPayload<ExtArgs>
       fields: Prisma.behavioralReportFieldRefs
@@ -2017,6 +2092,23 @@ export const TradeVerdictScalarFieldEnum = {
 export type TradeVerdictScalarFieldEnum = (typeof TradeVerdictScalarFieldEnum)[keyof typeof TradeVerdictScalarFieldEnum]
 
 
+export const CandleScalarFieldEnum = {
+  pair: 'pair',
+  timeframe: 'timeframe',
+  ts: 'ts',
+  open: 'open',
+  high: 'high',
+  low: 'low',
+  close: 'close',
+  volume: 'volume',
+  source: 'source',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type CandleScalarFieldEnum = (typeof CandleScalarFieldEnum)[keyof typeof CandleScalarFieldEnum]
+
+
 export const BehavioralReportScalarFieldEnum = {
   id: 'id',
   userId: 'userId',
@@ -2287,6 +2379,7 @@ export type GlobalOmitConfig = {
   preTradeEvaluation?: Prisma.preTradeEvaluationOmit
   executionGrade?: Prisma.executionGradeOmit
   tradeVerdict?: Prisma.tradeVerdictOmit
+  candle?: Prisma.candleOmit
   behavioralReport?: Prisma.behavioralReportOmit
 }
 

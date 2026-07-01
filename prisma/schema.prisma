@@ -392,6 +392,28 @@ model tradeVerdict {
   @@index([tradeId])
 }
 
+// Shared, global OHLC candle cache (read-through). Not scoped to a user: the
+// first viewer of a pair/timeframe pays the upstream API cost, everyone after
+// reads from here. Plain Postgres (no TimescaleDB) — the PK + DESC index serve
+// the chart-window range queries and gap-detection MIN/MAX scans directly.
+// `source` records which upstream provider supplied the bar (twelvedata|oanda|polygon).
+model candle {
+  pair      String // canonical 6-char symbol, e.g. "EURUSD"
+  timeframe String // "M15" | "H1" | "H4" | "D1"
+  ts        DateTime // bar open time (UTC)
+  open      Float
+  high      Float
+  low       Float
+  close     Float
+  volume    Float?
+  source    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@id([pair, timeframe, ts])
+  @@index([pair, timeframe, ts(sort: Desc)])
+}
+
 // Behavioral intelligence report across a user's evaluated trade history.
 model behavioralReport {
   id             String   @id @default(uuid())
