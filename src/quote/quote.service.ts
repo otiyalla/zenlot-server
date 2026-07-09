@@ -30,6 +30,19 @@ export class QuoteService {
    */
   private static readonly AVAILABLE_FOREX_TTL_MS = 48 * 60 * 60 * 1000; // 48h
 
+  /**
+   * The same quote→account conversion rate is resolved repeatedly for one trade:
+   * the display exchange-rate path (get-exchange-rate) and the risk engine's
+   * resolveExchangeRate, which re-runs on every debounced /risk/calculate. Caching
+   * each base/quote for a short TTL (with single-flight de-dup) collapses those
+   * redundant upstream calls into one and keeps the displayed rate and the rate
+   * governance sizes on in sync. The one-shot entry quote (get-quote) and live
+   * auto-close monitoring deliberately bypass this and call fxRate() directly.
+   */
+  private readonly fxRateCache = new Map<string, { price: number; at: number }>();
+  private readonly fxRateInflight = new Map<string, Promise<{ price: number }>>();
+  private static readonly FX_RATE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
   server: Server;
 
   constructor(
@@ -164,7 +177,15 @@ export class QuoteService {
     }
   }
 
-  async fxRate(symbol: { base: string; quote: string }) {
+  /**
+   * Raw quote straight from the provider (no caching). Used for the one-shot
+   * entry-price quote (get-quote) and live auto-close monitoring, which must
+   * always see the freshest price.
+   */
+  async fxRate(symbol: {
+    base: string;
+    quote: string;
+  }): Promise<{ price: number }> {
     try {
       const mapCurrency: Record<string, number> = {
         JPY: 3,
@@ -187,5 +208,39 @@ export class QuoteService {
       Sentry.captureException(error, { extra: { symbol, context: 'fx rate' } });
       throw error;
     }
+  }
+
+  /**
+   * Cached quote→account conversion rate (5-min TTL + single-flight). Used by the
+   * display exchange-rate path (get-exchange-rate) and the risk engine's
+   * resolveExchangeRate, which re-resolve the same rate repeatedly for one trade.
+   */
+  async cachedFxRate(symbol: {
+    base: string;
+    quote: string;
+  }): Promise<{ price: number }> {
+    const key = `${symbol.base}/${symbol.quote}`.toUpperCase();
+
+    const cached = this.fxRateCache.get(key);
+    if (cached && Date.now() - cached.at < QuoteService.FX_RATE_TTL_MS) {
+      return { price: cached.price };
+    }
+
+    // Collapse concurrent resolutions of the same rate into one upstream call.
+    const inflight = this.fxRateInflight.get(key);
+    if (inflight) return inflight;
+
+    const request = (async () => {
+      try {
+        const result = await this.fxRate(symbol);
+        this.fxRateCache.set(key, { price: result.price, at: Date.now() });
+        return result;
+      } finally {
+        this.fxRateInflight.delete(key);
+      }
+    })();
+
+    this.fxRateInflight.set(key, request);
+    return request;
   }
 }

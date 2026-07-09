@@ -8,6 +8,7 @@ const forexList = (items: Partial<fmpList>[]): fmpList[] => items as fmpList[];
 
 describe('QuoteService', () => {
   let service: QuoteService;
+  let fxQuote: { fxRate: jest.Mock };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -35,10 +36,61 @@ describe('QuoteService', () => {
     }).compile();
 
     service = module.get<QuoteService>(QuoteService);
+    fxQuote = module.get<{ fxRate: jest.Mock }>(FX_QUOTE);
   });
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  it('caches cachedFxRate for the TTL and de-dupes upstream calls', async () => {
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(0);
+    fxQuote.fxRate
+      .mockResolvedValueOnce({ price: 1.2345 })
+      .mockResolvedValueOnce({ price: 1.9999 });
+
+    // First resolution hits the provider and caches the result.
+    await expect(
+      service.cachedFxRate({ base: 'USD', quote: 'EUR' }),
+    ).resolves.toEqual({ price: 1.2345 });
+
+    // Still within the 5-minute TTL — served from cache, no new upstream call.
+    nowSpy.mockReturnValue(4 * 60 * 1000);
+    await expect(
+      service.cachedFxRate({ base: 'USD', quote: 'EUR' }),
+    ).resolves.toEqual({ price: 1.2345 });
+    expect(fxQuote.fxRate).toHaveBeenCalledTimes(1);
+
+    // Past the TTL — cache is stale, so it re-resolves from the provider.
+    nowSpy.mockReturnValue(5 * 60 * 1000 + 1);
+    await expect(
+      service.cachedFxRate({ base: 'USD', quote: 'EUR' }),
+    ).resolves.toEqual({ price: 1.9999 });
+    expect(fxQuote.fxRate).toHaveBeenCalledTimes(2);
+
+    nowSpy.mockRestore();
+  });
+
+  it('shares one in-flight cachedFxRate fetch across concurrent callers', async () => {
+    fxQuote.fxRate.mockResolvedValue({ price: 1.5 });
+
+    const [first, second] = await Promise.all([
+      service.cachedFxRate({ base: 'USD', quote: 'EUR' }),
+      service.cachedFxRate({ base: 'USD', quote: 'EUR' }),
+    ]);
+
+    expect(first).toEqual({ price: 1.5 });
+    expect(second).toEqual({ price: 1.5 });
+    expect(fxQuote.fxRate).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not cache fxRate — the entry-quote path always re-fetches', async () => {
+    fxQuote.fxRate.mockResolvedValue({ price: 1.5 });
+
+    await service.fxRate({ base: 'EUR', quote: 'USD' });
+    await service.fxRate({ base: 'EUR', quote: 'USD' });
+
+    expect(fxQuote.fxRate).toHaveBeenCalledTimes(2);
   });
 
   it('caches available forex after the first fetch', async () => {

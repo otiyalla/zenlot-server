@@ -33,7 +33,7 @@ export class RateResolverService {
     if (quote === account) return 1;
 
     try {
-      const { price } = await this.quoteService.fxRate({
+      const { price } = await this.quoteService.cachedFxRate({
         base: quote,
         quote: account,
       });
@@ -46,7 +46,7 @@ export class RateResolverService {
     }
 
     try {
-      const { price } = await this.quoteService.fxRate({
+      const { price } = await this.quoteService.cachedFxRate({
         base: account,
         quote,
       });
