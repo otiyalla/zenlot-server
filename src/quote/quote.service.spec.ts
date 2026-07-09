@@ -61,6 +61,43 @@ describe('QuoteService', () => {
     expect(getFMPList).toHaveBeenCalledTimes(1);
   });
 
+  it('refetches available forex after the TTL expires', async () => {
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(0);
+    const getFMPList = jest
+      .spyOn(service, 'getFMPList')
+      .mockResolvedValueOnce(
+        forexList([
+          { symbol: 'EURUSD', fromCurrency: 'EUR', toCurrency: 'USD' },
+        ]),
+      )
+      .mockResolvedValueOnce(
+        forexList([
+          { symbol: 'GBPJPY', fromCurrency: 'GBP', toCurrency: 'JPY' },
+        ]),
+      );
+
+    // First call populates the cache at t=0.
+    await expect(service.getAvailableForex()).resolves.toEqual([
+      { symbol: 'EURUSD', currency: 'USD' },
+    ]);
+
+    // Still within the TTL an hour later — served from cache, no new fetch.
+    nowSpy.mockReturnValue(60 * 60 * 1000);
+    await expect(service.getAvailableForex()).resolves.toEqual([
+      { symbol: 'EURUSD', currency: 'USD' },
+    ]);
+    expect(getFMPList).toHaveBeenCalledTimes(1);
+
+    // Past the 48h TTL — cache is stale, so it refetches the newest list.
+    nowSpy.mockReturnValue(48 * 60 * 60 * 1000 + 1);
+    await expect(service.getAvailableForex()).resolves.toEqual([
+      { symbol: 'GBPJPY', currency: 'JPY' },
+    ]);
+    expect(getFMPList).toHaveBeenCalledTimes(2);
+
+    nowSpy.mockRestore();
+  });
+
   it('shares one in-flight forex fetch across concurrent callers', async () => {
     const getFMPList = jest
       .spyOn(service, 'getFMPList')

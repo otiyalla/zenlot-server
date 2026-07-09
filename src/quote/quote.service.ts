@@ -19,7 +19,16 @@ const forex_url = 'https://financialmodelingprep.com/stable';
 export class QuoteService {
   private readonly logger = new Logger(QuoteService.name);
   private availableForexCache: AvailableSymbols[] | null = null;
+  private availableForexCachedAt = 0;
   private availableForexRequest: Promise<AvailableSymbols[]> | null = null;
+
+  /**
+   * The forex pair list changes rarely, so cache it in-process and only re-hit
+   * the upstream provider once per TTL window (SCRUM-16). Refreshing on a TTL —
+   * rather than caching forever — is what lets a newly added pair appear without
+   * a server restart, while keeping the list served instantly the rest of the time.
+   */
+  private static readonly AVAILABLE_FOREX_TTL_MS = 48 * 60 * 60 * 1000; // 48h
 
   server: Server;
 
@@ -55,8 +64,12 @@ export class QuoteService {
   // This service can be expanded to include methods for fetching quotes, processing data, etc.
   // For now, it serves as a placeholder for future functionality related to quotes.
   async getAvailableForex(): Promise<AvailableSymbols[]> {
-    if (this.availableForexCache) {
-      return this.availableForexCache;
+    const isFresh =
+      this.availableForexCache !== null &&
+      Date.now() - this.availableForexCachedAt <
+        QuoteService.AVAILABLE_FOREX_TTL_MS;
+    if (isFresh) {
+      return this.availableForexCache as AvailableSymbols[];
     }
 
     if (!this.availableForexRequest) {
@@ -69,6 +82,7 @@ export class QuoteService {
           }));
 
           this.availableForexCache = data;
+          this.availableForexCachedAt = Date.now();
           return data;
         } catch (error) {
           if (this.availableForexCache) {
@@ -91,6 +105,7 @@ export class QuoteService {
 
   clearAvailableForexCache() {
     this.availableForexCache = null;
+    this.availableForexCachedAt = 0;
   }
 
   async refreshAvailableForex(): Promise<AvailableSymbols[]> {
