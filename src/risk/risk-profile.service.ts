@@ -116,6 +116,15 @@ export class RiskProfileService {
       data.lastBalanceSource = 'manual';
     }
 
+    // Circuit-breaker breaches are sticky until the period reset, so changing a
+    // drawdown limit must re-evaluate the corresponding flag against the new
+    // limit — otherwise raising a limit leaves a trade blocked by a breach that
+    // no longer applies (SCRUM-53).
+    const drawdownLimitsChanged =
+      dto.maxDailyDrawdownPct !== undefined ||
+      dto.maxWeeklyDrawdownPct !== undefined ||
+      dto.maxMonthlyDrawdownPct !== undefined;
+
     // When the balance is manually reconciled we must keep the drawdown row's
     // running balance in lock-step with the profile — otherwise the Drawdown
     // screen (which reads drawdownState, seeded once and only moved by realized
@@ -133,6 +142,13 @@ export class RiskProfileService {
           userId,
           data.accountBalance as number,
         );
+      }
+      if (drawdownLimitsChanged) {
+        await this.drawdownService.reconcileBreachFlags(tx, userId, {
+          maxDailyDrawdownPct: dto.maxDailyDrawdownPct,
+          maxWeeklyDrawdownPct: dto.maxWeeklyDrawdownPct,
+          maxMonthlyDrawdownPct: dto.maxMonthlyDrawdownPct,
+        });
       }
       return updated;
     });
