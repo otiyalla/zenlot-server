@@ -21,7 +21,7 @@ export function isTimeframe(value: string): value is Timeframe {
 }
 
 /** Upstream market-data sources, in fallback priority order. */
-export type CandleSource = 'twelvedata' | 'oanda' | 'polygon';
+export type CandleSource = 'twelvedata' | 'oanda' | 'massive';
 
 /**
  * Every candle provider implements this. Implementations are responsible for

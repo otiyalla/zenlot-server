@@ -167,6 +167,59 @@ describe('RiskProfileService', () => {
       expect(txClient.riskProfile.upsert).toBe(upsert);
     });
 
+    it('reconciles a changed limit against the newly set balance', async () => {
+      let drawdownRow = {
+        userId: USER_ID,
+        accountBalance: 9000,
+        peakBalance: 10000,
+        dailyOpenBalance: 10000,
+        weeklyOpenBalance: 10000,
+        monthlyOpenBalance: 10000,
+        dailyBreached: false,
+        weeklyBreached: false,
+        monthlyBreached: true,
+      };
+      const drawdownState = {
+        findUnique: jest.fn(() => Promise.resolve({ ...drawdownRow })),
+        create: jest.fn(),
+        update: jest.fn(({ data }: { data: Partial<typeof drawdownRow> }) => {
+          drawdownRow = { ...drawdownRow, ...data };
+          return Promise.resolve(drawdownRow);
+        }),
+      };
+      const riskProfile = {
+        upsert: jest.fn(({ update }: { update: Record<string, unknown> }) =>
+          Promise.resolve({ ...storedRow, ...update }),
+        ),
+        findUnique: jest.fn(),
+      };
+      const tx = { riskProfile, drawdownState };
+      const prisma = {
+        $transaction: jest.fn((callback: (client: typeof tx) => unknown) =>
+          callback(tx),
+        ),
+      };
+      const actualService = new RiskProfileService(
+        prisma as unknown as PrismaService,
+        {
+          log: jest.fn().mockResolvedValue(undefined),
+        } as unknown as AuditService,
+        new DrawdownService({} as PrismaService),
+      );
+
+      await actualService.updateProfile(
+        USER_ID,
+        { accountBalance: 9800, maxMonthlyDrawdownPct: 5 },
+        CURRENCY,
+      );
+
+      // The top-up reduces the current drawdown from 10% to 2%, so the raised
+      // 5% limit must clear the sticky flag using the row written just before.
+      expect(drawdownRow.accountBalance).toBe(9800);
+      expect(drawdownRow.monthlyBreached).toBe(false);
+      expect(drawdownState.findUnique).toHaveBeenCalledTimes(2);
+    });
+
     it('writes an audit log entry', async () => {
       await service.updateProfile(
         USER_ID,

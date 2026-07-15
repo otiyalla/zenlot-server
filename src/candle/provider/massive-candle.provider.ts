@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosInstance } from 'axios';
 import {
@@ -7,15 +7,15 @@ import {
   CandleSource,
   Timeframe,
 } from '../interface/candle.interface';
-import { toPolygonTicker } from '../util/symbol.util';
+import { toMassiveTicker } from '../util/symbol.util';
 import { timeframeSpec } from '../util/timeframe.util';
 import { sanitizeApiKey } from '../util/api-key.util';
 
-const POLYGON_BASE_URL = 'https://api.polygon.io';
+const MASSIVE_BASE_URL = 'https://api.massive.com';
 const MAX_LIMIT = 50000;
 
-interface PolygonBar {
-  t: number; // epoch ms (bar start)
+interface MassiveBar {
+  t: number;
   o: number;
   h: number;
   l: number;
@@ -23,26 +23,25 @@ interface PolygonBar {
   v?: number;
 }
 
-interface PolygonResponse {
+interface MassiveResponse {
   status?: string;
   error?: string;
   message?: string;
-  results?: PolygonBar[];
+  results?: MassiveBar[];
 }
 
-/** Third fallback candle source: clean REST, ~2yr forex history. */
+/** Third fallback candle source: Massive forex aggregate bars. */
 @Injectable()
-export class PolygonCandleProvider implements CandleProvider {
-  readonly source: CandleSource = 'polygon';
-  private readonly logger = new Logger(PolygonCandleProvider.name);
+export class MassiveCandleProvider implements CandleProvider {
+  readonly source: CandleSource = 'massive';
   private readonly client: AxiosInstance;
   private readonly apiKey?: string;
 
   constructor(private readonly configService: ConfigService) {
     this.apiKey = sanitizeApiKey(
-      this.configService.get<string>('POLYGON_API_KEY'),
+      this.configService.get<string>('MASSIVE_API_KEY'),
     );
-    this.client = axios.create({ baseURL: POLYGON_BASE_URL, method: 'get' });
+    this.client = axios.create({ baseURL: MASSIVE_BASE_URL, method: 'get' });
   }
 
   isConfigured(): boolean {
@@ -56,13 +55,13 @@ export class PolygonCandleProvider implements CandleProvider {
     to: number,
   ): Promise<Candle[]> {
     if (!this.apiKey) {
-      throw new Error('POLYGON_API_KEY is not configured');
+      throw new Error('MASSIVE_API_KEY is not configured');
     }
 
-    const ticker = toPolygonTicker(pair);
-    const { multiplier, timespan } = timeframeSpec(timeframe).polygon;
+    const ticker = toMassiveTicker(pair);
+    const { multiplier, timespan } = timeframeSpec(timeframe).massive;
 
-    const { data } = await this.client<PolygonResponse>({
+    const { data } = await this.client<MassiveResponse>({
       url: `/v2/aggs/ticker/${ticker}/range/${multiplier}/${timespan}/${from}/${to}`,
       params: {
         adjusted: true,
@@ -74,19 +73,18 @@ export class PolygonCandleProvider implements CandleProvider {
 
     if (data.status === 'ERROR') {
       throw new Error(
-        data.error ?? data.message ?? `Polygon request failed for ${ticker}`,
+        data.error ?? data.message ?? `Massive request failed for ${ticker}`,
       );
     }
 
-    const results = data.results ?? [];
-    return results
-      .map((bar) => parseBar(bar))
+    return (data.results ?? [])
+      .map(parseBar)
       .filter((bar): bar is Candle => bar !== null)
       .sort((a, b) => a.ts - b.ts);
   }
 }
 
-function parseBar(bar: PolygonBar): Candle | null {
+function parseBar(bar: MassiveBar): Candle | null {
   const { t: ts, o: open, h: high, l: low, c: close } = bar;
   if (![ts, open, high, low, close].every(Number.isFinite)) {
     return null;

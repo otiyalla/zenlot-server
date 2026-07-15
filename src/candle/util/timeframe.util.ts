@@ -11,8 +11,8 @@ export interface TimeframeSpec {
   twelveData: string;
   /** OANDA `granularity` value. */
   oanda: string;
-  /** Polygon aggregate `multiplier` + `timespan`. */
-  polygon: { multiplier: number; timespan: 'minute' | 'hour' | 'day' };
+  /** Massive aggregate `multiplier` + `timespan`. */
+  massive: { multiplier: number; timespan: 'minute' | 'hour' | 'day' };
 }
 
 const MINUTE = 60 * 1000;
@@ -24,25 +24,25 @@ export const TIMEFRAME_SPECS: Record<Timeframe, TimeframeSpec> = {
     durationMs: 15 * MINUTE,
     twelveData: '15min',
     oanda: 'M15',
-    polygon: { multiplier: 15, timespan: 'minute' },
+    massive: { multiplier: 15, timespan: 'minute' },
   },
   H1: {
     durationMs: HOUR,
     twelveData: '1h',
     oanda: 'H1',
-    polygon: { multiplier: 1, timespan: 'hour' },
+    massive: { multiplier: 1, timespan: 'hour' },
   },
   H4: {
     durationMs: 4 * HOUR,
     twelveData: '4h',
     oanda: 'H4',
-    polygon: { multiplier: 4, timespan: 'hour' },
+    massive: { multiplier: 4, timespan: 'hour' },
   },
   D1: {
     durationMs: DAY,
     twelveData: '1day',
     oanda: 'D',
-    polygon: { multiplier: 1, timespan: 'day' },
+    massive: { multiplier: 1, timespan: 'day' },
   },
 };
 

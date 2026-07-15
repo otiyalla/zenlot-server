@@ -396,7 +396,7 @@ model tradeVerdict {
 // first viewer of a pair/timeframe pays the upstream API cost, everyone after
 // reads from here. Plain Postgres (no TimescaleDB) — the PK + DESC index serve
 // the chart-window range queries and gap-detection MIN/MAX scans directly.
-// `source` records which upstream provider supplied the bar (twelvedata|oanda|polygon).
+// `source` records which upstream provider supplied the bar (twelvedata|oanda|massive).
 model candle {
   pair      String // canonical 6-char symbol, e.g. "EURUSD"
   timeframe String // "M15" | "H1" | "H4" | "D1"

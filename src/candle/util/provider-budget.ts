@@ -18,9 +18,9 @@ interface BudgetState {
 
 /** Conservative free-tier daily ceilings; 0 = effectively uncapped (per-day). */
 const DAILY_BUDGET: Record<CandleSource, number> = {
+  massive: 0,
   twelvedata: 800,
   oanda: 0,
-  polygon: 0,
 };
 
 const RATE_LIMIT_COOLDOWN_MS = 60 * 1000;

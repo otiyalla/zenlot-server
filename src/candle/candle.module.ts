@@ -5,7 +5,7 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { AuthModule } from '../auth/auth.module';
 import { TwelveDataCandleProvider } from './provider/twelvedata-candle.provider';
 import { OandaCandleProvider } from './provider/oanda-candle.provider';
-import { PolygonCandleProvider } from './provider/polygon-candle.provider';
+import { MassiveCandleProvider } from './provider/massive-candle.provider';
 import { CANDLE_PROVIDERS, CandleProvider } from './interface/candle.interface';
 import { CandleLiveService } from './candle-live.service';
 import { CandleGateway } from './candle.gateway';
@@ -16,20 +16,20 @@ import { CandleGateway } from './candle.gateway';
   providers: [
     TwelveDataCandleProvider,
     OandaCandleProvider,
-    PolygonCandleProvider,
+    MassiveCandleProvider,
     {
-      // Ordered fallback chain: TwelveData (primary) -> OANDA -> Polygon.
+      // Ordered fallback chain: Massive (primary) -> TwelveData -> OANDA.
       provide: CANDLE_PROVIDERS,
       inject: [
         TwelveDataCandleProvider,
         OandaCandleProvider,
-        PolygonCandleProvider,
+        MassiveCandleProvider,
       ],
       useFactory: (
         twelveData: TwelveDataCandleProvider,
         oanda: OandaCandleProvider,
-        polygon: PolygonCandleProvider,
-      ): CandleProvider[] => [twelveData, oanda, polygon],
+        massive: MassiveCandleProvider,
+      ): CandleProvider[] => [massive, twelveData, oanda],
     },
     CandleService,
     CandleLiveService,
