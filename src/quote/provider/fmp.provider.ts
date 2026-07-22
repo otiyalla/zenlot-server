@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosInstance } from 'axios';
 import { Currencies, FxQuote } from '../interface/quote.interface';
+import { sanitizeApiKey } from '../../candle/util/api-key.util';
 
 const FMP_BASE_URL = 'https://financialmodelingprep.com/stable';
 
@@ -27,7 +28,7 @@ export class FmpClient implements FxQuote {
 
   private initializeClient(): void {
     const rawApiKey = this.configService.get<string>('FMP_API_KEY');
-    this.apiKey = this.sanitizeApiKey(rawApiKey);
+    this.apiKey = sanitizeApiKey(rawApiKey);
 
     if (!this.apiKey) {
       this.logger.warn('FMP api key is required.');
@@ -38,20 +39,6 @@ export class FmpClient implements FxQuote {
       baseURL: FMP_BASE_URL,
       method: 'get',
     });
-  }
-
-  private sanitizeApiKey(rawApiKey?: string): string | undefined {
-    if (!rawApiKey) {
-      return undefined;
-    }
-
-    const sanitized = rawApiKey
-      .trim()
-      .replace(/^['"]|['"]$/g, '')
-      .replace(/;+\s*$/g, '')
-      .trim();
-
-    return sanitized || undefined;
   }
 
   private parseSymbols(symbols: Currencies | string): ParsedCurrencies {
