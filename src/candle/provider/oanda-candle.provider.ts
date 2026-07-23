@@ -47,6 +47,7 @@ export class OandaCandleProvider implements CandleProvider {
     this.client = axios.create({
       baseURL: live ? OANDA_LIVE_URL : OANDA_PRACTICE_URL,
       method: 'get',
+      timeout: 10_000,
     });
   }
 

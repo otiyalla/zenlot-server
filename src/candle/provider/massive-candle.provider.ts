@@ -41,7 +41,11 @@ export class MassiveCandleProvider implements CandleProvider {
     this.apiKey = sanitizeApiKey(
       this.configService.get<string>('MASSIVE_API_KEY'),
     );
-    this.client = axios.create({ baseURL: MASSIVE_BASE_URL, method: 'get' });
+    this.client = axios.create({
+      baseURL: MASSIVE_BASE_URL,
+      method: 'get',
+      timeout: 10_000,
+    });
   }
 
   isConfigured(): boolean {
