@@ -148,6 +148,61 @@ export class DrawdownService {
   }
 
   /**
+   * Re-evaluates the sticky circuit-breaker flags against changed drawdown
+   * limits (spec Section 14). Called when the user edits their risk profile:
+   * a breach flag is set at close time relative to the *then-current* limit and
+   * stays sticky until the period reset, so raising a limit would otherwise leave
+   * a trade blocked by a breach that no longer applies (SCRUM-53). For each limit
+   * supplied, the flag is recomputed as "current period drawdown ≥ new limit" —
+   * the same comparison governance uses — so the block always reflects the user's
+   * current limits: raising a limit clears a stale breach, lowering one below the
+   * current drawdown re-arms it. Only the periods whose limit actually changed are
+   * touched; a missing drawdown row means no breach has been recorded yet, so
+   * there is nothing to reconcile. Runs inside the caller's transaction so the
+   * profile and breach flags move atomically.
+   */
+  async reconcileBreachFlags(
+    db: Db,
+    userId: string,
+    limits: {
+      maxDailyDrawdownPct?: number;
+      maxWeeklyDrawdownPct?: number;
+      maxMonthlyDrawdownPct?: number;
+    },
+  ): Promise<void> {
+    const { maxDailyDrawdownPct, maxWeeklyDrawdownPct, maxMonthlyDrawdownPct } =
+      limits;
+    if (
+      maxDailyDrawdownPct === undefined &&
+      maxWeeklyDrawdownPct === undefined &&
+      maxMonthlyDrawdownPct === undefined
+    ) {
+      return;
+    }
+
+    const existing = await db.drawdownState.findUnique({ where: { userId } });
+    if (!existing) return;
+
+    const dd = calculateDrawdown(
+      toNumber(existing.accountBalance),
+      toNumber(existing.dailyOpenBalance),
+      toNumber(existing.weeklyOpenBalance),
+      toNumber(existing.monthlyOpenBalance),
+      toNumber(existing.peakBalance),
+    );
+
+    const data: Prisma.drawdownStateUpdateInput = {};
+    if (maxDailyDrawdownPct !== undefined)
+      data.dailyBreached = dd.daily >= maxDailyDrawdownPct;
+    if (maxWeeklyDrawdownPct !== undefined)
+      data.weeklyBreached = dd.weekly >= maxWeeklyDrawdownPct;
+    if (maxMonthlyDrawdownPct !== undefined)
+      data.monthlyBreached = dd.monthly >= maxMonthlyDrawdownPct;
+
+    await db.drawdownState.update({ where: { userId }, data });
+  }
+
+  /**
    * Reconciles the drawdown row to a manually-set account balance (spec §11.2).
    * Unlike {@link applyBalanceDelta} (a realized-PnL increment), this is an
    * absolute "my real balance is now X" assertion from the Risk Profile screen,

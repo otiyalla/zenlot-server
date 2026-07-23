@@ -35,7 +35,7 @@ export function toOandaInstrument(pair: string): string {
   return `${base}_${quote}`;
 }
 
-/** Polygon.io forex tickers are prefixed with "C:" — "C:EURUSD". */
-export function toPolygonTicker(pair: string): string {
+/** Massive forex tickers are prefixed with "C:" — "C:EURUSD". */
+export function toMassiveTicker(pair: string): string {
   return `C:${pair}`;
 }

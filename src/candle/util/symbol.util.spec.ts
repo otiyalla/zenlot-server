@@ -2,7 +2,7 @@ import {
   normalizePair,
   parsePair,
   toOandaInstrument,
-  toPolygonTicker,
+  toMassiveTicker,
   toTwelveDataSymbol,
 } from './symbol.util';
 
@@ -25,6 +25,6 @@ describe('symbol util', () => {
   it('formats per provider', () => {
     expect(toTwelveDataSymbol('EURUSD')).toBe('EUR/USD');
     expect(toOandaInstrument('EURUSD')).toBe('EUR_USD');
-    expect(toPolygonTicker('EURUSD')).toBe('C:EURUSD');
+    expect(toMassiveTicker('EURUSD')).toBe('C:EURUSD');
   });
 });
