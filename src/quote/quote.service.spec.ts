@@ -84,6 +84,41 @@ describe('QuoteService', () => {
     expect(fxQuote.fxRate).toHaveBeenCalledTimes(1);
   });
 
+  it('serves one stale cachedFxRate to concurrent callers when refresh fails', async () => {
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(0);
+    fxQuote.fxRate.mockResolvedValueOnce({ price: 1.25 });
+
+    await service.cachedFxRate({ base: 'USD', quote: 'EUR' });
+
+    nowSpy.mockReturnValue(5 * 60 * 1000 + 1);
+    let rejectRefresh!: (error: Error) => void;
+    fxQuote.fxRate.mockReturnValueOnce(
+      new Promise((_, reject) => {
+        rejectRefresh = reject;
+      }),
+    );
+
+    const first = service.cachedFxRate({ base: 'USD', quote: 'EUR' });
+    const second = service.cachedFxRate({ base: 'USD', quote: 'EUR' });
+    rejectRefresh(new Error('provider unavailable'));
+
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      { price: 1.25 },
+      { price: 1.25 },
+    ]);
+    expect(fxQuote.fxRate).toHaveBeenCalledTimes(2);
+
+    nowSpy.mockRestore();
+  });
+
+  it('propagates cachedFxRate failures when no cached rate exists', async () => {
+    fxQuote.fxRate.mockRejectedValueOnce(new Error('provider unavailable'));
+
+    await expect(
+      service.cachedFxRate({ base: 'USD', quote: 'EUR' }),
+    ).rejects.toThrow('provider unavailable');
+  });
+
   it('does not cache fxRate — the entry-quote path always re-fetches', async () => {
     fxQuote.fxRate.mockResolvedValue({ price: 1.5 });
 

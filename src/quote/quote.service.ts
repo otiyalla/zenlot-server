@@ -39,8 +39,14 @@ export class QuoteService {
    * governance sizes on in sync. The one-shot entry quote (get-quote) and live
    * auto-close monitoring deliberately bypass this and call fxRate() directly.
    */
-  private readonly fxRateCache = new Map<string, { price: number; at: number }>();
-  private readonly fxRateInflight = new Map<string, Promise<{ price: number }>>();
+  private readonly fxRateCache = new Map<
+    string,
+    { price: number; at: number }
+  >();
+  private readonly fxRateInflight = new Map<
+    string,
+    Promise<{ price: number }>
+  >();
   private static readonly FX_RATE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
   server: Server;
@@ -235,6 +241,11 @@ export class QuoteService {
         const result = await this.fxRate(symbol);
         this.fxRateCache.set(key, { price: result.price, at: Date.now() });
         return result;
+      } catch (error) {
+        // Keep the risk engine available during a provider outage by serving
+        // the last-known rate. A cold-cache failure must still reach the caller.
+        if (cached) return { price: cached.price };
+        throw error;
       } finally {
         this.fxRateInflight.delete(key);
       }
