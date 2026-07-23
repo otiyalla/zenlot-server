@@ -11,6 +11,7 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { TradeService } from './trade.service';
+import { TradeLogService } from '../risk/trade-log.service';
 import { CreateTradeDto } from './dto/create-trade.dto';
 import { UpdateTradeDto } from './dto/update-trade.dto';
 import { DateRangeDto } from './dto/date-range.dto';
@@ -33,7 +34,10 @@ import {
 @ApiSecurity('access-token')
 @Controller('trade')
 export class TradeController {
-  constructor(private readonly tradeService: TradeService) {}
+  constructor(
+    private readonly tradeService: TradeService,
+    private readonly tradeLogService: TradeLogService,
+  ) {}
 
   /**
    * @swagger
@@ -293,6 +297,9 @@ export class TradeController {
     @Param('id', ParseUUIDPipe) id: string,
     @Request() req: AuthenticatedRequest,
   ) {
-    return this.tradeService.removeForUser(id, req.user.id);
+    // Delegates to the risk module so a delete reverses any settled realized PnL
+    // (keeping the circuit breaker correct). Response shape `{ deleted: true }`
+    // is preserved.
+    return this.tradeLogService.deleteTrade(req.user.id, id);
   }
 }

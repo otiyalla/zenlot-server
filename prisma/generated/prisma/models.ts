@@ -9,6 +9,9 @@
  * 🟢 You can import this file directly.
  */
 export type * from './models/trade'
+export type * from './models/riskProfile'
+export type * from './models/drawdownState'
+export type * from './models/governanceLog'
 export type * from './models/journal'
 export type * from './models/user'
 export type * from './models/RefreshToken'

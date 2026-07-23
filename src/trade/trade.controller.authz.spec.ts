@@ -1,5 +1,6 @@
 import { TradeController } from './trade.controller';
 import { TradeService } from './trade.service';
+import { TradeLogService } from '../risk/trade-log.service';
 import { AuthenticatedRequest } from '../user/interfaces/authenticated-request.interface';
 
 describe('TradeController authorization', () => {
@@ -16,7 +17,11 @@ describe('TradeController authorization', () => {
     removeForUser: jest.fn(),
   } as unknown as TradeService;
 
-  const controller = new TradeController(tradeService);
+  const tradeLogService = {
+    deleteTrade: jest.fn(),
+  } as unknown as TradeLogService;
+
+  const controller = new TradeController(tradeService, tradeLogService);
   const req = { user: { id: 'owner-1' } } as unknown as AuthenticatedRequest;
 
   beforeEach(() => jest.clearAllMocks());
@@ -46,5 +51,14 @@ describe('TradeController authorization', () => {
     expect(query.userId).toBe('owner-1');
     // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(tradeService.findAll).toHaveBeenCalledWith(query);
+  });
+
+  it('delegates delete to the risk module with the request user id', async () => {
+    await controller.remove('trade-123', req);
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    expect(tradeLogService.deleteTrade).toHaveBeenCalledWith(
+      'owner-1',
+      'trade-123',
+    );
   });
 });

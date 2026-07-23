@@ -5,6 +5,9 @@ import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
 import { QuoteGateway } from '../quote/quote.gateway';
 import { QuoteService } from '../quote/quote.service';
+import { DrawdownService } from '../risk/drawdown.service';
+import { calculatePnL, calculateRMultiple } from '../risk/engine';
+import { executionToDirection } from '../risk/risk.mapper';
 
 export const TRADE_AUTO_CLOSE_QUEUE = 'trade-auto-close';
 export const SCAN_OPEN_TRADES_JOB = 'scan-open-trades';
@@ -19,6 +22,8 @@ interface StoredTrade {
   userId: string;
   symbol: string;
   execution: string;
+  entry: number;
+  lot: number;
   accountCurrency: string;
   exchangeRate: number;
   stopLoss: unknown;
@@ -46,6 +51,7 @@ export class TradeAutoCloseService implements OnModuleInit {
     private readonly prisma: PrismaService,
     private readonly quoteService: QuoteService,
     private readonly quoteGateway: QuoteGateway,
+    private readonly drawdownService: DrawdownService,
     @InjectQueue(TRADE_AUTO_CLOSE_QUEUE)
     private readonly autoCloseQueue: Queue,
   ) {}
@@ -191,19 +197,50 @@ export class TradeAutoCloseService implements OnModuleInit {
     trigger: Trigger,
   ): Promise<void> {
     const closedExchangeRate = await this.getClosedExchangeRate(trade);
-    const { count } = await this.prisma.trade.updateMany({
-      where: { id: trade.id, status: 'open' },
-      data: {
-        closedAt: new Date(),
-        closedPrice: trigger.price,
-        closedReason: trigger.reason,
-        closedExchangeRate,
-        isAutoClosed: true,
-        status: trigger.status,
-      },
+    const direction = executionToDirection(trade.execution);
+    const pnl = calculatePnL({
+      symbol: trade.symbol,
+      entryPrice: trade.entry,
+      exitPrice: trigger.price,
+      lotSize: trade.lot,
+      direction,
+      exchangeRate: closedExchangeRate,
+    });
+    // calculateRMultiple throws when entry === stop; tolerate that in the job.
+    const rMultiple =
+      trade.entry !== trade.stopLossValue
+        ? calculateRMultiple(
+            trade.entry,
+            trigger.price,
+            trade.stopLossValue,
+            direction,
+          )
+        : null;
+
+    const settled = await this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.trade.updateMany({
+        where: { id: trade.id, status: 'open' },
+        data: {
+          closedAt: new Date(),
+          closedPrice: trigger.price,
+          closedReason: trigger.reason,
+          closedExchangeRate,
+          isAutoClosed: true,
+          status: trigger.status,
+          pnl,
+          rMultiple,
+        },
+      });
+      if (count === 0) {
+        return false;
+      }
+      // Reflect the realized PnL on the account balance + drawdown (no-op if the
+      // user has no risk profile). Atomic with the trade close.
+      await this.drawdownService.settleRealizedPnL(tx, trade.userId, pnl);
+      return true;
     });
 
-    if (count === 0) {
+    if (!settled) {
       return;
     }
 

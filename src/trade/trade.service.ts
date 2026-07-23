@@ -6,11 +6,30 @@ import { SymbolDateRangeDto } from './dto/symbol-date-range.dto';
 import { MultiTradeDto } from './dto/multiple-properties.dto';
 import { SearchTradeDto } from './dto/search-trade.dto';
 import { PrismaService } from '../prisma/prisma.service';
-import { Prisma } from '../../prisma/generated/prisma/client';
+import { Prisma, trade } from '../../prisma/generated/prisma/client';
+import { RiskCalculationService } from '../risk/risk-calculation.service';
+
+/**
+ * Fields whose change alters a trade's capital exposure or reward sizing, so a
+ * change to any of them on an *open* trade requires the risk figures
+ * (`capitalExposure`/`capitalExposurePct`/`rr`/`risk`/`reward`) to be recomputed
+ * — otherwise the portfolio exposure snapshot keeps summing stale numbers.
+ */
+const RISK_AFFECTING_FIELDS = [
+  'entry',
+  'stopLoss',
+  'takeProfit',
+  'lot',
+  'execution',
+  'symbol',
+] as const;
 
 @Injectable()
 export class TradeService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly riskCalculation: RiskCalculationService,
+  ) {}
 
   async create(createTradeDto: CreateTradeDto) {
     const data = {
@@ -21,6 +40,10 @@ export class TradeService {
       takeProfit: JSON.parse(
         JSON.stringify(createTradeDto.takeProfit),
       ) as Prisma.InputJsonValue,
+      // `isAutoClosed` is server-controlled: the client always submits the
+      // default `false`, and only the auto-close job ever sets it true. Force it
+      // here so a client cannot create an already-auto-closed trade.
+      isAutoClosed: false,
     };
     return this.prisma.trade.create({ data });
   }
@@ -203,21 +226,31 @@ export class TradeService {
     });
   }
 
-  async update(id: string, updateTradeDto: UpdateTradeDto) {
-    // Remove read-only fields that shouldn't be updated
+  async update(
+    id: string,
+    updateTradeDto: UpdateTradeDto,
+    riskPatch?: Prisma.tradeUpdateInput,
+  ) {
+    // Remove read-only / server-controlled fields that clients cannot set.
+    // `isAutoClosed` is owned by the auto-close job (which updates it directly),
+    // never by a client request.
     const {
       id: _,
       createdAt,
       updatedAt,
       userId,
+      isAutoClosed: _isAutoClosed,
       ...updateData
     } = updateTradeDto;
 
-    // Build the data object, only including defined (non-undefined) fields
+    // Build the data object, only including defined (non-undefined) fields.
+    // `riskPatch` (server-recomputed exposure/sizing) is applied last so it wins
+    // over the client-sent stop/target/lot values it derives from.
     const data: Prisma.tradeUpdateInput = {
       ...updateData,
       stopLoss: updateData.stopLoss as unknown as Prisma.InputJsonValue,
       takeProfit: updateData.takeProfit as unknown as Prisma.InputJsonValue,
+      ...(riskPatch ?? {}),
     };
     return this.prisma.trade.update({ where: { id }, data });
   }
@@ -227,8 +260,100 @@ export class TradeService {
     userId: string,
     updateTradeDto: UpdateTradeDto,
   ) {
-    await this.findOneForUser(id, userId);
-    return this.update(id, updateTradeDto);
+    const existing = await this.findOneForUser(id, userId);
+    const riskPatch = await this.buildRiskRecompute(
+      userId,
+      existing,
+      updateTradeDto,
+    );
+    return this.update(id, updateTradeDto, riskPatch ?? undefined);
+  }
+
+  /**
+   * When an open, risk-engine-tracked trade has its entry / stop / target / lot
+   * (or execution / symbol) edited, re-size it server-side so its stored capital
+   * exposure stays accurate. The portfolio exposure snapshot
+   * ({@link PortfolioService.getSnapshot}) sums each open trade's stored
+   * `capitalExposure`/`capitalExposurePct`; without this recompute those figures
+   * go stale on edit and the snapshot reports wrong exposure.
+   *
+   * Returns `null` (no recompute) when the edit can't or shouldn't change
+   * exposure:
+   *  - the trade is not (or is no longer) `open` — the snapshot only reads open
+   *    trades, so a closed trade's exposure is historical;
+   *  - no exposure-affecting field changed;
+   *  - the trade predates the risk engine (`capitalExposurePct` is null) and so
+   *    never contributed to exposure;
+   *  - sizing fails (e.g. the account balance is unset) — a derived recompute
+   *    must never block the primary edit.
+   */
+  private async buildRiskRecompute(
+    userId: string,
+    existing: trade,
+    dto: UpdateTradeDto,
+  ): Promise<Prisma.tradeUpdateInput | null> {
+    const finalStatus = dto.status ?? existing.status;
+    if (finalStatus !== 'open') return null;
+    if (existing.capitalExposurePct === null) return null;
+
+    const changed = RISK_AFFECTING_FIELDS.some(
+      (field) => dto[field] !== undefined,
+    );
+    if (!changed) return null;
+
+    const existingStop = existing.stopLoss as unknown as { value: number };
+    const existingTarget = existing.takeProfit as unknown as { value: number };
+
+    const entry = dto.entry ?? existing.entry;
+    const stopPrice = dto.stopLoss?.value ?? existingStop.value;
+    const rawTarget = dto.takeProfit?.value ?? existingTarget.value;
+    const lot = dto.lot ?? existing.lot;
+    const execution = (dto.execution ?? existing.execution) as 'buy' | 'sell';
+    const symbol = dto.symbol ?? existing.symbol;
+
+    try {
+      const { calculation } = await this.riskCalculation.calculate(
+        userId,
+        existing.accountCurrency,
+        {
+          symbol,
+          execution,
+          entry,
+          stopPrice,
+          // The engine treats a non-positive target as "no target".
+          targetPrice: rawTarget > 0 ? rawTarget : undefined,
+          lot: lot > 0 ? lot : undefined,
+        },
+      );
+
+      const reward =
+        calculation.rewardPips !== null && calculation.rewardToRisk !== null
+          ? calculation.actualCapitalExposure * calculation.rewardToRisk
+          : 0;
+
+      return {
+        lot: calculation.lotSizeRounded,
+        exchangeRate: calculation.exchangeRate,
+        rr: calculation.rewardToRisk ?? 0,
+        risk: calculation.actualCapitalExposure,
+        reward,
+        capitalExposure: calculation.actualCapitalExposure,
+        capitalExposurePct: calculation.capitalExposurePct,
+        // Keep the persisted stop/target pips consistent with the recompute.
+        stopLoss: {
+          value: calculation.stopPrice,
+          pips: calculation.stopDistancePips,
+        } as unknown as Prisma.InputJsonValue,
+        takeProfit: {
+          value: calculation.targetPrice ?? 0,
+          pips: calculation.rewardPips ?? 0,
+        } as unknown as Prisma.InputJsonValue,
+      };
+    } catch {
+      // Sizing failed (e.g. account balance unset). Leave the stored exposure
+      // untouched rather than failing the edit the user actually requested.
+      return null;
+    }
   }
 
   async remove(id: string) {

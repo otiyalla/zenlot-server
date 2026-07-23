@@ -8,6 +8,7 @@ import {
   IsIn,
   IsPositive,
   Matches,
+  IsBoolean,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
@@ -124,4 +125,9 @@ export class CreateTradeDto {
   @IsString({ each: true })
   @ApiProperty({ description: 'The trade tags' })
   tags: string[];
+
+  @IsBoolean()
+  @IsOptional()
+  @ApiProperty({ description: 'Whether the trade is auto closed' })
+  isAutoClosed: boolean;
 }

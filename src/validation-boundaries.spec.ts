@@ -1,5 +1,5 @@
 import { plainToInstance } from 'class-transformer';
-import { BadRequestException, ValidationPipe } from '@nestjs/common';
+import { ValidationPipe } from '@nestjs/common';
 import { validate } from 'class-validator';
 import { SignInDto } from './auth/dto/auth.dto';
 import { CreateFeedbackDto } from './feedback/dto/create-feedback.dto';
@@ -72,7 +72,7 @@ describe('Request validation boundaries', () => {
     expect(await validate(dto)).not.toHaveLength(0);
   });
 
-  it('rejects client-controlled auto-close metadata on trade creation', async () => {
+  it('accepts the default isAutoClosed flag (server forces it false on create)', async () => {
     const validationPipe = new ValidationPipe({
       whitelist: true,
       forbidNonWhitelisted: true,
@@ -80,30 +80,15 @@ describe('Request validation boundaries', () => {
       transformOptions: { enableImplicitConversion: true },
     });
 
-    await validationPipe
-      .transform(
-        {
-          ...validTradePayload,
-          isAutoClosed: true,
-        },
-        { type: 'body', metatype: CreateTradeDto },
-      )
-      .then(
-        () => {
-          throw new Error('Expected trade validation to reject isAutoClosed');
-        },
-        (error: unknown) => {
-          expect(error).toBeInstanceOf(BadRequestException);
-
-          const response = (error as BadRequestException).getResponse();
-          if (typeof response !== 'object' || response === null) {
-            throw new Error('Expected validation error response object');
-          }
-
-          const message = (response as { message?: unknown }).message;
-          expect(message).toContain('property isAutoClosed should not exist');
-        },
-      );
+    // The client always submits isAutoClosed with its default `false`, so the
+    // DTO whitelists it (the request is not rejected). The server controls the
+    // real value: TradeService.create forces it to false, so a client cannot
+    // persist isAutoClosed=true (covered in trade.service.spec.ts).
+    const result = (await validationPipe.transform(
+      { ...validTradePayload, isAutoClosed: false },
+      { type: 'body', metatype: CreateTradeDto },
+    )) as { isAutoClosed?: boolean };
+    expect(result.isAutoClosed).toBe(false);
   });
 
   it('allows journal content columns to be omitted as in the Prisma model', async () => {

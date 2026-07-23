@@ -52,6 +52,9 @@ export const AnyNull = runtime.AnyNull
 
 export const ModelName = {
   trade: 'trade',
+  riskProfile: 'riskProfile',
+  drawdownState: 'drawdownState',
+  governanceLog: 'governanceLog',
   journal: 'journal',
   user: 'user',
   RefreshToken: 'RefreshToken',
@@ -99,11 +102,76 @@ export const TradeScalarFieldEnum = {
   closedExchangeRate: 'closedExchangeRate',
   closedReason: 'closedReason',
   isAutoClosed: 'isAutoClosed',
+  capitalExposure: 'capitalExposure',
+  capitalExposurePct: 'capitalExposurePct',
+  governanceStatus: 'governanceStatus',
+  overridden: 'overridden',
+  pnl: 'pnl',
+  rMultiple: 'rMultiple',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const
 
 export type TradeScalarFieldEnum = (typeof TradeScalarFieldEnum)[keyof typeof TradeScalarFieldEnum]
+
+
+export const RiskProfileScalarFieldEnum = {
+  userId: 'userId',
+  maxRiskPerTradePct: 'maxRiskPerTradePct',
+  maxPortfolioExposurePct: 'maxPortfolioExposurePct',
+  maxDailyDrawdownPct: 'maxDailyDrawdownPct',
+  maxWeeklyDrawdownPct: 'maxWeeklyDrawdownPct',
+  maxMonthlyDrawdownPct: 'maxMonthlyDrawdownPct',
+  maxOpenTrades: 'maxOpenTrades',
+  maxCorrelatedExposure: 'maxCorrelatedExposure',
+  accountBalance: 'accountBalance',
+  lastBalanceSetAt: 'lastBalanceSetAt',
+  lastBalanceSource: 'lastBalanceSource',
+  overrideMode: 'overrideMode',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type RiskProfileScalarFieldEnum = (typeof RiskProfileScalarFieldEnum)[keyof typeof RiskProfileScalarFieldEnum]
+
+
+export const DrawdownStateScalarFieldEnum = {
+  userId: 'userId',
+  accountBalance: 'accountBalance',
+  peakBalance: 'peakBalance',
+  dailyOpenBalance: 'dailyOpenBalance',
+  weeklyOpenBalance: 'weeklyOpenBalance',
+  monthlyOpenBalance: 'monthlyOpenBalance',
+  dailyDrawdownPct: 'dailyDrawdownPct',
+  weeklyDrawdownPct: 'weeklyDrawdownPct',
+  monthlyDrawdownPct: 'monthlyDrawdownPct',
+  allTimeDrawdownPct: 'allTimeDrawdownPct',
+  dailyBreached: 'dailyBreached',
+  weeklyBreached: 'weeklyBreached',
+  monthlyBreached: 'monthlyBreached',
+  lastResetLocalDate: 'lastResetLocalDate',
+  updatedAt: 'updatedAt',
+  createdAt: 'createdAt'
+} as const
+
+export type DrawdownStateScalarFieldEnum = (typeof DrawdownStateScalarFieldEnum)[keyof typeof DrawdownStateScalarFieldEnum]
+
+
+export const GovernanceLogScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  tradeId: 'tradeId',
+  overallStatus: 'overallStatus',
+  checksJson: 'checksJson',
+  blockedReason: 'blockedReason',
+  acknowledged: 'acknowledged',
+  acknowledgedRules: 'acknowledgedRules',
+  overrideReason: 'overrideReason',
+  aiCoaching: 'aiCoaching',
+  createdAt: 'createdAt'
+} as const
+
+export type GovernanceLogScalarFieldEnum = (typeof GovernanceLogScalarFieldEnum)[keyof typeof GovernanceLogScalarFieldEnum]
 
 
 export const JournalScalarFieldEnum = {

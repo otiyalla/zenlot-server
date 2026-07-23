@@ -1,4 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import * as Sentry from '@sentry/nestjs';
 import { InjectQueue } from '@nestjs/bullmq';
 import { ConfigService } from '@nestjs/config';
@@ -9,7 +14,7 @@ import { QuoteService } from 'src/quote/quote.service';
 import { CreatePriceFeedDto } from './dto/create-price-feed.dto';
 
 @Injectable()
-export class PriceFeedService {
+export class PriceFeedService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PriceFeedService.name);
   private subscriber: Redis;
   constructor(
@@ -39,6 +44,13 @@ export class PriceFeedService {
       lazyConnect: true,
       commandTimeout: 10000,
     });
+
+    this.subscriber.on('error', (error) => {
+      this.logger.error('Redis subscriber error', error);
+      Sentry.captureException(error, {
+        extra: { context: 'PriceFeedService.subscriber' },
+      });
+    });
   }
 
   // Add a new price feed job to the queue
@@ -58,8 +70,19 @@ export class PriceFeedService {
     return this.quoteService.search(query);
   }
 
-  async onModuleInit() {
-    await this.subscriber.subscribe('price-feed');
+  private async subscribeToPriceFeed() {
+    try {
+      await this.subscriber.subscribe('price-feed');
+      this.logger.log('Subscribed to Redis price feed');
+    } catch (error) {
+      this.logger.error('Failed to subscribe to Redis price feed', error);
+      Sentry.captureException(error, {
+        extra: { context: 'PriceFeedService.subscribeToPriceFeed' },
+      });
+    }
+  }
+
+  onModuleInit() {
     this.subscriber.on('message', (channel, message) => {
       if (channel === 'price-feed') {
         try {
@@ -73,10 +96,21 @@ export class PriceFeedService {
         }
       }
     });
+
+    this.subscriber.on('ready', () => {
+      void this.subscribeToPriceFeed();
+    });
+
+    void this.subscriber.connect().catch((error: unknown) => {
+      this.logger.error('Failed to connect Redis subscriber', error);
+      Sentry.captureException(error, {
+        extra: { context: 'PriceFeedService.onModuleInit' },
+      });
+    });
   }
 
-  async onModuleDestroy() {
-    await this.subscriber.quit();
+  onModuleDestroy() {
+    this.subscriber.disconnect();
     this.logger.log('Redis subscriber disconnected');
   }
 }

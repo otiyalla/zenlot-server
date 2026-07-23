@@ -47,6 +47,7 @@
     "sentry:sourcemaps:optional": "sh -c 'if [ -n \"${SENTRY_AUTH_TOKEN:-}\" ]; then yarn sentry:sourcemaps; else echo \"Skipping Sentry sourcemap upload\"; fi'"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.104.1",
     "@fastify/helmet": "^13.0.1",
     "@fastify/rate-limit": "^10.3.0",
     "@fastify/static": "^8.2.0",
@@ -78,6 +79,7 @@
     "ioredis": "^5.3.3",
     "mixpanel": "^0.18.1",
     "nodemailer": "^7.0.12",
+    "openai": "^6.42.0",
     "pg": "^8.17.2",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1"
@@ -110,6 +112,8 @@
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.20.0"
-  }
+    "typescript-eslint": "^8.20.0",
+    "webpack": "^5.0.0"
+  },
+  "packageManager": "yarn@4.16.0"
 }
