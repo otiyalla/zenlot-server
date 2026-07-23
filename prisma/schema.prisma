@@ -168,6 +168,63 @@ model user {
   emailVerified                Boolean         @default(false)
   emailVerificationToken       String?
   emailVerificationTokenExpiry DateTime?
+  pushTokens                   pushToken[]
+  notificationPreference       notificationPreference?
+}
+
+/// An Expo push token for one of a user's devices. A user can have many devices;
+/// each device's Expo token is unique. We store the platform + a device
+/// identifier so a re-registration from the same device updates in place rather
+/// than accumulating stale rows, and an `enabled` flag plus `lastErrorAt` so the
+/// send pipeline can soft-disable tokens that Expo reports as
+/// `DeviceNotRegistered` instead of hard-deleting them immediately.
+model pushToken {
+  id           String    @id @default(uuid())
+  user         user      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  userId       String
+  token        String    @unique
+  platform     String // 'ios' | 'android' | 'web'
+  deviceId     String? // stable per-install id from the client (Device.osBuildId/installationId)
+  deviceName   String?
+  enabled      Boolean   @default(true)
+  lastErrorAt  DateTime?
+  lastError    String?
+  lastUsedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([userId, deviceId])
+  @@index([userId])
+}
+
+/// Per-user notification preferences. One row per user, lazily created with
+/// sensible supportive defaults (all categories on, no quiet hours). Quiet hours
+/// are stored as local "HH:mm" strings and evaluated against the user's IANA
+/// `timezone`, mirroring the drawdown reset's DST-safe local-date approach.
+model notificationPreference {
+  userId           String   @id
+  user             user     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  // Master switch — when false, no push is sent regardless of category toggles.
+  pushEnabled      Boolean  @default(true)
+  tradeClosed      Boolean  @default(true)
+  coachingReady    Boolean  @default(true)
+  drawdownAlerts   Boolean  @default(true)
+  governanceAlerts Boolean  @default(true)
+  journalReminders Boolean  @default(true)
+  // Optional quiet-hours window in the user's local time, "HH:mm" 24h. When both
+  // are set, non-urgent notifications are suppressed inside the window.
+  quietHoursStart  String?
+  quietHoursEnd    String?
+  // The user's local hour (0-23) at which the daily journaling nudge fires.
+  // Null disables it independently of the `journalReminders` toggle (which the
+  // user controls); default 20:00 local is set when the row is created.
+  reminderHour     Int      @default(20)
+  // The local calendar date (YYYY-MM-DD, user's IANA tz) the journaling reminder
+  // last fired. Lets the hourly job send exactly once per local day — DST-safe
+  // and idempotent across retries, mirroring drawdownState.lastResetLocalDate.
+  lastReminderLocalDate String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 }
 
 model RefreshToken {

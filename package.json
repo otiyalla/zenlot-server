@@ -6,6 +6,7 @@
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
+    "prebuild": "prisma generate",
     "build": "nest build",
     "build:with:package": "NODE_OPTIONS=--max_old_space_size=4096 yarn build && yarn copy:env:for:package && yarn copy:prisma && yarn copy:migrations && yarn copy:package && yarn sentry:sourcemaps:optional",
     "copy:env": "cp .env dist/.env",
@@ -74,6 +75,7 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.2",
     "dotenv": "^17.2.3",
+    "expo-server-sdk": "^6.1.0",
     "fastify": "^4.23.2",
     "financialmodelingprep": "^1.1.0",
     "ioredis": "^5.3.3",

@@ -34,7 +34,7 @@ const SYSTEM_PROMPTS: Record<Language, string> = {
     "- Lorsqu'il est approuvé, confirmez-le et mentionnez brièvement les avertissements.",
     "- Traitez un avertissement à 80 % d'une limite comme une information, pas une alerte.",
     '- Utilisez le symbole de la devise du compte du trader.',
-    '- Répondez en texte brut uniquement. N\'utilisez pas de markdown, de titres, d\'astérisques, de backticks ni de puces.',
+    "- Répondez en texte brut uniquement. N'utilisez pas de markdown, de titres, d'astérisques, de backticks ni de puces.",
     'Répondez en français.',
   ].join('\n'),
 };

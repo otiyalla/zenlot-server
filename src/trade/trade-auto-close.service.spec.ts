@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { QuoteGateway } from '../quote/quote.gateway';
 import { QuoteService } from '../quote/quote.service';
 import { DrawdownService } from '../risk/drawdown.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import {
   SCAN_OPEN_TRADES_JOB,
   TRADE_SCAN_INTERVAL_MS,
@@ -63,7 +64,18 @@ describe('TradeAutoCloseService', () => {
           .mockResolvedValue({ ...trades[0], status: 'reached_tp' }),
       },
       $transaction: jest.fn((cb: (tx: unknown) => unknown) =>
-        cb({ trade: { updateMany } }),
+        cb({
+          trade: { updateMany },
+          // The auto-close path snapshots breach flags before/after settlement
+          // to detect newly tripped circuit breakers for a drawdown push.
+          drawdownState: {
+            findUnique: jest.fn().mockResolvedValue({
+              dailyBreached: false,
+              weeklyBreached: false,
+              monthlyBreached: false,
+            }),
+          },
+        }),
       ),
     };
     const quoteService = {
@@ -75,6 +87,10 @@ describe('TradeAutoCloseService', () => {
     const drawdown = {
       settleRealizedPnL: jest.fn().mockResolvedValue(undefined),
     };
+    const notifications = {
+      notifyTradeClosed: jest.fn().mockResolvedValue(undefined),
+      notifyDrawdownBreach: jest.fn().mockResolvedValue(undefined),
+    };
     const queue = {
       add: jest.fn(),
     };
@@ -83,10 +99,19 @@ describe('TradeAutoCloseService', () => {
       quoteService as unknown as QuoteService,
       gateway as unknown as QuoteGateway,
       drawdown as unknown as DrawdownService,
+      notifications as unknown as NotificationsService,
       queue as unknown as Queue,
     );
 
-    return { drawdown, gateway, prisma, queue, quoteService, service };
+    return {
+      drawdown,
+      gateway,
+      notifications,
+      prisma,
+      queue,
+      quoteService,
+      service,
+    };
   };
 
   const getLastUpdateArg = (updateMany: jest.Mock): TradeUpdateArg => {

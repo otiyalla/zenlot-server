@@ -12,6 +12,9 @@ module.exports = {
   },
   moduleNameMapper: {
     '^src/(.*)$': '<rootDir>/src/$1',
+    // expo-server-sdk is ESM (node:assert + undici) which the CommonJS ts-jest
+    // transform can't load in unit tests; use a lightweight mock instead.
+    '^expo-server-sdk$': '<rootDir>/test/mocks/expo-server-sdk.ts',
   },
   collectCoverageFrom: ['**/*.(t|j)s'],
   coverageDirectory: './coverage',

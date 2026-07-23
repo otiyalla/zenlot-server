@@ -22,15 +22,17 @@ import {
   CoachingJobData,
   GENERATE_COACHING_JOB,
 } from './coaching/coaching.processor';
+import { NotificationsService } from '../notifications/notifications.service';
+import { DrawdownPeriod } from '../notifications/notification.copy';
 
 /**
  * Trade statuses whose close settled realized PnL onto the account balance +
- * drawdown (i.e. called {@link DrawdownService.settleRealizedPnL}). Manual close
+ * drawdown (i.e. called {@link DrawdownService#settleRealizedPnL}). Manual close
  * sets `closed_in_profit`/`closed_in_loss`; the auto-close job sets
  * `reached_tp`/`reached_sl`. The neutral `'closed'` status (legacy update path)
  * is intentionally absent — it never settles PnL.
  */
-const SETTLED_STATUSES = new Set<string>([
+export const SETTLED_STATUSES = new Set<string>([
   'closed_in_profit',
   'closed_in_loss',
   'reached_tp',
@@ -47,6 +49,7 @@ export class TradeLogService {
     private readonly rateResolver: RateResolverService,
     private readonly drawdownService: DrawdownService,
     private readonly riskProfileService: RiskProfileService,
+    private readonly notifications: NotificationsService,
     @InjectQueue(COACHING_QUEUE) private readonly coachingQueue: Queue,
   ) {}
 
@@ -198,6 +201,17 @@ export class TradeLogService {
       });
     }
 
+    // Push: governance / rule violation. Fires when the trade was logged despite
+    // breaking a rule (i.e. the user overrode a blocking governance check), so
+    // the breach is surfaced even if the app was backgrounded. Best-effort.
+    if (overridden) {
+      void this.notifications.notifyGovernanceViolation(userId, {
+        tradeId: created.id,
+        governanceLogId: log.id,
+        symbol: calculation.symbol,
+      });
+    }
+
     return created;
   }
 
@@ -249,25 +263,165 @@ export class TradeLogService {
     // Ensure a risk profile row exists so the balance increment below succeeds.
     await this.riskProfileService.getProfile(userId, existing.accountCurrency);
 
-    return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.trade.update({
-        where: { id: tradeId },
-        data: {
-          closedPrice: exitPrice,
-          closedExchangeRate: closeExchangeRate,
-          pnl,
-          rMultiple,
-          status,
-          closedAt: new Date(),
-          closedReason: 'manual',
-        },
-      });
+    const { updated, before, after } = await this.prisma.$transaction(
+      async (tx) => {
+        const updated = await tx.trade.update({
+          where: { id: tradeId },
+          data: {
+            closedPrice: exitPrice,
+            closedExchangeRate: closeExchangeRate,
+            pnl,
+            rMultiple,
+            status,
+            closedAt: new Date(),
+            closedReason: 'manual',
+          },
+        });
 
-      // Increment balance + recompute drawdown atomically with the close.
-      await this.drawdownService.settleRealizedPnL(tx, userId, pnl);
+        // Snapshot circuit-breaker flags around settlement to detect new breaches.
+        const before = await tx.drawdownState.findUnique({
+          where: { userId },
+          select: {
+            dailyBreached: true,
+            weeklyBreached: true,
+            monthlyBreached: true,
+          },
+        });
+        // Increment balance + recompute drawdown atomically with the close.
+        await this.drawdownService.settleRealizedPnL(tx, userId, pnl);
+        const after = await tx.drawdownState.findUnique({
+          where: { userId },
+          select: {
+            dailyBreached: true,
+            weeklyBreached: true,
+            monthlyBreached: true,
+          },
+        });
 
-      return updated;
-    });
+        return { updated, before, after };
+      },
+    );
+
+    // Push: drawdown circuit breaker(s) this close newly tripped. Best-effort.
+    for (const period of newlyBreachedPeriods(before, after)) {
+      void this.notifications.notifyDrawdownBreach(userId, period);
+    }
+
+    return updated;
+  }
+
+  /**
+   * Settles a manual close that arrives through the generic trade-update path
+   * (the app's status menu: `closed_in_profit`/`closed_in_loss`/`reached_tp`/
+   * `reached_sl`). Like {@link closeTrade} it computes PnL + R-multiple and, in
+   * one transaction, applies the field update AND settles realized PnL onto the
+   * balance + drawdown — keeping balance/circuit-breaker correct. It differs from
+   * `closeTrade` in two ways: the caller's chosen status is preserved (so the
+   * `reached_tp`/`reached_sl` labels survive instead of being collapsed to
+   * profit/loss by sign), and the rest of the sanitized update payload is written
+   * alongside the close so any same-request field edits persist atomically.
+   *
+   * The exit price is the client-recorded close price (the app uses the trade's
+   * own TP/SL level for these statuses); the exchange rate is re-resolved
+   * server-side, never trusted from the client. If no usable exit price is
+   * available the trade is still updated, but with no PnL settled.
+   */
+  async settleManualClose(
+    userId: string,
+    existing: trade,
+    data: Prisma.tradeUpdateInput,
+    exitPrice: number,
+  ): Promise<trade> {
+    const status =
+      typeof data.status === 'string' ? data.status : existing.status;
+    const direction = executionToDirection(existing.execution);
+    const stopPrice = Number(
+      (existing.stopLoss as unknown as { value: number }).value,
+    );
+    const targetPrice = Number(
+      (existing.takeProfit as unknown as { value: number }).value,
+    );
+
+    // The settling statuses close at the trade's own protective levels; fall back
+    // to the matching stored level if the client didn't supply a usable price.
+    const isProfit = status === 'closed_in_profit' || status === 'reached_tp';
+    const resolvedExit =
+      exitPrice > 0 ? exitPrice : isProfit ? targetPrice : stopPrice;
+
+    const closeExchangeRate = await this.rateResolver.resolveExchangeRate(
+      existing.symbol,
+      existing.accountCurrency,
+    );
+
+    const settles = resolvedExit > 0;
+    const pnl = settles
+      ? calculatePnL({
+          symbol: existing.symbol,
+          entryPrice: existing.entry,
+          exitPrice: resolvedExit,
+          lotSize: existing.lot,
+          direction,
+          exchangeRate: closeExchangeRate,
+        })
+      : null;
+    const rMultiple = settles
+      ? calculateRMultiple(existing.entry, resolvedExit, stopPrice, direction)
+      : null;
+
+    // Ensure a risk profile row exists so the balance increment below succeeds.
+    await this.riskProfileService.getProfile(userId, existing.accountCurrency);
+
+    const { updated, before, after } = await this.prisma.$transaction(
+      async (tx) => {
+        const updated = await tx.trade.update({
+          where: { id: existing.id },
+          data: {
+            ...data,
+            status,
+            closedPrice: settles ? resolvedExit : null,
+            closedExchangeRate: closeExchangeRate,
+            closedReason:
+              typeof data.closedReason === 'string'
+                ? data.closedReason
+                : 'manual',
+            closedAt: (data.closedAt as Date | undefined) ?? new Date(),
+            pnl,
+            rMultiple,
+          },
+        });
+
+        // Snapshot circuit-breaker flags around settlement to detect new breaches.
+        const before = await tx.drawdownState.findUnique({
+          where: { userId },
+          select: {
+            dailyBreached: true,
+            weeklyBreached: true,
+            monthlyBreached: true,
+          },
+        });
+        if (pnl !== null) {
+          // Increment balance + recompute drawdown atomically with the close.
+          await this.drawdownService.settleRealizedPnL(tx, userId, pnl);
+        }
+        const after = await tx.drawdownState.findUnique({
+          where: { userId },
+          select: {
+            dailyBreached: true,
+            weeklyBreached: true,
+            monthlyBreached: true,
+          },
+        });
+
+        return { updated, before, after };
+      },
+    );
+
+    // Push: drawdown circuit breaker(s) this close newly tripped. Best-effort.
+    for (const period of newlyBreachedPeriods(before, after)) {
+      void this.notifications.notifyDrawdownBreach(userId, period);
+    }
+
+    return updated;
   }
 
   /**
@@ -276,7 +430,7 @@ export class TradeLogService {
    * breaker/drawdown state reflects reality.
    *
    * Only trades closed through a PnL-settling path are reversed. Those are the
-   * statuses that called {@link DrawdownService.settleRealizedPnL}: the manual
+   * statuses that called {@link DrawdownService#settleRealizedPnL}: the manual
    * close (`closed_in_profit`/`closed_in_loss`) and the auto-close job
    * (`reached_tp`/`reached_sl`). Open trades and the neutral `'closed'` status
    * (set via the legacy update path, which never settles PnL) carry no realized
@@ -337,4 +491,24 @@ export class TradeLogService {
 
     return { deleted: true };
   }
+}
+
+interface BreachFlags {
+  dailyBreached: boolean;
+  weeklyBreached: boolean;
+  monthlyBreached: boolean;
+}
+
+/** Periods whose breach flag flipped false→true between two snapshots. */
+function newlyBreachedPeriods(
+  before: BreachFlags | null,
+  after: BreachFlags | null,
+): DrawdownPeriod[] {
+  if (!after) return [];
+  const periods: DrawdownPeriod[] = [];
+  if (after.dailyBreached && !before?.dailyBreached) periods.push('daily');
+  if (after.weeklyBreached && !before?.weeklyBreached) periods.push('weekly');
+  if (after.monthlyBreached && !before?.monthlyBreached)
+    periods.push('monthly');
+  return periods;
 }

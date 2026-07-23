@@ -6,6 +6,7 @@ import { QuoteGateway } from '../../quote/quote.gateway';
 import { GovernanceResult } from '../engine';
 import { RiskCalculationView } from '../risk.mapper';
 import { CoachingService } from './coaching.service';
+import { NotificationsService } from '../../notifications/notifications.service';
 
 export const COACHING_QUEUE = 'risk-coaching';
 export const GENERATE_COACHING_JOB = 'generate-coaching';
@@ -34,6 +35,7 @@ export class CoachingProcessor extends WorkerHost {
     private readonly coachingService: CoachingService,
     private readonly prisma: PrismaService,
     private readonly quoteGateway: QuoteGateway,
+    private readonly notifications: NotificationsService,
   ) {
     super();
   }
@@ -68,6 +70,15 @@ export class CoachingProcessor extends WorkerHost {
     this.quoteGateway.emitCoachingReady(userId, {
       governanceLogId,
       tradeId,
+      coaching,
+    });
+
+    // Push: coaching ready. The WebSocket emit above only reaches a foreground
+    // device; this delivers when the app is backgrounded/closed. Best-effort.
+    void this.notifications.notifyCoachingReady(userId, {
+      tradeId,
+      governanceLogId,
+      symbol: calculation.symbol,
       coaching,
     });
   }

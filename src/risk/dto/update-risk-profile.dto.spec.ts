@@ -27,14 +27,17 @@ describe('UpdateRiskProfileDto — accountBalance bounds', () => {
 
   it('accepts the boundary values 0 and 1e12', async () => {
     expect(await validateDto({ accountBalance: 0 })).toHaveLength(0);
-    expect(await validateDto({ accountBalance: 1_000_000_000_000 })).toHaveLength(
-      0,
-    );
+    expect(
+      await validateDto({ accountBalance: 1_000_000_000_000 }),
+    ).toHaveLength(0);
   });
 
   it('rejects a balance above the 1e12 maximum (matches the DB CHECK)', async () => {
     expect(
-      await constraintsFor({ accountBalance: 1_000_000_000_001 }, 'accountBalance'),
+      await constraintsFor(
+        { accountBalance: 1_000_000_000_001 },
+        'accountBalance',
+      ),
     ).toHaveProperty('max');
   });
 
