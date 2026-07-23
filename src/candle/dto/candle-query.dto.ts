@@ -43,4 +43,12 @@ export class CandleQueryDto {
     description: 'Window end, epoch milliseconds (UTC). Defaults to now.',
   })
   to?: number;
+
+  @ValidateIf((o: CandleQueryDto) => o.from !== undefined && o.to !== undefined)
+  @IsIn([true], {
+    message: 'from must be earlier than to',
+  })
+  get fromBeforeTo(): boolean {
+    return (this.from ?? 0) < (this.to ?? Infinity);
+  }
 }
