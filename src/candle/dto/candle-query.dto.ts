@@ -7,6 +7,7 @@ import {
   IsString,
   Matches,
   Min,
+  ValidateIf,
 } from 'class-validator';
 import { TIMEFRAMES, Timeframe } from '../interface/candle.interface';
 
