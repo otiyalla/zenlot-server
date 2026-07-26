@@ -78,7 +78,7 @@ export function detectGaps(
   } else if (dbMax >= now - 2 * barMs) {
     // Window is covered, but the latest bar is fresh enough that it may still
     // be forming — refresh it (and anything up to now) so the open bar updates.
-    gaps.push({ from: dbMax, to: Math.min(to, now), reason: 'stale' });
+    gaps.push({ from: dbMax, to: now, reason: 'stale' });
   }
 
   return gaps;

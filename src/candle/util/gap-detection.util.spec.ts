@@ -102,9 +102,19 @@ describe('detectGaps', () => {
     const gaps = detectGaps(existing, 98 * HOUR, 99 * HOUR, HOUR, recentNow);
     expect(gaps).toContainEqual({
       from: 99 * HOUR,
-      to: 99 * HOUR,
+      to: recentNow,
       reason: 'stale',
     });
+  });
+
+  it('refreshes a recent cached bar through now for a covered historical sub-window', () => {
+    const recentNow = 100 * HOUR;
+    const existing = [bar(98 * HOUR), bar(99 * HOUR)];
+
+    const gaps = detectGaps(existing, 98 * HOUR, 98 * HOUR, HOUR, recentNow);
+
+    expect(gaps).toEqual([{ from: 99 * HOUR, to: recentNow, reason: 'stale' }]);
+    expect(gaps.every((gap) => gap.from <= gap.to)).toBe(true);
   });
 
   it('does not double-count: a tail gap supersedes the stale refetch', () => {
