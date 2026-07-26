@@ -84,15 +84,27 @@ Example config (HTTP only; HTTPS is added in the next step):
 server {
     listen 80;
     server_name api.zenlot.net;
+   access_log /var/log/nginx/custom-access-logs.log custom_log;
 
     location / {
         proxy_pass         http://127.0.0.1:3000;
         proxy_http_version 1.1;
         proxy_set_header   Upgrade $http_upgrade;
         proxy_set_header   Connection 'upgrade';
+        proxy_set_header   accessToken $http_accesstoken;
+        proxy_set_header   refreshToken $http_refreshtoken;
         proxy_set_header   Host $host;
+        proxy_set_header   X-Real-IP $remote_addr;
+        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_cache_bypass $http_upgrade;
     }
+
+  location /health {
+        access_log off;
+        default_type text/plain;
+        return 200 "OK"
+    }
+
 }
 ```
 
