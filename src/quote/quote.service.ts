@@ -20,6 +20,7 @@ export class QuoteService {
   private readonly logger = new Logger(QuoteService.name);
   private availableForexCache: AvailableSymbols[] | null = null;
   private availableForexCachedAt = 0;
+  private availableForexRetryAfter = 0;
   private availableForexRequest: Promise<AvailableSymbols[]> | null = null;
 
   /**
@@ -29,6 +30,7 @@ export class QuoteService {
    * a server restart, while keeping the list served instantly the rest of the time.
    */
   private static readonly AVAILABLE_FOREX_TTL_MS = 48 * 60 * 60 * 1000; // 48h
+  private static readonly AVAILABLE_FOREX_RETRY_DELAY_MS = 60 * 1000; // 1 minute
 
   /**
    * The same quote→account conversion rate is resolved repeatedly for one trade:
@@ -90,6 +92,12 @@ export class QuoteService {
     if (isFresh) {
       return this.availableForexCache as AvailableSymbols[];
     }
+    if (
+      this.availableForexCache !== null &&
+      Date.now() < this.availableForexRetryAfter
+    ) {
+      return this.availableForexCache;
+    }
 
     if (!this.availableForexRequest) {
       this.availableForexRequest = (async () => {
@@ -102,9 +110,12 @@ export class QuoteService {
 
           this.availableForexCache = data;
           this.availableForexCachedAt = Date.now();
+          this.availableForexRetryAfter = 0;
           return data;
         } catch (error) {
           if (this.availableForexCache) {
+            this.availableForexRetryAfter =
+              Date.now() + QuoteService.AVAILABLE_FOREX_RETRY_DELAY_MS;
             return this.availableForexCache;
           }
 
@@ -125,6 +136,7 @@ export class QuoteService {
   clearAvailableForexCache() {
     this.availableForexCache = null;
     this.availableForexCachedAt = 0;
+    this.availableForexRetryAfter = 0;
   }
 
   async refreshAvailableForex(): Promise<AvailableSymbols[]> {

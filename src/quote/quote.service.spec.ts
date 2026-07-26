@@ -201,6 +201,43 @@ describe('QuoteService', () => {
     nowSpy.mockRestore();
   });
 
+  it('backs off refreshes after serving stale forex data', async () => {
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(0);
+    const getFMPList = jest
+      .spyOn(service, 'getFMPList')
+      .mockResolvedValueOnce(
+        forexList([
+          { symbol: 'EURUSD', fromCurrency: 'EUR', toCurrency: 'USD' },
+        ]),
+      )
+      .mockRejectedValueOnce(new Error('provider unavailable'))
+      .mockResolvedValueOnce(
+        forexList([
+          { symbol: 'GBPJPY', fromCurrency: 'GBP', toCurrency: 'JPY' },
+        ]),
+      );
+
+    await service.getAvailableForex();
+
+    const expiredAt = 48 * 60 * 60 * 1000 + 1;
+    nowSpy.mockReturnValue(expiredAt);
+    await expect(service.getAvailableForex()).resolves.toEqual([
+      { symbol: 'EURUSD', currency: 'USD' },
+    ]);
+
+    nowSpy.mockReturnValue(expiredAt + 30 * 1000);
+    await service.search('eur');
+    expect(getFMPList).toHaveBeenCalledTimes(2);
+
+    nowSpy.mockReturnValue(expiredAt + 60 * 1000);
+    await expect(service.getAvailableForex()).resolves.toEqual([
+      { symbol: 'GBPJPY', currency: 'JPY' },
+    ]);
+    expect(getFMPList).toHaveBeenCalledTimes(3);
+
+    nowSpy.mockRestore();
+  });
+
   it('shares one in-flight forex fetch across concurrent callers', async () => {
     const getFMPList = jest
       .spyOn(service, 'getFMPList')
