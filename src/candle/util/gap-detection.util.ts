@@ -10,6 +10,32 @@ export interface CandleGap {
   reason: GapReason;
 }
 
+function isForexWeekend(timestamp: number): boolean {
+  const date = new Date(timestamp);
+  const day = date.getUTCDay();
+  const hour = date.getUTCHours();
+
+  return day === 6 || (day === 0 && hour < 22) || (day === 5 && hour >= 22);
+}
+
+/**
+ * A tail is covered when every bar that could follow the cached bar falls in
+ * the regular Friday 22:00–Sunday 22:00 UTC forex closure. This deliberately
+ * stays conservative: holidays and provider-specific closures are still
+ * fetched because they cannot be inferred reliably here.
+ */
+function isClosedMarketTail(dbMax: number, to: number, barMs: number): boolean {
+  let nextBar = dbMax + barMs;
+  if (nextBar > to) return false;
+
+  while (nextBar <= to) {
+    if (!isForexWeekend(nextBar)) return false;
+    nextBar += barMs;
+  }
+
+  return true;
+}
+
 /**
  * Decide which sub-ranges of [from, to] must be fetched upstream, given the
  * bars already cached. Implements the PDF's cold/head/tail/stale model:
@@ -46,7 +72,9 @@ export function detectGaps(
   }
 
   if (to > dbMax) {
-    gaps.push({ from: dbMax, to, reason: 'tail' });
+    if (!isClosedMarketTail(dbMax, to, barMs)) {
+      gaps.push({ from: dbMax, to, reason: 'tail' });
+    }
   } else if (dbMax >= now - 2 * barMs) {
     // Window is covered, but the latest bar is fresh enough that it may still
     // be forming — refresh it (and anything up to now) so the open bar updates.
