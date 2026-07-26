@@ -26,6 +26,18 @@ describe('detectGaps', () => {
     });
   });
 
+  it('ignores a partial head interval shorter than one bar', () => {
+    const existing = [bar(15 * HOUR), bar(16 * HOUR)];
+    const gaps = detectGaps(
+      existing,
+      15 * HOUR - HOUR / 2,
+      16 * HOUR,
+      HOUR,
+      now,
+    );
+    expect(gaps).toEqual([]);
+  });
+
   it('detects a tail gap when the request ends after the newest cached bar', () => {
     const existing = [bar(15 * HOUR), bar(16 * HOUR)];
     const gaps = detectGaps(existing, 15 * HOUR, 20 * HOUR, HOUR, now);

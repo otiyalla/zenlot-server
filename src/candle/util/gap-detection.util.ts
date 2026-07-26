@@ -78,7 +78,7 @@ export function detectGaps(
   const dbMin = existing[0].ts;
   const dbMax = existing[existing.length - 1].ts;
 
-  if (from < dbMin) {
+  if (dbMin - from >= barMs) {
     gaps.push({ from, to: dbMin, reason: 'head' });
   }
 
