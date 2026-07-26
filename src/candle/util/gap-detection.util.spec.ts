@@ -36,20 +36,31 @@ describe('detectGaps', () => {
     });
   });
 
-  it('does not refetch a tail containing only weekend market closure bars', () => {
-    const fridayAt21Utc = Date.UTC(2026, 6, 24, 21);
-    const saturdayAt12Utc = Date.UTC(2026, 6, 25, 12);
+  it.each([
+    {
+      season: 'daylight time',
+      finalBar: Date.UTC(2026, 6, 24, 20),
+      weekend: Date.UTC(2026, 6, 25, 12),
+    },
+    {
+      season: 'standard time',
+      finalBar: Date.UTC(2026, 0, 23, 21),
+      weekend: Date.UTC(2026, 0, 24, 12),
+    },
+  ])(
+    'does not refetch a weekend tail during $season',
+    ({ finalBar, weekend }) => {
+      const gaps = detectGaps(
+        [bar(finalBar)],
+        finalBar,
+        weekend,
+        HOUR,
+        weekend + HOUR,
+      );
 
-    const gaps = detectGaps(
-      [bar(fridayAt21Utc)],
-      fridayAt21Utc,
-      saturdayAt12Utc,
-      HOUR,
-      Date.UTC(2026, 6, 25, 13),
-    );
-
-    expect(gaps).toEqual([]);
-  });
+      expect(gaps).toEqual([]);
+    },
+  );
 
   it('fetches a tail that extends through the Sunday market reopening', () => {
     const fridayAt21Utc = Date.UTC(2026, 6, 24, 21);
@@ -71,19 +82,19 @@ describe('detectGaps', () => {
   });
 
   it('fetches a missing open-market bar before the weekend closure', () => {
-    const fridayAt20Utc = Date.UTC(2026, 6, 24, 20);
+    const fridayAt19Utc = Date.UTC(2026, 6, 24, 19);
     const saturdayAt12Utc = Date.UTC(2026, 6, 25, 12);
 
     const gaps = detectGaps(
-      [bar(fridayAt20Utc)],
-      fridayAt20Utc,
+      [bar(fridayAt19Utc)],
+      fridayAt19Utc,
       saturdayAt12Utc,
       HOUR,
       Date.UTC(2026, 6, 25, 13),
     );
 
     expect(gaps).toContainEqual({
-      from: fridayAt20Utc,
+      from: fridayAt19Utc,
       to: saturdayAt12Utc,
       reason: 'tail',
     });

@@ -10,19 +10,30 @@ export interface CandleGap {
   reason: GapReason;
 }
 
-function isForexWeekend(timestamp: number): boolean {
-  const date = new Date(timestamp);
-  const day = date.getUTCDay();
-  const hour = date.getUTCHours();
+const NEW_YORK_TIME = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/New_York',
+  weekday: 'short',
+  hour: 'numeric',
+  hourCycle: 'h23',
+});
 
-  return day === 6 || (day === 0 && hour < 22) || (day === 5 && hour >= 22);
+function isForexWeekend(timestamp: number): boolean {
+  const parts = NEW_YORK_TIME.formatToParts(timestamp);
+  const day = parts.find((part) => part.type === 'weekday')?.value;
+  const hour = Number(parts.find((part) => part.type === 'hour')?.value);
+
+  return (
+    day === 'Sat' ||
+    (day === 'Sun' && hour < 17) ||
+    (day === 'Fri' && hour >= 17)
+  );
 }
 
 /**
  * A tail is covered when every bar that could follow the cached bar falls in
- * the regular Friday 22:00–Sunday 22:00 UTC forex closure. This deliberately
- * stays conservative: holidays and provider-specific closures are still
- * fetched because they cannot be inferred reliably here.
+ * the regular Friday 17:00–Sunday 17:00 New York forex closure. This
+ * deliberately stays conservative: holidays and provider-specific closures
+ * are still fetched because they cannot be inferred reliably here.
  */
 function isClosedMarketTail(dbMax: number, to: number, barMs: number): boolean {
   let nextBar = dbMax + barMs;
