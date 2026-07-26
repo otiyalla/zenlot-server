@@ -38,6 +38,7 @@ export class FmpClient implements FxQuote {
     this.fmpClient = axios.create({
       baseURL: FMP_BASE_URL,
       method: 'get',
+      timeout: 10_000,
     });
   }
 

@@ -3,11 +3,15 @@ import { ConfigService } from '@nestjs/config';
 import { FmpClient } from './fmp.provider';
 
 const mockRequest = jest.fn();
+let axiosCreateConfig: unknown;
 
 jest.mock('axios', () => ({
   __esModule: true,
   default: {
-    create: jest.fn(() => mockRequest),
+    create: jest.fn((config: unknown) => {
+      axiosCreateConfig = config;
+      return mockRequest;
+    }),
     isAxiosError: jest.fn(
       (error: unknown) =>
         typeof error === 'object' &&
@@ -39,6 +43,14 @@ describe('FmpClient', () => {
     jest.clearAllMocks();
     const module: TestingModule = await createModule('test-api-key');
     client = module.get(FmpClient);
+  });
+
+  it('configures a 10-second request timeout', () => {
+    expect(axiosCreateConfig).toEqual({
+      baseURL: 'https://financialmodelingprep.com/stable',
+      method: 'get',
+      timeout: 10_000,
+    });
   });
 
   describe('fxRate', () => {
