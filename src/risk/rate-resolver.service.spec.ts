@@ -4,8 +4,11 @@ import { QuoteService } from '../quote/quote.service';
 
 // The resolver resolves the quote→account conversion rate through the cached
 // path (cachedFxRate), so the risk/governance recalcs share one upstream call.
-function make(cachedFxRate: jest.Mock) {
-  return new RateResolverService({ cachedFxRate } as unknown as QuoteService);
+function make(cachedFxRate: jest.Mock, cacheFxRate = jest.fn()) {
+  return new RateResolverService({
+    cachedFxRate,
+    cacheFxRate,
+  } as unknown as QuoteService);
 }
 
 describe('RateResolverService.resolveExchangeRate', () => {
@@ -28,10 +31,50 @@ describe('RateResolverService.resolveExchangeRate', () => {
       .fn()
       .mockRejectedValueOnce(new Error('no GBPUSD'))
       .mockResolvedValueOnce({ price: 0.7874 });
-    const rate = await make(cachedFxRate).resolveExchangeRate('EURGBP', 'USD');
-    expect(cachedFxRate).toHaveBeenNthCalledWith(1, { base: 'GBP', quote: 'USD' });
-    expect(cachedFxRate).toHaveBeenNthCalledWith(2, { base: 'USD', quote: 'GBP' });
+    const cacheFxRate = jest.fn();
+    const rate = await make(cachedFxRate, cacheFxRate).resolveExchangeRate(
+      'EURGBP',
+      'USD',
+    );
+    expect(cachedFxRate).toHaveBeenNthCalledWith(1, {
+      base: 'GBP',
+      quote: 'USD',
+    });
+    expect(cachedFxRate).toHaveBeenNthCalledWith(2, {
+      base: 'USD',
+      quote: 'GBP',
+    });
+    expect(cacheFxRate).toHaveBeenCalledWith(
+      { base: 'GBP', quote: 'USD' },
+      1 / 0.7874,
+    );
     expect(rate).toBeCloseTo(1 / 0.7874, 6);
+  });
+
+  it('reuses an inverted rate under the originally requested pair', async () => {
+    const rates = new Map<string, number>([['USD/GBP', 0.8]]);
+    const cachedFxRate = jest.fn(
+      ({ base, quote }: { base: string; quote: string }) => {
+        const price = rates.get(`${base}/${quote}`);
+        if (!price) return Promise.reject(new Error('unsupported pair'));
+        return Promise.resolve({ price });
+      },
+    );
+    const cacheFxRate = jest.fn(
+      ({ base, quote }: { base: string; quote: string }, price: number) => {
+        rates.set(`${base}/${quote}`, price);
+      },
+    );
+    const resolver = make(cachedFxRate, cacheFxRate);
+
+    await resolver.resolveExchangeRate('EURGBP', 'USD');
+    await resolver.resolveExchangeRate('EURGBP', 'USD');
+
+    expect(cachedFxRate).toHaveBeenCalledTimes(3);
+    expect(cachedFxRate).toHaveBeenLastCalledWith({
+      base: 'GBP',
+      quote: 'USD',
+    });
   });
 
   it('throws ServiceUnavailable when both lookups fail', async () => {

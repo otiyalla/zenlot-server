@@ -50,7 +50,14 @@ export class RateResolverService {
         base: account,
         quote,
       });
-      if (price > 0) return 1 / price;
+      if (price > 0) {
+        const invertedPrice = 1 / price;
+        this.quoteService.cacheFxRate(
+          { base: quote, quote: account },
+          invertedPrice,
+        );
+        return invertedPrice;
+      }
     } catch (error) {
       Sentry.captureException(error, {
         extra: {

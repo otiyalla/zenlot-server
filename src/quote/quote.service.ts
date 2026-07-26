@@ -254,4 +254,10 @@ export class QuoteService {
     this.fxRateInflight.set(key, request);
     return request;
   }
+
+  /** Stores a derived rate (for example, an inverted provider quote). */
+  cacheFxRate(symbol: { base: string; quote: string }, price: number): void {
+    const key = `${symbol.base}/${symbol.quote}`.toUpperCase();
+    this.fxRateCache.set(key, { price, at: Date.now() });
+  }
 }
