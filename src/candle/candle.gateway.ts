@@ -137,7 +137,7 @@ export class CandleGateway implements OnModuleInit, OnModuleDestroy {
     // Push the current bar immediately so the client doesn't wait a full cycle.
     try {
       const bar = await this.liveService.getLiveBar(pair, timeframe);
-      if (bar) {
+      if (bar && client.candleRooms.get(key) === room) {
         client.emit('candle:update', { symbol: pair, timeframe, bar });
       }
     } catch (error) {
