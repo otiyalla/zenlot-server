@@ -108,6 +108,22 @@ describe('QuoteService', () => {
     ]);
     expect(fxQuote.fxRate).toHaveBeenCalledTimes(2);
 
+    // Serving stale data starts a new TTL window, avoiding another provider
+    // attempt on every calculation while the upstream remains unavailable.
+    nowSpy.mockReturnValue(10 * 60 * 1000);
+    await expect(
+      service.cachedFxRate({ base: 'USD', quote: 'EUR' }),
+    ).resolves.toEqual({ price: 1.25 });
+    expect(fxQuote.fxRate).toHaveBeenCalledTimes(2);
+
+    // Once the renewed TTL expires, a later request may attempt recovery.
+    nowSpy.mockReturnValue(10 * 60 * 1000 + 2);
+    fxQuote.fxRate.mockResolvedValueOnce({ price: 1.3 });
+    await expect(
+      service.cachedFxRate({ base: 'USD', quote: 'EUR' }),
+    ).resolves.toEqual({ price: 1.3 });
+    expect(fxQuote.fxRate).toHaveBeenCalledTimes(3);
+
     nowSpy.mockRestore();
   });
 

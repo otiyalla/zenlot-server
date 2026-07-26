@@ -243,8 +243,13 @@ export class QuoteService {
         return result;
       } catch (error) {
         // Keep the risk engine available during a provider outage by serving
-        // the last-known rate. A cold-cache failure must still reach the caller.
-        if (cached) return { price: cached.price };
+        // the last-known rate. Renew its timestamp so repeated calculations do
+        // not retry a degraded provider until the normal TTL has elapsed. A
+        // cold-cache failure must still reach the caller.
+        if (cached) {
+          this.fxRateCache.set(key, { price: cached.price, at: Date.now() });
+          return { price: cached.price };
+        }
         throw error;
       } finally {
         this.fxRateInflight.delete(key);
