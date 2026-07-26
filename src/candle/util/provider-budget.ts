@@ -8,12 +8,14 @@ import { CandleSource } from '../interface/candle.interface';
  * ever scales horizontally this should move to Redis.
  */
 interface BudgetState {
-  /** Requests made in the current UTC day. */
+  /** Successful requests made in the current budget window. */
   count: number;
   /** Epoch ms when the daily counter resets. */
   resetAt: number;
   /** Epoch ms until which the provider is circuit-broken (0 = open). */
   blockedUntil: number;
+  /** Consecutive non-rate-limit failures used for transient backoff. */
+  consecutiveErrors: number;
 }
 
 /** Conservative free-tier daily ceilings; 0 = effectively uncapped (per-day). */
@@ -24,6 +26,8 @@ const DAILY_BUDGET: Record<CandleSource, number> = {
 };
 
 const RATE_LIMIT_COOLDOWN_MS = 60 * 1000;
+const ERROR_BACKOFF_BASE_MS = 1000;
+const ERROR_BACKOFF_MAX_MS = 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export class ProviderBudget {
@@ -32,7 +36,12 @@ export class ProviderBudget {
   private get(source: CandleSource, now: number): BudgetState {
     let s = this.state.get(source);
     if (!s) {
-      s = { count: 0, resetAt: now + DAY_MS, blockedUntil: 0 };
+      s = {
+        count: 0,
+        resetAt: now + DAY_MS,
+        blockedUntil: 0,
+        consecutiveErrors: 0,
+      };
       this.state.set(source, s);
     }
     if (now >= s.resetAt) {
@@ -53,7 +62,10 @@ export class ProviderBudget {
   }
 
   recordSuccess(source: CandleSource, now: number = Date.now()): void {
-    this.get(source, now).count += 1;
+    const s = this.get(source, now);
+    s.count += 1;
+    s.consecutiveErrors = 0;
+    s.blockedUntil = 0;
   }
 
   recordFailure(
@@ -62,9 +74,16 @@ export class ProviderBudget {
     now: number = Date.now(),
   ): void {
     const s = this.get(source, now);
-    s.count += 1;
     if (rateLimited) {
+      s.consecutiveErrors = 0;
       s.blockedUntil = now + RATE_LIMIT_COOLDOWN_MS;
+      return;
     }
+    s.consecutiveErrors += 1;
+    const backoffMs = Math.min(
+      ERROR_BACKOFF_BASE_MS * 2 ** (s.consecutiveErrors - 1),
+      ERROR_BACKOFF_MAX_MS,
+    );
+    s.blockedUntil = now + backoffMs;
   }
 }
