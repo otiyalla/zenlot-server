@@ -187,6 +187,34 @@ describe('CandleService', () => {
     expect(backup.fetchCandles).toHaveBeenCalled();
   });
 
+  it('falls back to the next provider when the primary returns no candles', async () => {
+    const findMany = jest
+      .fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([row(500 * HOUR)]);
+    const prisma = makePrisma(findMany);
+    const primary = makeProvider('twelvedata');
+    const backup = makeProvider('oanda', {
+      fetchCandles: jest
+        .fn()
+        .mockResolvedValue([
+          { ts: 500 * HOUR, open: 1, high: 2, low: 0.5, close: 1.1 },
+        ]),
+    });
+    const service = new CandleService(prisma as never, [primary, backup]);
+
+    await service.getCandles({
+      symbol: 'EURUSD',
+      timeframe: 'H1',
+      from: 400 * HOUR,
+      to: 600 * HOUR,
+    });
+
+    expect(primary.fetchCandles).toHaveBeenCalledTimes(1);
+    expect(backup.fetchCandles).toHaveBeenCalledTimes(1);
+    expect(prisma.candle.upsert).toHaveBeenCalledTimes(1);
+  });
+
   it('uses 3-decimal precision for JPY quote pairs', async () => {
     const findMany = jest.fn().mockResolvedValue([row(500 * HOUR)]);
     const prisma = makePrisma(findMany);

@@ -197,7 +197,9 @@ export class CandleService {
       try {
         const candles = await provider.fetchCandles(pair, timeframe, from, to);
         this.budget.recordSuccess(provider.source);
-        return { candles, source: provider.source };
+        if (candles.length > 0) {
+          return { candles, source: provider.source };
+        }
       } catch (error) {
         const rateLimited =
           axios.isAxiosError(error) && error.response?.status === 429;
