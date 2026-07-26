@@ -103,6 +103,11 @@ export class CandleGateway implements OnModuleInit, OnModuleDestroy {
     @MessageBody() body: SubscribePayload,
     @ConnectedSocket() client: AuthenticatedSocket,
   ): Promise<void> {
+    if (!client.user || !client.candleRooms) {
+      client.disconnect(true);
+      return;
+    }
+
     const parsed = this.parse(body);
     if (!parsed) {
       client.emit('candle:error', { message: 'Invalid subscription' });
@@ -136,6 +141,11 @@ export class CandleGateway implements OnModuleInit, OnModuleDestroy {
     @MessageBody() body: SubscribePayload,
     @ConnectedSocket() client: AuthenticatedSocket,
   ): void {
+    if (!client.user || !client.candleRooms) {
+      client.disconnect(true);
+      return;
+    }
+
     const parsed = this.parse(body);
     if (!parsed) return;
     const { pair, timeframe } = parsed;
