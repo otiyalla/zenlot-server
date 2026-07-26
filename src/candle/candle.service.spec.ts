@@ -120,6 +120,44 @@ describe('CandleService', () => {
     expect(prisma.candle.upsert).not.toHaveBeenCalled();
   });
 
+  it('rejects windows larger than 300 bars before reading the cache', async () => {
+    const findMany = jest.fn();
+    const prisma = makePrisma(findMany);
+    const primary = makeProvider('twelvedata');
+    const service = new CandleService(prisma as never, [primary]);
+
+    await expect(
+      service.getCandles({
+        symbol: 'EURUSD',
+        timeframe: 'H1',
+        from: 0,
+        to: 301 * HOUR,
+      }),
+    ).rejects.toThrow('Candle window cannot exceed 300 H1 bars');
+
+    expect(findMany).not.toHaveBeenCalled();
+    expect(primary.fetchCandles).not.toHaveBeenCalled();
+  });
+
+  it('rejects a window inverted by the future end-time cap', async () => {
+    const findMany = jest.fn();
+    const prisma = makePrisma(findMany);
+    const primary = makeProvider('twelvedata');
+    const service = new CandleService(prisma as never, [primary]);
+
+    await expect(
+      service.getCandles({
+        symbol: 'EURUSD',
+        timeframe: 'H1',
+        from: now + 2 * HOUR,
+        to: now + 3 * HOUR,
+      }),
+    ).rejects.toThrow('Candle window start must be earlier than its end');
+
+    expect(findMany).not.toHaveBeenCalled();
+    expect(primary.fetchCandles).not.toHaveBeenCalled();
+  });
+
   it('falls back to the next provider when the primary throws', async () => {
     const findMany = jest
       .fn()

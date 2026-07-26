@@ -32,7 +32,7 @@ export class CandleQueryDto {
   @Min(0)
   @ApiPropertyOptional({
     description:
-      'Window start, epoch milliseconds (UTC). Defaults to ~300 bars back.',
+      'Window start, epoch milliseconds (UTC). Defaults to ~300 bars back; requests are limited to 300 bars.',
   })
   from?: number;
 

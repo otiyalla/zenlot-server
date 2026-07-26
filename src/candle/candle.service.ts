@@ -1,4 +1,9 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import * as Sentry from '@sentry/nestjs';
 import axios from 'axios';
 import { PrismaService } from '../prisma/prisma.service';
@@ -39,6 +44,8 @@ interface FetchResult {
 
 /** Default bars to return when the caller doesn't bound the window. */
 const DEFAULT_BAR_COUNT = 300;
+/** Maximum number of bars accepted in a single request. */
+const MAX_BAR_COUNT = 300;
 /** Upsert chunk size to keep transactions bounded. */
 const UPSERT_CHUNK = 200;
 
@@ -72,9 +79,20 @@ export class CandleService {
     const now = Date.now();
 
     // Bound the window. Default to the last DEFAULT_BAR_COUNT bars; never allow
-    // a `to` beyond the current forming bar.
+    // a `to` beyond the current forming bar or an upstream fetch spanning more
+    // than MAX_BAR_COUNT bars.
     const to = Math.min(params.to ?? now, now + spec.durationMs);
     const from = params.from ?? to - DEFAULT_BAR_COUNT * spec.durationMs;
+    if (from >= to) {
+      throw new BadRequestException(
+        'Candle window start must be earlier than its end',
+      );
+    }
+    if (to - from > MAX_BAR_COUNT * spec.durationMs) {
+      throw new BadRequestException(
+        `Candle window cannot exceed ${MAX_BAR_COUNT} ${params.timeframe} bars`,
+      );
+    }
 
     let existing = await this.readRange(pair, params.timeframe, from, to);
     const gaps = detectGaps(existing, from, to, spec.durationMs, now);
