@@ -102,6 +102,21 @@ describe('CandleService', () => {
     ]);
   });
 
+  it('does not query providers for a live window during the weekend closure', async () => {
+    const weekend = Date.UTC(2026, 6, 25, 12);
+    (Date.now as jest.Mock)
+      .mockReturnValueOnce(weekend)
+      .mockReturnValueOnce(weekend);
+    const findMany = jest.fn().mockResolvedValue([]);
+    const prisma = makePrisma(findMany);
+    const primary = makeProvider('twelvedata');
+    const service = new CandleService(prisma as never, [primary]);
+
+    await expect(service.getLiveBar('EURUSD', 'M15')).resolves.toBeNull();
+
+    expect(primary.fetchCandles).not.toHaveBeenCalled();
+  });
+
   it('deduplicates concurrent fills of the same cold-cache gap', async () => {
     let resolveFetch!: (
       candles: Awaited<ReturnType<CandleProvider['fetchCandles']>>,

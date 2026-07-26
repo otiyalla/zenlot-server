@@ -29,6 +29,18 @@ function isForexWeekend(timestamp: number): boolean {
   );
 }
 
+function isClosedMarketWindow(
+  from: number,
+  to: number,
+  barMs: number,
+): boolean {
+  for (let timestamp = from; timestamp <= to; timestamp += barMs) {
+    if (!isForexWeekend(timestamp)) return false;
+  }
+
+  return isForexWeekend(to);
+}
+
 /**
  * A tail is covered when every bar that could follow the cached bar falls in
  * the regular Friday 17:00–Sunday 17:00 New York forex closure. This
@@ -36,22 +48,17 @@ function isForexWeekend(timestamp: number): boolean {
  * are still fetched because they cannot be inferred reliably here.
  */
 function isClosedMarketTail(dbMax: number, to: number, barMs: number): boolean {
-  let nextBar = dbMax + barMs;
+  const nextBar = dbMax + barMs;
   if (nextBar > to) return false;
 
-  while (nextBar <= to) {
-    if (!isForexWeekend(nextBar)) return false;
-    nextBar += barMs;
-  }
-
-  return true;
+  return isClosedMarketWindow(nextBar, to, barMs);
 }
 
 /**
  * Decide which sub-ranges of [from, to] must be fetched upstream, given the
  * bars already cached. Implements the PDF's cold/head/tail/stale model:
  *
- *  - cold:  nothing cached     -> fetch the whole window.
+ *  - cold:  nothing cached     -> fetch unless the market is closed throughout.
  *  - head:  requested start is older than the oldest cached bar.
  *  - tail:  requested end is newer than the newest cached bar.
  *  - stale: the newest cached bar is recent enough to still be forming, so it
@@ -71,6 +78,7 @@ export function detectGaps(
   now: number = Date.now(),
 ): CandleGap[] {
   if (existing.length === 0) {
+    if (isClosedMarketWindow(from, to, barMs)) return [];
     return [{ from, to, reason: 'cold' }];
   }
 

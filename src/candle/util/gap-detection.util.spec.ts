@@ -16,6 +16,15 @@ describe('detectGaps', () => {
     expect(gaps).toEqual([{ from: 10 * HOUR, to: 20 * HOUR, reason: 'cold' }]);
   });
 
+  it('does not fetch a cold window wholly inside the weekend closure', () => {
+    const saturdayMorning = Date.UTC(2026, 6, 25, 8);
+    const saturdayNoon = Date.UTC(2026, 6, 25, 12);
+
+    expect(
+      detectGaps([], saturdayMorning, saturdayNoon, HOUR, saturdayNoon),
+    ).toEqual([]);
+  });
+
   it('detects a head gap when the request starts before the oldest cached bar', () => {
     const existing = [bar(15 * HOUR), bar(16 * HOUR)];
     const gaps = detectGaps(existing, 10 * HOUR, 16 * HOUR, HOUR, now);
