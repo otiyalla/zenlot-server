@@ -55,6 +55,7 @@ const PRICE_PRECISION: Record<string, number> = { JPY: 3, XAG: 3, XAU: 2 };
 export class CandleService {
   private readonly logger = new Logger(CandleService.name);
   private readonly budget = new ProviderBudget();
+  private readonly gapFillInflight = new Map<string, Promise<void>>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -99,20 +100,7 @@ export class CandleService {
 
     if (gaps.length > 0) {
       for (const gap of gaps) {
-        const result = await this.fetchFromProviders(
-          pair,
-          params.timeframe,
-          gap.from,
-          gap.to,
-        );
-        if (result && result.candles.length > 0) {
-          await this.upsertCandles(
-            pair,
-            params.timeframe,
-            result.candles,
-            result.source,
-          );
-        }
+        await this.fillGap(pair, params.timeframe, gap.from, gap.to);
       }
       existing = await this.readRange(pair, params.timeframe, from, to);
     }
@@ -157,6 +145,37 @@ export class CandleService {
     const base = pair.slice(0, 3);
     const quote = pair.slice(3, 6);
     return PRICE_PRECISION[quote] ?? PRICE_PRECISION[base] ?? 5;
+  }
+
+  /** Collapse concurrent fills of the same gap into one provider request. */
+  private fillGap(
+    pair: string,
+    timeframe: Timeframe,
+    from: number,
+    to: number,
+  ): Promise<void> {
+    const key = `${pair}:${timeframe}:${from}:${to}`;
+    const inflight = this.gapFillInflight.get(key);
+    if (inflight) return inflight;
+
+    const request = (async () => {
+      try {
+        const result = await this.fetchFromProviders(pair, timeframe, from, to);
+        if (result && result.candles.length > 0) {
+          await this.upsertCandles(
+            pair,
+            timeframe,
+            result.candles,
+            result.source,
+          );
+        }
+      } finally {
+        this.gapFillInflight.delete(key);
+      }
+    })();
+
+    this.gapFillInflight.set(key, request);
+    return request;
   }
 
   private async readRange(
