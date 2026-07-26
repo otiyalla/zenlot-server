@@ -32,6 +32,39 @@ describe('CandleGateway', () => {
     expect(liveService.subscribe).not.toHaveBeenCalled();
   });
 
+  it('deduplicates concurrent subscriptions for the same room', async () => {
+    let resolveJoin!: () => void;
+    const client = {
+      user: { id: 'user-1' },
+      candleRooms: new Map(),
+      disconnect: jest.fn(),
+      emit: jest.fn(),
+      join: jest.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveJoin = resolve;
+          }),
+      ),
+    };
+    liveService.getLiveBar.mockResolvedValue(null);
+
+    const first = gateway.handleSubscribe(
+      { symbol: 'EURUSD', timeframe: 'M15' },
+      client as never,
+    );
+    const duplicate = gateway.handleSubscribe(
+      { symbol: 'EURUSD', timeframe: 'M15' },
+      client as never,
+    );
+
+    expect(client.join).toHaveBeenCalledTimes(1);
+    expect(liveService.subscribe).toHaveBeenCalledTimes(1);
+
+    resolveJoin();
+    await Promise.all([first, duplicate]);
+    expect(client.candleRooms.size).toBe(1);
+  });
+
   it('disconnects and rejects unsubscriptions before authentication completes', () => {
     const client = {
       disconnect: jest.fn(),

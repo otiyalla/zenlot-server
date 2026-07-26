@@ -119,9 +119,20 @@ export class CandleGateway implements OnModuleInit, OnModuleDestroy {
     // Idempotent: ignore a repeat subscribe for a room this socket already has.
     if (client.candleRooms?.has(key)) return;
 
-    await client.join(key);
-    client.candleRooms?.set(key, { pair, timeframe });
+    const room = { pair, timeframe };
+    client.candleRooms.set(key, room);
     this.liveService.subscribe(pair, timeframe);
+    try {
+      await client.join(key);
+    } catch (error) {
+      if (client.candleRooms.get(key) === room) {
+        client.candleRooms.delete(key);
+        this.liveService.unsubscribe(pair, timeframe);
+      }
+      throw error;
+    }
+
+    if (client.candleRooms.get(key) !== room) return;
 
     // Push the current bar immediately so the client doesn't wait a full cycle.
     try {
