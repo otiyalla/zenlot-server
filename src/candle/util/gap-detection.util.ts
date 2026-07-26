@@ -90,7 +90,7 @@ export function detectGaps(
     gaps.push({ from, to: dbMin, reason: 'head' });
   }
 
-  if (to > dbMax) {
+  if (to - dbMax >= barMs) {
     if (!isClosedMarketTail(dbMax, to, barMs)) {
       gaps.push({ from: dbMax, to, reason: 'tail' });
     }

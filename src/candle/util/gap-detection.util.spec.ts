@@ -57,6 +57,29 @@ describe('detectGaps', () => {
     });
   });
 
+  it('ignores a historical partial tail shorter than one bar', () => {
+    const existing = [bar(15 * HOUR), bar(16 * HOUR)];
+    const gaps = detectGaps(
+      existing,
+      15 * HOUR,
+      16 * HOUR + HOUR / 2,
+      HOUR,
+      now,
+    );
+
+    expect(gaps).toEqual([]);
+  });
+
+  it('refreshes a forming bar when the requested tail is shorter than one bar', () => {
+    const recentNow = 100 * HOUR + HOUR / 2;
+    const existing = [bar(99 * HOUR), bar(100 * HOUR)];
+    const gaps = detectGaps(existing, 99 * HOUR, recentNow, HOUR, recentNow);
+
+    expect(gaps).toEqual([
+      { from: 100 * HOUR, to: recentNow, reason: 'stale' },
+    ]);
+  });
+
   it.each([
     {
       season: 'daylight time',
