@@ -142,6 +142,19 @@ describe('RiskCalculationService.calculate', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
+  it('maps directionally invalid geometry to a 400', async () => {
+    const { service } = makeService();
+    await expect(
+      service.calculate('u1', CURRENCY, {
+        symbol: 'EURUSD',
+        execution: 'buy',
+        entry: 1.1,
+        stopPrice: 1.095,
+        targetPrice: 1.09,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
   it('blocks when projected portfolio exposure exceeds the limit', async () => {
     const getSnapshot = jest.fn().mockResolvedValue({
       openTradeCount: 1,

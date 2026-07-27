@@ -218,6 +218,55 @@ export interface RiskCalculationInput {
 }
 
 /**
+ * Validates directional trade geometry at the engine boundary.  The lower-level
+ * sizing helpers intentionally remain direction-agnostic for backwards
+ * compatibility; composed risk calculations must enforce that stops protect
+ * in the adverse direction and targets lie in the profitable direction.
+ */
+function validateTradeGeometry(input: RiskCalculationInput): void {
+  const { direction, entryPrice, stopPrice, targetPrice } = input;
+
+  if (targetPrice !== undefined && targetPrice !== null && targetPrice <= 0) {
+    throw new RiskCalculationError(
+      'targetPrice must be positive when provided',
+    );
+  }
+
+  if (direction === 'long') {
+    if (stopPrice >= entryPrice) {
+      throw new RiskCalculationError(
+        'For long trades, stopPrice must be strictly below entryPrice',
+      );
+    }
+    if (
+      targetPrice !== undefined &&
+      targetPrice !== null &&
+      targetPrice <= entryPrice
+    ) {
+      throw new RiskCalculationError(
+        'For long trades, targetPrice must be strictly above entryPrice',
+      );
+    }
+    return;
+  }
+
+  if (stopPrice <= entryPrice) {
+    throw new RiskCalculationError(
+      'For short trades, stopPrice must be strictly above entryPrice',
+    );
+  }
+  if (
+    targetPrice !== undefined &&
+    targetPrice !== null &&
+    targetPrice >= entryPrice
+  ) {
+    throw new RiskCalculationError(
+      'For short trades, targetPrice must be strictly below entryPrice',
+    );
+  }
+}
+
+/**
  * Convenience composer: resolves instrument metadata, sizes the position, and
  * attaches reward fields when a target is supplied. Pure — the caller is
  * responsible for fetching the live exchange rate and passing it in.
@@ -241,6 +290,8 @@ export function computeRiskCalculation(
     exchangeRate,
     lot,
   } = input;
+
+  validateTradeGeometry(input);
 
   const instrument = getInstrumentType(pair);
   const pipSize = getPipSize(pair);
@@ -273,7 +324,7 @@ export function computeRiskCalculation(
 
   let rewardPips: number | null = null;
   let rewardToRisk: number | null = null;
-  if (targetPrice !== undefined && targetPrice !== null && targetPrice > 0) {
+  if (targetPrice !== undefined && targetPrice !== null) {
     const reward = calculateRewardToRisk(
       entryPrice,
       stopPrice,

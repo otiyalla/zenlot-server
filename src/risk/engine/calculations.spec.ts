@@ -210,6 +210,65 @@ describe('computeRiskCalculation — multi-instrument', () => {
     expect(calc.rewardPips).toBeNull();
     expect(calc.rewardToRisk).toBeNull();
   });
+
+  it.each([
+    ['long stop above entry', { direction: 'long' as const, stopPrice: 1.105 }],
+    [
+      'long stop equal to entry',
+      { direction: 'long' as const, stopPrice: 1.1 },
+    ],
+    [
+      'long target below entry',
+      { direction: 'long' as const, stopPrice: 1.095, targetPrice: 1.09 },
+    ],
+    [
+      'long target equal to entry',
+      { direction: 'long' as const, stopPrice: 1.095, targetPrice: 1.1 },
+    ],
+    [
+      'short stop below entry',
+      { direction: 'short' as const, stopPrice: 1.095 },
+    ],
+    [
+      'short stop equal to entry',
+      { direction: 'short' as const, stopPrice: 1.1 },
+    ],
+    [
+      'short target above entry',
+      { direction: 'short' as const, stopPrice: 1.105, targetPrice: 1.11 },
+    ],
+    [
+      'short target equal to entry',
+      { direction: 'short' as const, stopPrice: 1.105, targetPrice: 1.1 },
+    ],
+  ])('rejects invalid geometry: %s', (_label, geometry) => {
+    expect(() =>
+      computeRiskCalculation({
+        pair: 'EURUSD',
+        accountBalance: 10000,
+        maxRiskPct: 1,
+        exchangeRate: 1,
+        entryPrice: 1.1,
+        ...geometry,
+      }),
+    ).toThrow(RiskCalculationError);
+  });
+
+  it('allows omitted and null targets', () => {
+    for (const targetPrice of [undefined, null]) {
+      const calc = computeRiskCalculation({
+        pair: 'EURUSD',
+        direction: 'long',
+        entryPrice: 1.1,
+        stopPrice: 1.095,
+        targetPrice,
+        accountBalance: 10000,
+        maxRiskPct: 1,
+        exchangeRate: 1,
+      });
+      expect(calc.rewardToRisk).toBeNull();
+    }
+  });
 });
 
 describe('calculateRewardToRisk', () => {
