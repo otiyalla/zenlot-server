@@ -76,6 +76,8 @@ export class OandaCandleProvider implements CandleProvider {
       params: {
         price: 'M',
         granularity,
+        dailyAlignment: 0,
+        alignmentTimezone: 'UTC',
         from: new Date(from).toISOString(),
         to: new Date(safeTo).toISOString(),
       },
