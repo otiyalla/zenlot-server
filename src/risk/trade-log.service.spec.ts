@@ -653,7 +653,7 @@ describe('TradeLogService.settleManualClose', () => {
   });
 
   it('settles a close with an edited breakeven stop and leaves R-multiple null', async () => {
-    const { service, txUpdate, settleRealizedPnL } = makeService({});
+    const { service, txUpdateMany, settleRealizedPnL } = makeService({});
 
     await service.settleManualClose(
       'u1',
@@ -666,7 +666,7 @@ describe('TradeLogService.settleManualClose', () => {
       1.12,
     );
 
-    expect(dataOf(txUpdate).rMultiple).toBeNull();
+    expect(dataOf(txUpdateMany).rMultiple).toBeNull();
     expect(settleRealizedPnL).toHaveBeenCalledWith(
       expect.anything(),
       'u1',
