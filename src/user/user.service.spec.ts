@@ -102,6 +102,9 @@ describe('UserService', () => {
 
     await expect(service.resetPassword('user-1', 'new-password')).rejects.toBe(
       revocationError,
+    );
+  });
+
   it('permanently deletes a due scheduled account and records the audit', async () => {
     prisma.user.findUnique.mockResolvedValue({
       deletedAt: new Date('2026-01-01'),

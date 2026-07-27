@@ -48,8 +48,8 @@ describe('JournalService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     service = new JournalService(prisma as unknown as PrismaService);
-    journalCreate = prisma.journal.create as jest.Mock;
-    tradeFindFirst = prisma.trade.findFirst as jest.Mock;
+    journalCreate = prisma.journal.create;
+    tradeFindFirst = prisma.trade.findFirst;
     prisma.journal.create.mockResolvedValue({ id: 'journal-1' });
     prisma.journal.findMany.mockResolvedValue([]);
     prisma.journal.findUnique.mockResolvedValue({ id: 'journal-1' });
