@@ -12,9 +12,11 @@ import { SETTLED_STATUSES, TradeLogService } from '../risk/trade-log.service';
 
 /**
  * Fields whose change alters a trade's capital exposure or reward sizing, so a
- * change to any of them on an *open* trade requires the risk figures
- * (`capitalExposure`/`capitalExposurePct`/`rr`/`risk`/`reward`) to be recomputed
+ * change to any of them on an *open* trade requires the active risk figures
+ * (`capitalExposure`/`capitalExposurePct`/`risk`/`reward`) to be recomputed
  * — otherwise the portfolio exposure snapshot keeps summing stale numbers.
+ * The planned `rr` recorded when the trade was sized is intentionally excluded:
+ * later stop management must not rewrite that grading baseline.
  */
 const RISK_AFFECTING_FIELDS = [
   'entry',
@@ -242,6 +244,7 @@ export class TradeService {
    */
   private toUpdateData(
     updateTradeDto: UpdateTradeDto,
+    preservePlannedRr = false,
   ): Prisma.tradeUpdateInput {
     const {
       id: _,
@@ -251,11 +254,16 @@ export class TradeService {
       isAutoClosed: _isAutoClosed,
       ...updateData
     } = updateTradeDto;
+    const { rr: _clientRr, ...updateDataWithoutRr } = updateData;
+    const mutableUpdateData = preservePlannedRr
+      ? updateDataWithoutRr
+      : updateData;
 
     return {
-      ...updateData,
-      stopLoss: updateData.stopLoss as unknown as Prisma.InputJsonValue,
-      takeProfit: updateData.takeProfit as unknown as Prisma.InputJsonValue,
+      ...mutableUpdateData,
+      stopLoss: mutableUpdateData.stopLoss as unknown as Prisma.InputJsonValue,
+      takeProfit:
+        mutableUpdateData.takeProfit as unknown as Prisma.InputJsonValue,
     };
   }
 
@@ -263,11 +271,12 @@ export class TradeService {
     id: string,
     updateTradeDto: UpdateTradeDto,
     riskPatch?: Prisma.tradeUpdateInput,
+    preservePlannedRr = false,
   ) {
     // `riskPatch` (server-recomputed exposure/sizing) is applied last so it wins
     // over the client-sent stop/target/lot values it derives from.
     const data: Prisma.tradeUpdateInput = {
-      ...this.toUpdateData(updateTradeDto),
+      ...this.toUpdateData(updateTradeDto, preservePlannedRr),
       ...(riskPatch ?? {}),
     };
     return this.prisma.trade.update({ where: { id }, data });
@@ -279,6 +288,8 @@ export class TradeService {
     updateTradeDto: UpdateTradeDto,
   ) {
     const existing = await this.findOneForUser(id, userId);
+    const preservePlannedRr =
+      existing.status === 'open' && existing.capitalExposurePct !== null;
 
     // An open trade moving to a PnL-settling status (closed_in_profit/
     // closed_in_loss/reached_tp/reached_sl) is a realized close. Delegate to the
@@ -291,7 +302,7 @@ export class TradeService {
       return this.tradeLog.settleManualClose(
         userId,
         existing,
-        this.toUpdateData(updateTradeDto),
+        this.toUpdateData(updateTradeDto, preservePlannedRr),
         updateTradeDto.closedPrice ?? 0,
       );
     }
@@ -301,7 +312,12 @@ export class TradeService {
       existing,
       updateTradeDto,
     );
-    return this.update(id, updateTradeDto, riskPatch ?? undefined);
+    return this.update(
+      id,
+      updateTradeDto,
+      riskPatch ?? undefined,
+      preservePlannedRr,
+    );
   }
 
   /**
@@ -384,7 +400,6 @@ export class TradeService {
     return {
       lot: calculation.lotSizeRounded,
       exchangeRate: calculation.exchangeRate,
-      rr: calculation.rewardToRisk ?? 0,
       risk: calculation.actualCapitalExposure,
       reward,
       capitalExposure: calculation.actualCapitalExposure,

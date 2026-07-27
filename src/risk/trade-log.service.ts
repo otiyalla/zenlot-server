@@ -438,7 +438,6 @@ export class TradeLogService {
       riskPatch = {
         lot: calculation.lotSizeRounded,
         exchangeRate: calculation.exchangeRate,
-        rr: calculation.rewardToRisk ?? 0,
         risk: calculation.actualCapitalExposure,
         reward,
         capitalExposure: calculation.actualCapitalExposure,

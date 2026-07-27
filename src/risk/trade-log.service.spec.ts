@@ -214,6 +214,7 @@ describe('TradeLogService.logTrade', () => {
     expect(data.symbol).toBe('EURUSD');
     expect(data.lot).toBe(0.2);
     expect(data.execution).toBe('buy');
+    expect(data.rr).toBe(2);
     expect(data.capitalExposure).toBe(100);
     expect(data.governanceStatus).toBe('approved');
     expect(govCreate).toHaveBeenCalled();
@@ -468,6 +469,7 @@ describe('TradeLogService.applyStopAdjustment', () => {
     id: 't1',
     userId: 'u1',
     execution: 'buy',
+    rr: 2,
     stopLoss: { value: 1.095, pips: 50 },
     stopAdjustments: [],
     status: 'open',
@@ -504,6 +506,61 @@ describe('TradeLogService.applyStopAdjustment', () => {
     const adjustments = dataOf(tradeUpdate).stopAdjustments as unknown[];
     expect(adjustments).toHaveLength(2);
   });
+
+  it.each([
+    ['buy', 1.095, 1.12],
+    ['sell', 1.105, 1.08],
+  ] as const)(
+    'refreshes tracked open %s trailing-stop metadata without overwriting planned rr',
+    async (execution, newStop, targetPrice) => {
+      const tracked = {
+        ...openTrade,
+        symbol: 'EURUSD',
+        execution,
+        entry: 1.1,
+        lot: 0.2,
+        accountCurrency: 'USD',
+        capitalExposurePct: 1,
+        stopLoss: {
+          value: execution === 'buy' ? 1.09 : 1.11,
+          pips: 100,
+        },
+        takeProfit: { value: targetPrice, pips: 200 },
+      };
+      const findFirst = jest.fn().mockResolvedValue(tracked);
+      const calculateActiveTrade = jest.fn().mockResolvedValue({
+        actualCapitalExposure: 100,
+        capitalExposurePct: 1,
+        rewardToRisk: 4,
+        rewardPips: 200,
+        pipValue: 10,
+        stopPrice: newStop,
+        stopDistancePips: 50,
+        targetPrice,
+        lotSizeRounded: 0.2,
+        exchangeRate: 1,
+      });
+      const { service, tradeUpdate } = makeService({
+        findFirst,
+        calculateActiveTrade,
+      });
+
+      await service.applyStopAdjustment('u1', 't1', newStop, 'trail stop');
+
+      const data = dataOf(tradeUpdate);
+      expect(data).not.toHaveProperty('rr');
+      expect(data).toMatchObject({
+        lot: 0.2,
+        exchangeRate: 1,
+        risk: 100,
+        reward: 400,
+        capitalExposure: 100,
+        capitalExposurePct: 1,
+        stopLoss: { value: newStop, pips: 50 },
+        takeProfit: { value: targetPrice, pips: 200 },
+      });
+    },
+  );
 
   it.each([
     ['buy', 1.105, 1.12],
@@ -554,8 +611,10 @@ describe('TradeLogService.applyStopAdjustment', () => {
         lot: 0.2,
       });
       const data = dataOf(tradeUpdate);
+      expect(data).not.toHaveProperty('rr');
       expect(data).toMatchObject({
-        rr: 0,
+        lot: 0.2,
+        exchangeRate: 1,
         risk: 0,
         reward: 400,
         capitalExposure: 0,

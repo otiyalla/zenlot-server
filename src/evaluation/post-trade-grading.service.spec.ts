@@ -237,6 +237,7 @@ describe('PostTradeGradingService.getExecutionForTrade', () => {
     expect(result.overallExecutionScore).toBe(100);
     expect(result.stopQuality.logic).toBe('logical');
     expect(result.exitQuality.exitType).toBe('target_hit');
+    expect(result.exitQuality.targetR).toBe(2);
   });
 
   it('throws 404 when the trade has not been graded', async () => {
