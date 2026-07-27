@@ -20,7 +20,7 @@ describe('UserService', () => {
         },
         {
           provide: UserGateway,
-          useValue: { server: { emit: jest.fn() } },
+          useValue: { emitUserUpdate: jest.fn() },
         },
         {
           provide: AuditService,
