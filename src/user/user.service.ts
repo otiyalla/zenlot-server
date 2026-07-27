@@ -468,10 +468,9 @@ export class UserService {
   ): Promise<void> {
     const user = await this.prisma.user.findUnique({
       where: { id },
-      include: {
-        trade: true,
-        journalEntries: true,
-        refreshTokens: true,
+      select: {
+        deletedAt: true,
+        deleteScheduledFor: true,
       },
     });
 
@@ -479,11 +478,29 @@ export class UserService {
       throw new NotFoundException('User not found');
     }
 
-    // Perform the permanent deletion with all cascading deletes
-    // This will cascade delete: trades, journals, refresh tokens, audit logs
-    await this.prisma.user.delete({
-      where: { id },
+    const now = new Date();
+    if (
+      !user.deletedAt ||
+      !user.deleteScheduledFor ||
+      user.deleteScheduledFor > now
+    ) {
+      // A restored account, or a job that ran before its deadline, is stale.
+      return;
+    }
+
+    // Re-check the deletion state atomically so a cancellation racing this job
+    // cannot allow a stale snapshot to remove the restored account. The
+    // database cascades associated records from this conditional delete.
+    const deletion = await this.prisma.user.deleteMany({
+      where: {
+        id,
+        deletedAt: { not: null },
+        deleteScheduledFor: { lte: now },
+      },
     });
+    if (deletion.count === 0) {
+      return;
+    }
 
     // Log the final deletion
     await this.auditService.log({
