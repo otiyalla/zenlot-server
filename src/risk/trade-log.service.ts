@@ -505,12 +505,26 @@ export class TradeLogService {
   ): Promise<trade> {
     const status =
       typeof data.status === 'string' ? data.status : existing.status;
-    const direction = executionToDirection(existing.execution);
+    // The generic update path can edit geometry in the same request as the
+    // close. Settlement must use the values that will be persisted, not the
+    // pre-update snapshot loaded by TradeService.updateForUser.
+    const updateValues = Object.fromEntries(
+      Object.entries(data).filter(([, value]) => value !== undefined),
+    );
+    const settledTrade = { ...existing, ...updateValues } as trade;
+    // Realized PnL is applied to the user's single risk-profile balance. Use
+    // that balance's source-of-truth currency rather than a trade currency that
+    // the client may edit in this same request.
+    const { accountCurrency } = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { accountCurrency: true },
+    });
+    const direction = executionToDirection(settledTrade.execution);
     const stopPrice = Number(
-      (existing.stopLoss as unknown as { value: number }).value,
+      (settledTrade.stopLoss as unknown as { value: number }).value,
     );
     const targetPrice = Number(
-      (existing.takeProfit as unknown as { value: number }).value,
+      (settledTrade.takeProfit as unknown as { value: number }).value,
     );
 
     // The settling statuses close at the trade's own protective levels; fall back
@@ -520,27 +534,32 @@ export class TradeLogService {
       exitPrice > 0 ? exitPrice : isProfit ? targetPrice : stopPrice;
 
     const closeExchangeRate = await this.rateResolver.resolveExchangeRate(
-      existing.symbol,
-      existing.accountCurrency,
+      settledTrade.symbol,
+      accountCurrency,
     );
 
     const settles = resolvedExit > 0;
     const pnl = settles
       ? calculatePnL({
-          symbol: existing.symbol,
-          entryPrice: existing.entry,
+          symbol: settledTrade.symbol,
+          entryPrice: settledTrade.entry,
           exitPrice: resolvedExit,
-          lotSize: existing.lot,
+          lotSize: settledTrade.lot,
           direction,
           exchangeRate: closeExchangeRate,
         })
       : null;
     const rMultiple = settles
-      ? calculateRMultiple(existing.entry, resolvedExit, stopPrice, direction)
+      ? calculateRMultiple(
+          settledTrade.entry,
+          resolvedExit,
+          stopPrice,
+          direction,
+        )
       : null;
 
     // Ensure a risk profile row exists so the balance increment below succeeds.
-    await this.riskProfileService.getProfile(userId, existing.accountCurrency);
+    await this.riskProfileService.getProfile(userId, accountCurrency);
 
     const { updated, before, after } = await this.prisma.$transaction(
       async (tx) => {
