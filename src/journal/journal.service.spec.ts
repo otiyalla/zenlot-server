@@ -49,6 +49,8 @@ describe('JournalService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     service = new JournalService(prisma as unknown as PrismaService);
+    journalCreate = prisma.journal.create as jest.Mock;
+    tradeFindFirst = prisma.trade.findFirst as jest.Mock;
     prisma.journal.create.mockResolvedValue({ id: 'journal-1' });
     prisma.journal.findMany.mockResolvedValue([]);
     prisma.journal.findUnique.mockResolvedValue({ id: 'journal-1' });
@@ -179,7 +181,7 @@ describe('JournalService', () => {
           ...baseDto,
           tradeId: undefined,
         },
-        include: { author: true },
+        include: SAFE_AUTHOR_INCLUDE,
       });
     });
 
