@@ -11,8 +11,21 @@ import { Prisma } from '../../prisma/generated/prisma/client';
 export class JournalService {
   constructor(private readonly prisma: PrismaService) {}
 
-  create(createJournalDto: CreateJournalDto) {
-    // Ensure user exists
+  async create(createJournalDto: CreateJournalDto) {
+    if (createJournalDto.tradeId) {
+      const trade = await this.prisma.trade.findFirst({
+        where: {
+          id: createJournalDto.tradeId,
+          userId: createJournalDto.userId,
+        },
+        select: { id: true },
+      });
+
+      if (!trade) {
+        throw new NotFoundException('Trade not found');
+      }
+    }
+
     const data = {
       userId: createJournalDto.userId,
       symbol: createJournalDto.symbol,
