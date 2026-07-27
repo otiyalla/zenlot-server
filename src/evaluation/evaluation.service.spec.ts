@@ -263,10 +263,11 @@ describe('EvaluationService.getEvalById', () => {
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it('returns the evaluation by id incl. evaluationId and the async aiCoaching', async () => {
+  it('returns the evaluation by id incl. persisted checklistId and async aiCoaching', async () => {
     const evalFindFirst = jest.fn().mockResolvedValue({
       id: 'eval-1',
       tradeId: null,
+      checklistId: 'chk-1',
       setupQualityTotal: 88,
       setupQualityGrade: 'A',
       setupBreakdown: [],
@@ -286,6 +287,7 @@ describe('EvaluationService.getEvalById', () => {
       where: { id: 'eval-1', userId: USER_ID },
     });
     expect(result.evaluationId).toBe('eval-1');
+    expect(result.checklistId).toBe('chk-1');
     expect(result.tradeId).toBeNull();
     expect(result.aiCoaching).toBe(
       'Proceed. Strong confluence across all factors.',

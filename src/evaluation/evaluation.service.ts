@@ -161,7 +161,7 @@ export class EvaluationService {
     if (!evaluationRow) {
       throw new NotFoundException('No pre-trade evaluation found');
     }
-    return this.toResult(evaluationRow, null);
+    return this.toResult(evaluationRow, evaluationRow.checklistId);
   }
 
   // ─── Soft-gate wiring (decision #2 — warn, never block) ────────────────────
