@@ -566,6 +566,115 @@ describe('TradeLogService.settleManualClose', () => {
   });
 });
 
+describe('TradeLogService.settleManualClose', () => {
+  const existing = {
+    id: 't1',
+    userId: 'u1',
+    symbol: 'EURUSD',
+    execution: 'buy',
+    entry: 1.1,
+    lot: 0.1,
+    accountCurrency: 'USD',
+    status: 'open',
+    stopLoss: { value: 1.09, pips: 10 },
+    takeProfit: { value: 1.12, pips: 20 },
+  };
+
+  it('settles using geometry edited in the same close request', async () => {
+    const { service, settleRealizedPnL } = makeService({});
+
+    await service.settleManualClose(
+      'u1',
+      existing as never,
+      {
+        status: 'closed_in_profit',
+        entry: 1.105,
+        lot: 0.2,
+        execution: 'buy',
+        stopLoss: { value: 1.1 },
+        takeProfit: { value: 1.13 },
+      } as never,
+      1.12,
+    );
+
+    // 1.12 - edited entry 1.105, at 0.2 lots = 300 USD (rate 1).
+    expect(settleRealizedPnL).toHaveBeenCalledWith(
+      expect.anything(),
+      'u1',
+      expect.closeTo(300, 6),
+    );
+  });
+
+  it.each([
+    ['buy', 1.105, 1.1, 1.12, 300],
+    ['sell', 1.105, 1.11, 1.12, -300],
+  ])(
+    'uses edited direction and stop for %s settlement',
+    async (execution, entry, stop, exit, expectedPnl) => {
+      const { service, settleRealizedPnL } = makeService({});
+      await service.settleManualClose(
+        'u1',
+        existing as never,
+        {
+          status: expectedPnl > 0 ? 'closed_in_profit' : 'closed_in_loss',
+          execution,
+          entry,
+          lot: 0.2,
+          stopLoss: { value: stop },
+        } as never,
+        exit,
+      );
+
+      expect(settleRealizedPnL).toHaveBeenCalledWith(
+        expect.anything(),
+        'u1',
+        expect.closeTo(expectedPnl, 6),
+      );
+    },
+  );
+
+  it('settles in the user account currency when the trade currency is edited', async () => {
+    const resolveExchangeRate = jest.fn().mockResolvedValue(1);
+    const getProfile = jest.fn().mockResolvedValue({ overrideMode: 'simple' });
+    const { service } = makeService({ resolveExchangeRate, getProfile });
+
+    await service.settleManualClose(
+      'u1',
+      existing as never,
+      {
+        status: 'closed_in_profit',
+        accountCurrency: 'EUR',
+      } as never,
+      1.12,
+    );
+
+    expect(resolveExchangeRate).toHaveBeenCalledWith('EURUSD', 'USD');
+    expect(getProfile).toHaveBeenCalledWith('u1', 'USD');
+  });
+
+  it('settles a close with an edited breakeven stop and leaves R-multiple null', async () => {
+    const { service, txUpdateMany, settleRealizedPnL } = makeService({});
+
+    await service.settleManualClose(
+      'u1',
+      existing as never,
+      {
+        status: 'closed_in_profit',
+        entry: 1.105,
+        stopLoss: { value: 1.105 },
+      } as never,
+      1.12,
+    );
+
+    expect(dataOf(txUpdateMany).rMultiple).toBeNull();
+    expect(settleRealizedPnL).toHaveBeenCalledWith(
+      expect.anything(),
+      'u1',
+      expect.closeTo(150, 6),
+    );
+  });
+});
+
 describe('TradeLogService.applyStopAdjustment', () => {
   const openTrade = {
     id: 't1',
