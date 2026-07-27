@@ -478,14 +478,18 @@ export class TradeLogService {
           exchangeRate: closeExchangeRate,
         })
       : null;
-    const rMultiple = settles
-      ? calculateRMultiple(
-          settledTrade.entry,
-          resolvedExit,
-          stopPrice,
-          direction,
-        )
-      : null;
+    // A stop at entry represents a valid breakeven stop, but it leaves no
+    // initial-risk distance from which to calculate an R-multiple. Preserve the
+    // close and its realized PnL while recording the undefined metric as null.
+    const rMultiple =
+      settles && settledTrade.entry !== stopPrice
+        ? calculateRMultiple(
+            settledTrade.entry,
+            resolvedExit,
+            stopPrice,
+            direction,
+          )
+        : null;
 
     // Ensure a risk profile row exists so the balance increment below succeeds.
     await this.riskProfileService.getProfile(userId, accountCurrency);

@@ -536,6 +536,28 @@ describe('TradeLogService.settleManualClose', () => {
     expect(resolveExchangeRate).toHaveBeenCalledWith('EURUSD', 'USD');
     expect(getProfile).toHaveBeenCalledWith('u1', 'USD');
   });
+
+  it('settles a close with an edited breakeven stop and leaves R-multiple null', async () => {
+    const { service, txUpdate, settleRealizedPnL } = makeService({});
+
+    await service.settleManualClose(
+      'u1',
+      existing as never,
+      {
+        status: 'closed_in_profit',
+        entry: 1.105,
+        stopLoss: { value: 1.105 },
+      } as never,
+      1.12,
+    );
+
+    expect(dataOf(txUpdate).rMultiple).toBeNull();
+    expect(settleRealizedPnL).toHaveBeenCalledWith(
+      expect.anything(),
+      'u1',
+      expect.closeTo(150, 6),
+    );
+  });
 });
 
 describe('TradeLogService.applyStopAdjustment', () => {
