@@ -274,10 +274,13 @@ export class AuthService {
       if (!payload && refreshToken) {
         const { user, token } = await this.verifyRefreshToken(refreshToken);
 
-        // Generate new tokens
+        // Revoke first so a failed revocation never leaves the old token
+        // usable while a replacement token has already been persisted.
+        await this.revokeRefreshToken(token);
+
+        // Generate new tokens only after the old session is invalidated.
         const newPayload = { email: user.email, sub: user.id };
         const newRefreshTokenValue = await this.createRefreshToken(newPayload);
-        await this.revokeRefreshToken(token);
         this.analytics.trackTokensRefreshed(user.id, 'verify');
         this.analytics.trackSessionVerified(user.id, true);
         await this.auditService.log({
@@ -438,12 +441,13 @@ export class AuthService {
         },
       });
     } catch (error) {
-      this.logger.warn(
-        'RefreshToken model not yet available. Please run: npx prisma generate',
-      );
+      this.logger.warn('Could not revoke refresh tokens for user');
       Sentry.captureException(error, {
         extra: { userId, context: 'revokeAllRefreshTokens' },
       });
+      // Revocation is a security boundary. Never report sign-in/sign-out or
+      // rotation success when the database could not invalidate old tokens.
+      throw error;
     }
   }
 
@@ -459,12 +463,13 @@ export class AuthService {
         },
       });
     } catch (error) {
-      this.logger.warn(
-        'RefreshToken model not yet available. Please run: npx prisma generate',
-      );
+      this.logger.warn('Could not revoke refresh token');
       Sentry.captureException(error, {
         extra: { context: 'revokeRefreshToken' },
       });
+      // A failed rotation must not be reported as successful while the old
+      // refresh token remains valid.
+      throw error;
     }
   }
 
@@ -498,10 +503,11 @@ export class AuthService {
         throw new UnauthorizedException('Invalid refresh token');
       }
 
-      // Generate new tokens
+      // Revoke first so a failed revocation never leaves the old token
+      // usable while a replacement token has already been persisted.
       const payload = { email: user.email, sub: user.id };
-      const newRefreshTokenValue = await this.createRefreshToken(payload);
       await this.revokeRefreshToken(token);
+      const newRefreshTokenValue = await this.createRefreshToken(payload);
       this.analytics.trackTokensRefreshed(user.id, 'refresh');
       await this.auditService.log({
         userId: user.id,

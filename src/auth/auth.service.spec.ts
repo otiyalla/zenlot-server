@@ -228,6 +228,73 @@ describe('AuthService', () => {
     );
   });
 
+  it('fails sign-in when existing session revocation is unavailable', async () => {
+    userService.validateUser.mockResolvedValue(user);
+    const revocationError = new Error('refresh-token database unavailable');
+    jest
+      .spyOn(service as any, 'revokeAllRefreshTokens')
+      .mockRejectedValue(revocationError);
+    const createRefreshToken = jest
+      .spyOn(service, 'createRefreshToken')
+      .mockResolvedValue('unused');
+
+    await expect(service.signin(user.email, 'password')).rejects.toBe(
+      revocationError,
+    );
+    expect(createRefreshToken).not.toHaveBeenCalled();
+  });
+
+  it('fails refresh rotation when old-token revocation is unavailable', async () => {
+    jest.spyOn(service, 'verifyToken').mockResolvedValue(null);
+    jest
+      .spyOn(service, 'verifyRefreshToken')
+      .mockResolvedValue({ user, token: 'old-db-token' } as any);
+    jest
+      .spyOn(service, 'createRefreshToken')
+      .mockResolvedValue('new-refresh-token');
+    const revocationError = new Error('refresh-token database unavailable');
+    jest
+      .spyOn(service as any, 'revokeRefreshToken')
+      .mockRejectedValue(revocationError);
+
+    await expect(
+      service.verify('expired-access-token', 'valid-refresh-token'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('fails sign-out when session revocation is unavailable', async () => {
+    const revocationError = new Error('refresh-token database unavailable');
+    jest
+      .spyOn(service as any, 'revokeAllRefreshTokens')
+      .mockRejectedValue(revocationError);
+
+    await expect(service.signout(user.id)).rejects.toBe(revocationError);
+    expect(analytics.trackUserSignedOut).not.toHaveBeenCalled();
+    expect(analytics.trackAuthFailed).toHaveBeenCalledWith(
+      user.id,
+      'signout',
+      'server_error',
+    );
+  });
+
+  it('does not mint a replacement token when refresh revocation fails', async () => {
+    jest
+      .spyOn(service, 'verifyRefreshToken')
+      .mockResolvedValue({ user, token: 'old-db-token' } as any);
+    const revoke = jest
+      .spyOn(service as any, 'revokeRefreshToken')
+      .mockRejectedValue(new Error('refresh-token database unavailable'));
+    const createRefreshToken = jest
+      .spyOn(service, 'createRefreshToken')
+      .mockResolvedValue('must-not-be-created');
+
+    await expect(
+      service.refreshTokens('old-public-token'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(revoke).toHaveBeenCalledWith('old-db-token');
+    expect(createRefreshToken).not.toHaveBeenCalled();
+  });
+
   it('returns the verified payload when the access token is valid', async () => {
     const payload = { id: 'user-1', email: 'user@example.com' };
     jest.spyOn(service, 'verifyToken').mockResolvedValue(payload as any);

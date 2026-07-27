@@ -208,9 +208,19 @@ export class UserService {
   async resetPassword(id: string, newPassword: string) {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(newPassword, salt);
-    return this.prisma.user.update({
-      where: { id },
-      data: { password: hashedPassword },
+    // Keep the credential update and session revocation atomic. If revocation
+    // is unavailable, the password change is rolled back and old sessions are
+    // not left usable while reporting a failed operation.
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.user.update({
+        where: { id },
+        data: { password: hashedPassword },
+      });
+      await tx.refreshToken.updateMany({
+        where: { userId: id, isRevoked: false },
+        data: { isRevoked: true },
+      });
+      return updated;
     });
   }
 
