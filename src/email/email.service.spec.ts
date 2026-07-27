@@ -43,9 +43,14 @@ describe('EmailService', () => {
 
     const message = transport.send.mock.calls[0][0];
     expect(message.subject).toBe(
-      "You're in! Here's what you can do next with Zenlot John",
+      "Welcome to Zenlot, John — let's build your trading discipline",
     );
     expect(message.html).toContain('Welcome to Zenlot, John!');
+    // Repositioned around the discipline/risk OS + a primary CTA button.
+    expect(message.html).toContain('risk-management OS');
+    expect(message.html).toContain('Open Zenlot');
+    // CTA deep-links into the app (custom scheme → Home via the auth gate).
+    expect(message.html).toContain('href="zenlot://"');
   });
 
   it('sendWelcomeEmail sends French content for fr language', async () => {
@@ -61,9 +66,12 @@ describe('EmailService', () => {
 
     const message = transport.send.mock.calls[0][0];
     expect(message.subject).toBe(
-      'Bienvenue sur Zenlot : prochaines etapes pour Jean',
+      'Bienvenue sur Zenlot, Jean — bâtissons votre discipline de trading',
     );
     expect(message.html).toContain('Bienvenue sur Zenlot, Jean!');
+    // French copy now uses proper accents + the CTA button.
+    expect(message.html).toContain('Ouvrir Zenlot');
+    expect(message.html).toContain('gestion du risque');
   });
 
   it('sendPasswordResentEmail falls back to English for unsupported language', async () => {

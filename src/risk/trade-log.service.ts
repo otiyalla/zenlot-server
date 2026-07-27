@@ -24,6 +24,9 @@ import {
 } from './coaching/coaching.processor';
 import { NotificationsService } from '../notifications/notifications.service';
 import { DrawdownPeriod } from '../notifications/notification.copy';
+import { EvaluationService } from '../evaluation/evaluation.service';
+import { PostTradeGradingService } from '../evaluation/post-trade-grading.service';
+import { StopAdjustment } from '../evaluation/engine';
 
 /**
  * Trade statuses whose close settled realized PnL onto the account balance +
@@ -50,6 +53,8 @@ export class TradeLogService {
     private readonly drawdownService: DrawdownService,
     private readonly riskProfileService: RiskProfileService,
     private readonly notifications: NotificationsService,
+    private readonly evaluationService: EvaluationService,
+    private readonly postTradeGrading: PostTradeGradingService,
     @InjectQueue(COACHING_QUEUE) private readonly coachingQueue: Queue,
   ) {}
 
@@ -177,6 +182,39 @@ export class TradeLogService {
       },
     });
 
+    // Phase 2 soft-gate (decision #2 — warn, never block). If the client passed
+    // a pre-trade checklistId, link that checklist + its evaluation to this
+    // trade; otherwise record that the checklist was SKIPPED (a behavioral
+    // signal that maps to EvaluatedTrade.checklistSkipped). Best-effort: a
+    // failure here must never fail the trade log.
+    try {
+      if (dto.checklistId) {
+        const linked = await this.evaluationService.linkChecklistToTrade(
+          userId,
+          created.id,
+          dto.checklistId,
+        );
+        if (!linked) {
+          // The supplied checklist was not linkable (unknown / not owned /
+          // already bound) — treat the trade as having skipped its checklist.
+          await this.evaluationService.markChecklistSkipped(userId, created.id);
+        }
+      } else {
+        await this.evaluationService.markChecklistSkipped(userId, created.id);
+      }
+    } catch (error) {
+      this.logger.error(
+        'Failed to wire pre-trade checklist soft-gate',
+        error as Error,
+      );
+      Sentry.captureException(error, {
+        extra: {
+          tradeId: created.id,
+          context: 'TradeLogService.logTrade.softGate',
+        },
+      });
+    }
+
     // Fire async AI coaching (non-blocking — failure must not fail the log).
     try {
       const jobData: CoachingJobData = {
@@ -224,6 +262,7 @@ export class TradeLogService {
     userId: string,
     tradeId: string,
     exitPrice: number,
+    language: string = 'en',
   ): Promise<trade> {
     const existing = await this.prisma.trade.findUnique({
       where: { id: tradeId },
@@ -307,7 +346,70 @@ export class TradeLogService {
       void this.notifications.notifyDrawdownBreach(userId, period);
     }
 
+    // Phase 2 post-trade grading (spec Sections 6 & 7). Runs AFTER the close
+    // transaction has committed and is fully best-effort — gradeClosedTrade
+    // never throws, but we void + .catch defensively so it can never affect the
+    // close response either.
+    void this.postTradeGrading
+      .gradeClosedTrade(userId, tradeId, language)
+      .catch(() => undefined);
+
     return updated;
+  }
+
+  /**
+   * Logs a stop adjustment for an open trade (spec Section 13.2). Appends
+   * { ts, oldStop, newStop, reason } to the trade's `stopAdjustments` array AND
+   * updates the active `stopLoss` level to the new price. The append is what
+   * lets the execution grader detect widened/tightened stops, so logging is
+   * kept frictionless — only a positive price and a non-empty reason are
+   * required (validated at the DTO).
+   */
+  async applyStopAdjustment(
+    userId: string,
+    tradeId: string,
+    newStop: number,
+    reason: string,
+  ): Promise<trade> {
+    const existing = await this.prisma.trade.findFirst({
+      where: { id: tradeId, userId },
+    });
+    if (!existing) {
+      throw new NotFoundException('Trade not found');
+    }
+    if (existing.status !== 'open') {
+      throw new BadRequestException('Trade is not open');
+    }
+
+    const stopLossJson =
+      (existing.stopLoss as { value?: number; pips?: number } | null) ?? {};
+    const oldStop =
+      typeof stopLossJson.value === 'number' ? stopLossJson.value : 0;
+
+    const adjustment: StopAdjustment = {
+      ts: new Date().toISOString(),
+      oldStop,
+      newStop,
+      reason,
+    };
+    const adjustments = [
+      ...(Array.isArray(existing.stopAdjustments)
+        ? (existing.stopAdjustments as unknown as StopAdjustment[])
+        : []),
+      adjustment,
+    ];
+
+    return this.prisma.trade.update({
+      where: { id: tradeId },
+      data: {
+        // Preserve the original pips metadata; only the active value moves.
+        stopLoss: {
+          ...stopLossJson,
+          value: newStop,
+        } as unknown as Prisma.InputJsonValue,
+        stopAdjustments: adjustments as unknown as Prisma.InputJsonValue,
+      },
+    });
   }
 
   /**
@@ -331,6 +433,7 @@ export class TradeLogService {
     existing: trade,
     data: Prisma.tradeUpdateInput,
     exitPrice: number,
+    language: string = 'en',
   ): Promise<trade> {
     const status =
       typeof data.status === 'string' ? data.status : existing.status;
@@ -420,6 +523,11 @@ export class TradeLogService {
     for (const period of newlyBreachedPeriods(before, after)) {
       void this.notifications.notifyDrawdownBreach(userId, period);
     }
+
+    // Phase 2 post-trade grading (spec Sections 6 & 7). Best-effort, post-commit.
+    void this.postTradeGrading
+      .gradeClosedTrade(userId, existing.id, language)
+      .catch(() => undefined);
 
     return updated;
   }

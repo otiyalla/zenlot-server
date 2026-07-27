@@ -36,4 +36,15 @@ export class LogTradeDto extends CalculateRiskDto {
       'Optional free-text note for why the user is overriding the rule(s).',
   })
   overrideReason?: string;
+
+  @IsOptional()
+  @IsString()
+  @ApiPropertyOptional({
+    description:
+      'Phase 2 soft-gate: id of a pre-trade checklist submitted via ' +
+      'POST /evaluation/checklist. If provided, the checklist + its evaluation ' +
+      'are linked to this trade. If omitted, the trade is recorded as having ' +
+      'SKIPPED the checklist (a behavioral signal). Never blocks trade logging.',
+  })
+  checklistId?: string;
 }

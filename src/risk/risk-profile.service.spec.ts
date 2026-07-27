@@ -35,6 +35,7 @@ describe('RiskProfileService', () => {
   let upsert: jest.Mock;
   let auditLog: jest.Mock;
   let setManualBalance: jest.Mock;
+  let reconcileBreachFlags: jest.Mock;
   let transaction: jest.Mock;
 
   const firstUpsertArg = (): UpsertArg => {
@@ -46,6 +47,7 @@ describe('RiskProfileService', () => {
     upsert = jest.fn().mockResolvedValue(storedRow);
     auditLog = jest.fn().mockResolvedValue(undefined);
     setManualBalance = jest.fn().mockResolvedValue(undefined);
+    reconcileBreachFlags = jest.fn().mockResolvedValue(undefined);
 
     // The tx client the service operates on; getProfile uses the bare prisma
     // client, updateProfile runs inside $transaction with this same shape.
@@ -60,7 +62,10 @@ describe('RiskProfileService', () => {
           useValue: { riskProfile: { upsert }, $transaction: transaction },
         },
         { provide: AuditService, useValue: { log: auditLog } },
-        { provide: DrawdownService, useValue: { setManualBalance } },
+        {
+          provide: DrawdownService,
+          useValue: { setManualBalance, reconcileBreachFlags },
+        },
       ],
     }).compile();
 
@@ -107,6 +112,32 @@ describe('RiskProfileService', () => {
       expect(arg.update).not.toHaveProperty('lastBalanceSetAt');
       // …and the drawdown row is left untouched.
       expect(setManualBalance).not.toHaveBeenCalled();
+      expect(reconcileBreachFlags).not.toHaveBeenCalled();
+    });
+
+    it('re-evaluates sticky breach flags when a drawdown limit changes', async () => {
+      await service.updateProfile(
+        USER_ID,
+        { maxMonthlyDrawdownPct: 15 },
+        CURRENCY,
+      );
+
+      // The profile write and breach reconciliation share one $transaction, and
+      // only the changed limit is forwarded (SCRUM-53).
+      expect(transaction).toHaveBeenCalledTimes(1);
+      expect(reconcileBreachFlags).toHaveBeenCalledWith(
+        expect.anything(),
+        USER_ID,
+        {
+          maxDailyDrawdownPct: undefined,
+          maxWeeklyDrawdownPct: undefined,
+          maxMonthlyDrawdownPct: 15,
+        },
+      );
+      const txClient = reconcileBreachFlags.mock.calls[0][0] as {
+        riskProfile: { upsert: jest.Mock };
+      };
+      expect(txClient.riskProfile.upsert).toBe(upsert);
     });
 
     it('stamps a manual reconciliation when accountBalance is set', async () => {
@@ -134,6 +165,59 @@ describe('RiskProfileService', () => {
         riskProfile: { upsert: jest.Mock };
       };
       expect(txClient.riskProfile.upsert).toBe(upsert);
+    });
+
+    it('reconciles a changed limit against the newly set balance', async () => {
+      let drawdownRow = {
+        userId: USER_ID,
+        accountBalance: 9000,
+        peakBalance: 10000,
+        dailyOpenBalance: 10000,
+        weeklyOpenBalance: 10000,
+        monthlyOpenBalance: 10000,
+        dailyBreached: false,
+        weeklyBreached: false,
+        monthlyBreached: true,
+      };
+      const drawdownState = {
+        findUnique: jest.fn(() => Promise.resolve({ ...drawdownRow })),
+        create: jest.fn(),
+        update: jest.fn(({ data }: { data: Partial<typeof drawdownRow> }) => {
+          drawdownRow = { ...drawdownRow, ...data };
+          return Promise.resolve(drawdownRow);
+        }),
+      };
+      const riskProfile = {
+        upsert: jest.fn(({ update }: { update: Record<string, unknown> }) =>
+          Promise.resolve({ ...storedRow, ...update }),
+        ),
+        findUnique: jest.fn(),
+      };
+      const tx = { riskProfile, drawdownState };
+      const prisma = {
+        $transaction: jest.fn((callback: (client: typeof tx) => unknown) =>
+          callback(tx),
+        ),
+      };
+      const actualService = new RiskProfileService(
+        prisma as unknown as PrismaService,
+        {
+          log: jest.fn().mockResolvedValue(undefined),
+        } as unknown as AuditService,
+        new DrawdownService({} as PrismaService),
+      );
+
+      await actualService.updateProfile(
+        USER_ID,
+        { accountBalance: 9800, maxMonthlyDrawdownPct: 5 },
+        CURRENCY,
+      );
+
+      // The top-up reduces the current drawdown from 10% to 2%, so the raised
+      // 5% limit must clear the sticky flag using the row written just before.
+      expect(drawdownRow.accountBalance).toBe(9800);
+      expect(drawdownRow.monthlyBreached).toBe(false);
+      expect(drawdownState.findUnique).toHaveBeenCalledTimes(2);
     });
 
     it('writes an audit log entry', async () => {

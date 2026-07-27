@@ -95,4 +95,27 @@ describe('NotificationsService dispatch', () => {
     send.mockRejectedValueOnce(new Error('expo down'));
     await expect(service.notifyJournalReminder('u1')).resolves.toBeUndefined();
   });
+
+  it('respects the preference toggle for the weekly behavioral push', async () => {
+    const { service, send } = setup({ allowed: false });
+    await service.notifyBehavioralReport('u1', {
+      reportId: 'r1',
+      topPriority: 'overtrading',
+    });
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('sends the pattern-specific weekly behavioral push when allowed', async () => {
+    const { service, send } = setup({ allowed: true });
+    await service.notifyBehavioralReport('u1', {
+      reportId: 'r1',
+      topPriority: 'early_exit',
+    });
+    expect(send).toHaveBeenCalledTimes(1);
+    const [, message] = send.mock.calls[0];
+    expect(message.data.category).toBe('behavioralReports');
+    expect(message.data.reportId).toBe('r1');
+    // English label for early_exit appears in the body.
+    expect(message.body).toContain('exiting winners early');
+  });
 });

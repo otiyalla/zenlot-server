@@ -14,42 +14,53 @@ datasource db {
 }
 
 model trade {
-  id                 String    @id @default(uuid())
-  user               user      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  symbol             String
-  userId             String
-  entry              Float
-  lot                Float
-  pips               Float
-  execution          String
-  accountCurrency    String
-  exchangeRate       Float
-  rr                 Float
-  risk               Float
-  reward             Float
-  tags               String[]
-  stopLoss           Json
-  takeProfit         Json
-  plainText          String?
-  editorState        String?
-  status             String    @default("open")
-  closedAt           DateTime?
-  closedPrice        Float?
-  closedExchangeRate Float?
-  closedReason       String?
-  isAutoClosed       Boolean   @default(false)
+  id                  String               @id @default(uuid())
+  user                user                 @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  symbol              String
+  userId              String
+  entry               Float
+  lot                 Float
+  pips                Float
+  execution           String
+  accountCurrency     String
+  exchangeRate        Float
+  rr                  Float
+  risk                Float
+  reward              Float
+  tags                String[]
+  stopLoss            Json
+  takeProfit          Json
+  plainText           String?
+  editorState         String?
+  status              String               @default("open")
+  closedAt            DateTime?
+  closedPrice         Float?
+  closedExchangeRate  Float?
+  closedReason        String?
+  isAutoClosed        Boolean              @default(false)
   // Risk Engine (Phase 1) — populated when a trade is sized/logged/closed via the risk engine.
-  capitalExposure    Float?
-  capitalExposurePct Float?
-  governanceStatus   String?
+  capitalExposure     Float?
+  capitalExposurePct  Float?
+  governanceStatus    String?
   // True when the user knowingly logged this trade despite a blocking governance
   // rule (this is a journal, not an execution platform — rules warn, never block).
-  overridden         Boolean   @default(false)
-  pnl                Float?
-  rMultiple          Float?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
-  journal            journal[]
+  overridden          Boolean              @default(false)
+  pnl                 Float?
+  rMultiple           Float?
+  // Phase 2 (Trade Evaluation) — stop adjustments logged after open. Each entry:
+  // { ts: ISO8601, oldStop: number, newStop: number, reason: string }. The
+  // execution grader reads this to detect widened/tightened stops.
+  stopAdjustments     Json                 @default("[]")
+  // The Risk Engine's suggested lot at log time, retained for inconsistent_sizing
+  // behavioral detection (compares actual lot vs. suggestion).
+  suggestedLot        Float?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  journal             journal[]
+  preTradeChecklists  preTradeChecklist[]
+  preTradeEvaluations preTradeEvaluation[]
+  executionGrades     executionGrade[]
+  tradeVerdicts       tradeVerdict[]
 
   @@index([userId])
   @@index([status, symbol])
@@ -99,22 +110,22 @@ model drawdownState {
 }
 
 model governanceLog {
-  id            String   @id @default(uuid())
-  user          user     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  userId        String
-  tradeId       String?
-  overallStatus String
-  checksJson    Json
-  blockedReason String?
+  id                String   @id @default(uuid())
+  user              user     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  userId            String
+  tradeId           String?
+  overallStatus     String
+  checksJson        Json
+  blockedReason     String?
   // True when this log records a trade the user overrode past a blocking rule.
-  acknowledged     Boolean  @default(false)
+  acknowledged      Boolean  @default(false)
   // The rule keys the user explicitly acknowledged when overriding (e.g.
   // ['maxPortfolioExposure']). Empty unless `acknowledged` is true.
   acknowledgedRules String[]
   // Optional free-text note the user gave for why they overrode the rule(s).
   overrideReason    String?
-  aiCoaching    String? // populated asynchronously (Phase 1 Section 15)
-  createdAt     DateTime @default(now())
+  aiCoaching        String? // populated asynchronously (Phase 1 Section 15)
+  createdAt         DateTime @default(now())
 
   @@index([userId])
   @@index([tradeId])
@@ -141,23 +152,23 @@ model journal {
 }
 
 model user {
-  id                           String          @id @default(uuid())
-  fname                        String          @db.VarChar(256)
-  lname                        String          @db.VarChar(256)
-  email                        String          @unique @db.VarChar(256)
+  id                           String                  @id @default(uuid())
+  fname                        String                  @db.VarChar(256)
+  lname                        String                  @db.VarChar(256)
+  email                        String                  @unique @db.VarChar(256)
   role                         String
   tags                         String[]
   language                     String
   password                     String
   accountCurrency              String
-  theme                        String          @default("system")
+  theme                        String                  @default("system")
   rules                        Json
-  journalEntries               journal[]       @relation("UserJournal")
-  createdAt                    DateTime        @default(now())
-  updatedAt                    DateTime        @updatedAt
+  journalEntries               journal[]               @relation("UserJournal")
+  createdAt                    DateTime                @default(now())
+  updatedAt                    DateTime                @updatedAt
   trade                        trade[]
-  timezone                     String          @default("UTC")
-  togglePipValue               Boolean         @default(false)
+  timezone                     String                  @default("UTC")
+  togglePipValue               Boolean                 @default(false)
   refreshTokens                RefreshToken[]
   auditLogs                    auditLog[]
   riskProfile                  riskProfile?
@@ -165,11 +176,17 @@ model user {
   governanceLogs               governanceLog[]
   deletedAt                    DateTime?
   deleteScheduledFor           DateTime?
-  emailVerified                Boolean         @default(false)
+  emailVerified                Boolean                 @default(false)
   emailVerificationToken       String?
   emailVerificationTokenExpiry DateTime?
   pushTokens                   pushToken[]
   notificationPreference       notificationPreference?
+  tradingPlans                 tradingPlan[]
+  preTradeChecklists           preTradeChecklist[]
+  preTradeEvaluations          preTradeEvaluation[]
+  executionGrades              executionGrade[]
+  tradeVerdicts                tradeVerdict[]
+  behavioralReports            behavioralReport[]
 }
 
 /// An Expo push token for one of a user's devices. A user can have many devices;
@@ -179,19 +196,19 @@ model user {
 /// send pipeline can soft-disable tokens that Expo reports as
 /// `DeviceNotRegistered` instead of hard-deleting them immediately.
 model pushToken {
-  id           String    @id @default(uuid())
-  user         user      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  userId       String
-  token        String    @unique
-  platform     String // 'ios' | 'android' | 'web'
-  deviceId     String? // stable per-install id from the client (Device.osBuildId/installationId)
-  deviceName   String?
-  enabled      Boolean   @default(true)
-  lastErrorAt  DateTime?
-  lastError    String?
-  lastUsedAt   DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id          String    @id @default(uuid())
+  user        user      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  userId      String
+  token       String    @unique
+  platform    String // 'ios' | 'android' | 'web'
+  deviceId    String? // stable per-install id from the client (Device.osBuildId/installationId)
+  deviceName  String?
+  enabled     Boolean   @default(true)
+  lastErrorAt DateTime?
+  lastError   String?
+  lastUsedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   @@unique([userId, deviceId])
   @@index([userId])
@@ -202,29 +219,31 @@ model pushToken {
 /// are stored as local "HH:mm" strings and evaluated against the user's IANA
 /// `timezone`, mirroring the drawdown reset's DST-safe local-date approach.
 model notificationPreference {
-  userId           String   @id
-  user             user     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  userId                String   @id
+  user                  user     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   // Master switch — when false, no push is sent regardless of category toggles.
-  pushEnabled      Boolean  @default(true)
-  tradeClosed      Boolean  @default(true)
-  coachingReady    Boolean  @default(true)
-  drawdownAlerts   Boolean  @default(true)
-  governanceAlerts Boolean  @default(true)
-  journalReminders Boolean  @default(true)
+  pushEnabled           Boolean  @default(true)
+  tradeClosed           Boolean  @default(true)
+  coachingReady         Boolean  @default(true)
+  drawdownAlerts        Boolean  @default(true)
+  governanceAlerts      Boolean  @default(true)
+  journalReminders      Boolean  @default(true)
+  // Weekly behavioral-intelligence review push (Phase 2 Inc 3). On by default.
+  behavioralReports     Boolean  @default(true)
   // Optional quiet-hours window in the user's local time, "HH:mm" 24h. When both
   // are set, non-urgent notifications are suppressed inside the window.
-  quietHoursStart  String?
-  quietHoursEnd    String?
+  quietHoursStart       String?
+  quietHoursEnd         String?
   // The user's local hour (0-23) at which the daily journaling nudge fires.
   // Null disables it independently of the `journalReminders` toggle (which the
   // user controls); default 20:00 local is set when the row is created.
-  reminderHour     Int      @default(20)
+  reminderHour          Int      @default(20)
   // The local calendar date (YYYY-MM-DD, user's IANA tz) the journaling reminder
   // last fired. Lets the hourly job send exactly once per local day — DST-safe
   // and idempotent across retries, mirroring drawdownState.lastResetLocalDate.
   lastReminderLocalDate String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 }
 
 model RefreshToken {
@@ -269,4 +288,144 @@ model feedback {
 
   @@index([userId])
   @@index([status])
+}
+
+// ─── Phase 2: Trade Evaluation & Behavioral Intelligence ──────────────────────
+
+// The trader's strategy contract. Plan adherence is graded against the CURRENT
+// version. Saving a new plan creates a new version row and flips the previous to
+// isCurrent=false; history is preserved. A partial unique index ("only one
+// current plan per user") is added in the migration SQL — Prisma cannot express
+// a `WHERE isCurrent = true` partial unique in the schema.
+model tradingPlan {
+  id              String   @id @default(uuid())
+  user            user     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  userId          String
+  version         Int      @default(1)
+  entryConditions Json
+  stopRules       Json
+  exitRules       Json
+  sessionRules    Json
+  isCurrent       Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  @@index([userId])
+}
+
+// The trader's pre-trade declaration. tradeId is NULLABLE: the checklist is
+// created before the trade exists and back-filled on trade creation, resolving
+// the circular FK. `skipped` records a deliberately-skipped checklist as a
+// behavioral signal (product decision).
+model preTradeChecklist {
+  id          String   @id @default(uuid())
+  trade       trade?   @relation(fields: [tradeId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tradeId     String?
+  user        user     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  userId      String
+  checklist   Json
+  skipped     Boolean  @default(false)
+  submittedAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([tradeId])
+}
+
+// Pre-trade evaluation result. tradeId is NULLABLE (mirrors preTradeChecklist —
+// computed before the trade is logged). planAdherence* are nullable when no
+// TradingPlan exists.
+model preTradeEvaluation {
+  id                 String   @id @default(uuid())
+  trade              trade?   @relation(fields: [tradeId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tradeId            String?
+  user               user     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  userId             String
+  setupQualityTotal  Float
+  setupQualityGrade  String
+  setupBreakdown     Json
+  planAdherenceTotal Float?
+  planAdherenceGrade String?
+  planViolations     Json?
+  recommendation     String
+  aiCoaching         String?
+  evaluatedAt        DateTime @default(now())
+
+  @@index([userId, evaluatedAt(sort: Desc)])
+  @@index([tradeId])
+}
+
+// Post-trade execution grade. Fires when the trade closes.
+model executionGrade {
+  id                    String   @id @default(uuid())
+  trade                 trade    @relation(fields: [tradeId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tradeId               String
+  user                  user     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  userId                String
+  entryQualityScore     Float
+  stopQualityScore      Float
+  stopLogic             String
+  exitQualityScore      Float
+  exitType              String
+  overallExecutionScore Float
+  gradedAt              DateTime @default(now())
+
+  @@index([userId])
+  @@index([tradeId])
+}
+
+// Process vs outcome verdict (2x2 matrix). `lucky` flags a bad_process_win.
+model tradeVerdict {
+  id            String   @id @default(uuid())
+  trade         trade    @relation(fields: [tradeId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tradeId       String
+  user          user     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  userId        String
+  verdict       String
+  lucky         Boolean  @default(false)
+  processScore  Float
+  outcome       String
+  matrix        String
+  aiCoaching    String?
+  coachingFocus String?
+  createdAt     DateTime @default(now())
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([tradeId])
+}
+
+// Shared, global OHLC candle cache (read-through). Not scoped to a user: the
+// first viewer of a pair/timeframe pays the upstream API cost, everyone after
+// reads from here. Plain Postgres (no TimescaleDB) — the PK + DESC index serve
+// the chart-window range queries and gap-detection MIN/MAX scans directly.
+// `source` records which upstream provider supplied the bar (twelvedata|oanda|massive).
+model candle {
+  pair      String // canonical 6-char symbol, e.g. "EURUSD"
+  timeframe String // "M15" | "H1" | "H4" | "D1"
+  ts        DateTime // bar open time (UTC)
+  open      Float
+  high      Float
+  low       Float
+  close     Float
+  volume    Float?
+  source    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@id([pair, timeframe, ts])
+  @@index([pair, timeframe, ts(sort: Desc)])
+}
+
+// Behavioral intelligence report across a user's evaluated trade history.
+model behavioralReport {
+  id             String   @id @default(uuid())
+  user           user     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  userId         String
+  tradesAnalyzed Int
+  periodDays     Int      @default(90)
+  patterns       Json
+  stats          Json
+  topPriority    String?
+  aiSummary      String?
+  generatedAt    DateTime @default(now())
+
+  @@index([userId])
 }

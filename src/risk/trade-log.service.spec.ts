@@ -12,6 +12,8 @@ import { DrawdownService } from './drawdown.service';
 import { RiskProfileService } from './risk-profile.service';
 import { RiskCalculationView } from './risk.mapper';
 import { NotificationsService } from '../notifications/notifications.service';
+import { EvaluationService } from '../evaluation/evaluation.service';
+import { PostTradeGradingService } from '../evaluation/post-trade-grading.service';
 
 const view: RiskCalculationView = {
   symbol: 'EURUSD',
@@ -56,6 +58,10 @@ function makeService(opts: {
   profileUpdate?: jest.Mock;
   profileFindUnique?: jest.Mock;
   getProfile?: jest.Mock;
+  linkChecklistToTrade?: jest.Mock;
+  markChecklistSkipped?: jest.Mock;
+  gradeClosedTrade?: jest.Mock;
+  tradeUpdate?: jest.Mock;
 }) {
   const calculate =
     opts.calculate ??
@@ -94,11 +100,14 @@ function makeService(opts: {
       }),
     },
   };
+  const tradeUpdate =
+    opts.tradeUpdate ?? jest.fn().mockResolvedValue({ id: 't1' });
   const prisma = {
     trade: {
       create: tradeCreate,
       findUnique: opts.findUnique ?? jest.fn(),
       findFirst: opts.findFirst ?? jest.fn(),
+      update: tradeUpdate,
     },
     governanceLog: { create: govCreate },
     $transaction: jest
@@ -127,6 +136,21 @@ function makeService(opts: {
 
   const coachingQueue = { add: queueAdd } as unknown as Queue;
 
+  const linkChecklistToTrade =
+    opts.linkChecklistToTrade ?? jest.fn().mockResolvedValue(true);
+  const markChecklistSkipped =
+    opts.markChecklistSkipped ?? jest.fn().mockResolvedValue(undefined);
+  const evaluationService = {
+    linkChecklistToTrade,
+    markChecklistSkipped,
+  } as unknown as EvaluationService;
+
+  const gradeClosedTrade =
+    opts.gradeClosedTrade ?? jest.fn().mockResolvedValue(undefined);
+  const postTradeGrading = {
+    gradeClosedTrade,
+  } as unknown as PostTradeGradingService;
+
   const notifications = {
     notifyTradeClosed: jest.fn().mockResolvedValue(undefined),
     notifyGovernanceViolation: jest.fn().mockResolvedValue(undefined),
@@ -140,6 +164,8 @@ function makeService(opts: {
     drawdown,
     profile,
     notifications,
+    evaluationService,
+    postTradeGrading,
     coachingQueue,
   );
   return {
@@ -153,6 +179,10 @@ function makeService(opts: {
     profileFindUnique,
     settleRealizedPnL,
     applyBalanceDelta,
+    linkChecklistToTrade,
+    markChecklistSkipped,
+    gradeClosedTrade,
+    tradeUpdate,
   };
 }
 
@@ -299,6 +329,47 @@ describe('TradeLogService.logTrade', () => {
     );
     expect(tradeCreate).not.toHaveBeenCalled();
   });
+
+  // ─── Phase 2 soft-gate (decision #2 — warn, never block) ──────────────────
+
+  it('links the pre-trade checklist to the new trade when a checklistId is supplied', async () => {
+    const { service, linkChecklistToTrade, markChecklistSkipped } = makeService(
+      {},
+    );
+    await service.logTrade('u1', 'USD', { ...setup, checklistId: 'chk-1' });
+
+    expect(linkChecklistToTrade).toHaveBeenCalledWith('u1', 't1', 'chk-1');
+    expect(markChecklistSkipped).not.toHaveBeenCalled();
+  });
+
+  it('marks the checklist skipped when no checklistId is supplied', async () => {
+    const { service, linkChecklistToTrade, markChecklistSkipped } = makeService(
+      {},
+    );
+    await service.logTrade('u1', 'USD', setup);
+
+    expect(linkChecklistToTrade).not.toHaveBeenCalled();
+    expect(markChecklistSkipped).toHaveBeenCalledWith('u1', 't1');
+  });
+
+  it('falls back to marking skipped when the supplied checklist is not linkable', async () => {
+    const { service, markChecklistSkipped } = makeService({
+      linkChecklistToTrade: jest.fn().mockResolvedValue(false),
+    });
+    await service.logTrade('u1', 'USD', { ...setup, checklistId: 'chk-x' });
+
+    expect(markChecklistSkipped).toHaveBeenCalledWith('u1', 't1');
+  });
+
+  it('never fails the trade log when the soft-gate wiring throws', async () => {
+    const { service } = makeService({
+      markChecklistSkipped: jest.fn().mockRejectedValue(new Error('boom')),
+    });
+    // No checklistId → markChecklistSkipped path; its rejection must be swallowed.
+    await expect(service.logTrade('u1', 'USD', setup)).resolves.toEqual({
+      id: 't1',
+    });
+  });
 });
 
 describe('TradeLogService.closeTrade', () => {
@@ -358,6 +429,86 @@ describe('TradeLogService.closeTrade', () => {
     await expect(service.closeTrade('u1', 't1', 1.1)).rejects.toBeInstanceOf(
       BadRequestException,
     );
+  });
+
+  it('triggers post-trade grading after the close commits', async () => {
+    const findUnique = jest.fn().mockResolvedValue(openTrade);
+    const { service, gradeClosedTrade } = makeService({ findUnique });
+    await service.closeTrade('u1', 't1', 1.105, 'fr');
+    expect(gradeClosedTrade).toHaveBeenCalledWith('u1', 't1', 'fr');
+  });
+
+  it('still returns the closed trade even if post-trade grading throws', async () => {
+    const findUnique = jest.fn().mockResolvedValue(openTrade);
+    const gradeClosedTrade = jest
+      .fn()
+      .mockRejectedValue(new Error('grading boom'));
+    const { service } = makeService({ findUnique, gradeClosedTrade });
+    await expect(service.closeTrade('u1', 't1', 1.105)).resolves.toEqual({
+      id: 't1',
+      status: 'closed_in_profit',
+    });
+  });
+});
+
+describe('TradeLogService.applyStopAdjustment', () => {
+  const openTrade = {
+    id: 't1',
+    userId: 'u1',
+    execution: 'buy',
+    stopLoss: { value: 1.095, pips: 50 },
+    stopAdjustments: [],
+    status: 'open',
+  };
+
+  it('appends { ts, oldStop, newStop, reason } and moves the active stop', async () => {
+    const findFirst = jest.fn().mockResolvedValue(openTrade);
+    const { service, tradeUpdate } = makeService({ findFirst });
+
+    await service.applyStopAdjustment('u1', 't1', 1.092, 'widening to news');
+
+    const data = dataOf(tradeUpdate);
+    expect((data.stopLoss as { value: number }).value).toBe(1.092);
+    const adjustments = data.stopAdjustments as Array<Record<string, unknown>>;
+    expect(adjustments).toHaveLength(1);
+    expect(adjustments[0].oldStop).toBe(1.095);
+    expect(adjustments[0].newStop).toBe(1.092);
+    expect(adjustments[0].reason).toBe('widening to news');
+    expect(typeof adjustments[0].ts).toBe('string');
+  });
+
+  it('appends to an existing adjustments array', async () => {
+    const findFirst = jest.fn().mockResolvedValue({
+      ...openTrade,
+      stopLoss: { value: 1.093 },
+      stopAdjustments: [
+        { ts: 'x', oldStop: 1.095, newStop: 1.093, reason: 'first' },
+      ],
+    });
+    const { service, tradeUpdate } = makeService({ findFirst });
+
+    await service.applyStopAdjustment('u1', 't1', 1.091, 'second');
+
+    const adjustments = dataOf(tradeUpdate).stopAdjustments as unknown[];
+    expect(adjustments).toHaveLength(2);
+  });
+
+  it('404s when the trade is not found / not owned', async () => {
+    const findFirst = jest.fn().mockResolvedValue(null);
+    const { service } = makeService({ findFirst });
+    await expect(
+      service.applyStopAdjustment('u1', 't1', 1.092, 'reason'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('rejects adjusting a non-open trade', async () => {
+    const findFirst = jest
+      .fn()
+      .mockResolvedValue({ ...openTrade, status: 'closed_in_profit' });
+    const { service } = makeService({ findFirst });
+    await expect(
+      service.applyStopAdjustment('u1', 't1', 1.092, 'reason'),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 });
 

@@ -43,6 +43,11 @@ export class UpdateNotificationPreferenceDto {
   @IsBoolean()
   journalReminders?: boolean;
 
+  @ApiPropertyOptional({ description: 'Weekly behavioral review push' })
+  @IsOptional()
+  @IsBoolean()
+  behavioralReports?: boolean;
+
   @ApiPropertyOptional({
     description:
       'Hour of day (0–23, local time) to send the journaling reminder.',

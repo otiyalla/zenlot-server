@@ -10,6 +10,8 @@ import {
   NotificationContent,
 } from './notification.types';
 import {
+  BehavioralPatternKey,
+  buildBehavioralReportContent,
   buildCoachingReadyContent,
   buildDrawdownAlertContent,
   buildGovernanceAlertContent,
@@ -100,6 +102,23 @@ export class NotificationsService {
     await this.dispatch(userId, (locale) =>
       buildJournalReminderContent(locale, {
         category: NotificationCategory.JournalReminder,
+        route: '/(protected)/(tabs)/journal',
+      }),
+    );
+  }
+
+  /**
+   * Weekly behavioral-review push (spec 13.3). Pattern-specific when a
+   * top-priority pattern is known. Best-effort — never throws into the caller.
+   */
+  async notifyBehavioralReport(
+    userId: string,
+    params: { reportId: string; topPriority?: BehavioralPatternKey | null },
+  ): Promise<void> {
+    await this.dispatch(userId, (locale) =>
+      buildBehavioralReportContent(params.topPriority ?? null, locale, {
+        category: NotificationCategory.BehavioralReport,
+        reportId: params.reportId,
         route: '/(protected)/(tabs)/journal',
       }),
     );

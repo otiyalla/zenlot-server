@@ -4,6 +4,7 @@ import { TradeService } from './trade.service';
 import { TradeController } from './trade.controller';
 import { QuoteModule } from '../quote/quote.module';
 import { RiskModule } from '../risk/risk.module';
+import { EvaluationModule } from '../evaluation/evaluation.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { TradeAutoCloseProcessor } from './trade-auto-close.processor';
 import {
@@ -15,6 +16,7 @@ import {
   imports: [
     QuoteModule,
     RiskModule,
+    EvaluationModule,
     NotificationsModule,
     BullModule.registerQueue({
       name: TRADE_AUTO_CLOSE_QUEUE,

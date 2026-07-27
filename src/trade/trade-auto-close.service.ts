@@ -10,6 +10,7 @@ import { calculatePnL, calculateRMultiple } from '../risk/engine';
 import { executionToDirection } from '../risk/risk.mapper';
 import { NotificationsService } from '../notifications/notifications.service';
 import { DrawdownPeriod } from '../notifications/notification.copy';
+import { PostTradeGradingService } from '../evaluation/post-trade-grading.service';
 
 export const TRADE_AUTO_CLOSE_QUEUE = 'trade-auto-close';
 export const SCAN_OPEN_TRADES_JOB = 'scan-open-trades';
@@ -61,6 +62,7 @@ export class TradeAutoCloseService implements OnModuleInit {
     private readonly quoteGateway: QuoteGateway,
     private readonly drawdownService: DrawdownService,
     private readonly notifications: NotificationsService,
+    private readonly postTradeGrading: PostTradeGradingService,
     @InjectQueue(TRADE_AUTO_CLOSE_QUEUE)
     private readonly autoCloseQueue: Queue,
   ) {}
@@ -299,6 +301,13 @@ export class TradeAutoCloseService implements OnModuleInit {
     )) {
       void this.notifications.notifyDrawdownBreach(trade.userId, period);
     }
+
+    // Phase 2 post-trade grading (spec Sections 6 & 7). Runs AFTER the close
+    // transaction has committed and is fully best-effort — never affects the
+    // auto-close. Language defaults to 'en' (no request context in the job).
+    void this.postTradeGrading
+      .gradeClosedTrade(trade.userId, trade.id)
+      .catch(() => undefined);
   }
 
   /** Periods whose breach flag flipped false→true between two snapshots. */

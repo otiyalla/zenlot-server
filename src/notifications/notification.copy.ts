@@ -252,3 +252,94 @@ export function buildJournalReminderContent(
     data,
   };
 }
+
+/**
+ * Stable behavioral-pattern keys (mirror the engine's BehavioralPatternType).
+ * Kept local so the notification layer does not depend on the evaluation engine.
+ */
+export type BehavioralPatternKey =
+  | 'early_exit'
+  | 'stop_widening'
+  | 'revenge_trading'
+  | 'overtrading'
+  | 'rule_breaking_streak'
+  | 'inconsistent_sizing'
+  | 'lucky_streak'
+  | 'chasing_entries'
+  | 'weak_setup_bias';
+
+/**
+ * Short, calm human label for each behavioral pattern, used inside the weekly
+ * review push so the copy is pattern-specific (spec 13.3) rather than generic.
+ */
+const PATTERN_LABEL: Record<
+  NotificationLocale,
+  Record<BehavioralPatternKey, string>
+> = {
+  en: {
+    early_exit: 'exiting winners early',
+    stop_widening: 'widening your stops',
+    revenge_trading: 'revenge trading after losses',
+    overtrading: 'overtrading',
+    rule_breaking_streak: 'a streak of rule-breaking trades',
+    inconsistent_sizing: 'inconsistent position sizing',
+    lucky_streak: 'wins despite breaking your rules',
+    chasing_entries: 'chasing entries',
+    weak_setup_bias: 'a bias toward weak setups',
+  },
+  fr: {
+    early_exit: 'la sortie anticipée des trades gagnants',
+    stop_widening: "l'élargissement de vos stops",
+    revenge_trading: 'le trading de revanche après les pertes',
+    overtrading: 'le surtrading',
+    rule_breaking_streak: 'une série de trades enfreignant vos règles',
+    inconsistent_sizing: 'un dimensionnement de position incohérent',
+    lucky_streak: 'des gains malgré le non-respect de vos règles',
+    chasing_entries: 'la poursuite des entrées',
+    weak_setup_bias: 'un penchant pour les setups faibles',
+  },
+};
+
+/**
+ * Weekly behavioral review push (spec 13.3). Calm, non-judgemental. When a
+ * top-priority pattern is known the body names it specifically; otherwise it
+ * falls back to the spec's generic "a new behavioral pattern was detected".
+ */
+export function buildBehavioralReportContent(
+  topPriority: BehavioralPatternKey | null | undefined,
+  rawLocale: string | undefined,
+  data: Record<string, string>,
+): NotificationContent {
+  const locale = resolveLocale(rawLocale);
+  const label =
+    topPriority && PATTERN_LABEL[locale][topPriority]
+      ? PATTERN_LABEL[locale][topPriority]
+      : null;
+
+  const copy = {
+    en: {
+      title: 'Your weekly trading review is ready',
+      labelled: label
+        ? `We noticed a pattern around ${label}. A few minutes of reflection now can change next week.`
+        : '',
+      generic:
+        'A new behavioral pattern was detected. A few minutes of reflection now can change next week.',
+    },
+    fr: {
+      title: 'Votre bilan hebdomadaire de trading est prêt',
+      labelled: label
+        ? `Nous avons remarqué un schéma autour de ${label}. Quelques minutes de réflexion peuvent changer la semaine prochaine.`
+        : '',
+      generic:
+        'Un nouveau schéma comportemental a été détecté. Quelques minutes de réflexion peuvent changer la semaine prochaine.',
+    },
+  }[locale];
+
+  return {
+    category: NotificationCategory.BehavioralReport,
+    urgency: 'gentle',
+    title: copy.title,
+    body: label ? copy.labelled : copy.generic,
+    data,
+  };
+}
