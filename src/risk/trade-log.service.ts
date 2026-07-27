@@ -444,6 +444,10 @@ export class TradeLogService {
       Object.entries(data).filter(([, value]) => value !== undefined),
     );
     const settledTrade = { ...existing, ...updateValues } as trade;
+    // accountCurrency is immutable through TradeService's client update path,
+    // so settlement remains denominated in the trade's original account
+    // currency even when other trade geometry changes in this request.
+    const accountCurrency = existing.accountCurrency;
     const direction = executionToDirection(settledTrade.execution);
     const stopPrice = Number(
       (settledTrade.stopLoss as unknown as { value: number }).value,
@@ -460,7 +464,7 @@ export class TradeLogService {
 
     const closeExchangeRate = await this.rateResolver.resolveExchangeRate(
       settledTrade.symbol,
-      settledTrade.accountCurrency,
+      accountCurrency,
     );
 
     const settles = resolvedExit > 0;
@@ -484,10 +488,7 @@ export class TradeLogService {
       : null;
 
     // Ensure a risk profile row exists so the balance increment below succeeds.
-    await this.riskProfileService.getProfile(
-      userId,
-      settledTrade.accountCurrency,
-    );
+    await this.riskProfileService.getProfile(userId, accountCurrency);
 
     const { updated, before, after } = await this.prisma.$transaction(
       async (tx) => {

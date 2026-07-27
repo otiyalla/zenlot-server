@@ -517,6 +517,25 @@ describe('TradeLogService.settleManualClose', () => {
       );
     },
   );
+
+  it('settles in the user account currency when the trade currency is edited', async () => {
+    const resolveExchangeRate = jest.fn().mockResolvedValue(1);
+    const getProfile = jest.fn().mockResolvedValue({ overrideMode: 'simple' });
+    const { service } = makeService({ resolveExchangeRate, getProfile });
+
+    await service.settleManualClose(
+      'u1',
+      existing as never,
+      {
+        status: 'closed_in_profit',
+        accountCurrency: 'EUR',
+      } as never,
+      1.12,
+    );
+
+    expect(resolveExchangeRate).toHaveBeenCalledWith('EURUSD', 'USD');
+    expect(getProfile).toHaveBeenCalledWith('u1', 'USD');
+  });
 });
 
 describe('TradeLogService.applyStopAdjustment', () => {
