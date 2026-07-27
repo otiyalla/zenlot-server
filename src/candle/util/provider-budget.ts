@@ -1,3 +1,4 @@
+import { Injectable } from '@nestjs/common';
 import { CandleSource } from '../interface/candle.interface';
 
 /**
@@ -30,6 +31,7 @@ const ERROR_BACKOFF_BASE_MS = 1000;
 const ERROR_BACKOFF_MAX_MS = 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+@Injectable()
 export class ProviderBudget {
   private readonly state = new Map<CandleSource, BudgetState>();
 

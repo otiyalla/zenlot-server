@@ -54,13 +54,13 @@ const PRICE_PRECISION: Record<string, number> = { JPY: 3, XAG: 3, XAU: 2 };
 @Injectable()
 export class CandleService {
   private readonly logger = new Logger(CandleService.name);
-  private readonly budget = new ProviderBudget();
   private readonly gapFillInflight = new Map<string, Promise<void>>();
 
   constructor(
     private readonly prisma: PrismaService,
     @Inject(CANDLE_PROVIDERS)
     private readonly providers: CandleProvider[],
+    private readonly budget: ProviderBudget = new ProviderBudget(),
   ) {}
 
   /**

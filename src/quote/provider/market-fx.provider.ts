@@ -7,6 +7,7 @@ import {
   FxMarketQuoteSnapshot,
   FxQuote,
 } from '../interface/quote.interface';
+import { ProviderBudget } from '../../candle/util/provider-budget';
 
 const MARKET_FX_BASE_URL = 'https://api.twelvedata.com';
 
@@ -49,7 +50,10 @@ export class MarketFxClient implements FxQuote, FxMarketQuote {
   private marketFxClient?: AxiosInstance;
   private apiKey?: string;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly providerBudget: ProviderBudget,
+  ) {
     this.initializeClient();
   }
 
@@ -138,8 +142,21 @@ export class MarketFxClient implements FxQuote, FxMarketQuote {
     return this.marketFxClient;
   }
 
+  private assertBudgetAvailable(): void {
+    if (!this.providerBudget.canUse('twelvedata')) {
+      throw new Error('TwelveData request budget is temporarily unavailable');
+    }
+  }
+
+  private recordFailure(error: unknown): void {
+    const rateLimited =
+      axios.isAxiosError(error) && error.response?.status === 429;
+    this.providerBudget.recordFailure('twelvedata', rateLimited);
+  }
+
   async fxRate(symbols: Currencies | string): Promise<{ price: number }> {
     const client = this.requireClient();
+    this.assertBudgetAvailable();
     const { base, quote } = this.parseSymbols(symbols);
     if (!base || !quote) {
       throw new Error('Both base and quote currencies are required');
@@ -163,8 +180,10 @@ export class MarketFxClient implements FxQuote, FxMarketQuote {
         throw new Error(`Price not found in market FX response for ${symbol}`);
       }
 
+      this.providerBudget.recordSuccess('twelvedata');
       return { price };
     } catch (error) {
+      this.recordFailure(error);
       if (axios.isAxiosError(error) && error.response?.status === 401) {
         this.logger.error(
           `Market FX returned 401 for ${symbol}. Verify TWELVEDATA_API_KEY.`,
@@ -179,6 +198,7 @@ export class MarketFxClient implements FxQuote, FxMarketQuote {
     symbols: Currencies | string,
   ): Promise<FxMarketQuoteSnapshot> {
     const client = this.requireClient();
+    this.assertBudgetAvailable();
     const { base, quote } = this.parseSymbols(symbols);
     if (!base || !quote) {
       throw new Error('Both base and quote currencies are required');
@@ -217,8 +237,10 @@ export class MarketFxClient implements FxQuote, FxMarketQuote {
         isMarketOpen: data.is_market_open,
       };
 
+      this.providerBudget.recordSuccess('twelvedata');
       return snapshot;
     } catch (error) {
+      this.recordFailure(error);
       if (axios.isAxiosError(error) && error.response?.status === 401) {
         this.logger.error(
           `Market FX returned 401 for ${pairSymbol}. Verify TWELVEDATA_API_KEY.`,

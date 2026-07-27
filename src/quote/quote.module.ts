@@ -13,9 +13,10 @@ import {
   FxQuote,
 } from './interface/quote.interface';
 import { ConfigService } from '@nestjs/config';
+import { ProviderBudgetModule } from '../candle/util/provider-budget.module';
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, ProviderBudgetModule],
   providers: [
     UniRateClient,
     MarketFxClient,

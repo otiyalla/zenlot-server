@@ -9,9 +9,10 @@ import { MassiveCandleProvider } from './provider/massive-candle.provider';
 import { CANDLE_PROVIDERS, CandleProvider } from './interface/candle.interface';
 import { CandleLiveService } from './candle-live.service';
 import { CandleGateway } from './candle.gateway';
+import { ProviderBudgetModule } from './util/provider-budget.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule],
+  imports: [PrismaModule, AuthModule, ProviderBudgetModule],
   controllers: [CandleController],
   providers: [
     TwelveDataCandleProvider,
