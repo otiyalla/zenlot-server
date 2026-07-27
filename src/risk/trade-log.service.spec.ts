@@ -54,6 +54,7 @@ function makeService(opts: {
   settleRealizedPnL?: jest.Mock;
   applyBalanceDelta?: jest.Mock;
   txUpdate?: jest.Mock;
+  txUpdateMany?: jest.Mock;
   txDelete?: jest.Mock;
   profileUpdate?: jest.Mock;
   profileFindUnique?: jest.Mock;
@@ -81,6 +82,9 @@ function makeService(opts: {
   const txUpdate =
     opts.txUpdate ??
     jest.fn().mockResolvedValue({ id: 't1', status: 'closed_in_profit' });
+  const txUpdateMany =
+    opts.txUpdateMany ?? jest.fn().mockResolvedValue({ count: 1 });
+  const txFindUnique = jest.fn().mockResolvedValue(undefined);
   const txDelete = opts.txDelete ?? jest.fn().mockResolvedValue({ id: 't1' });
   const profileUpdate = opts.profileUpdate ?? jest.fn().mockResolvedValue({});
   // Defaults to a present profile so the reversal path runs; tests covering the
@@ -89,7 +93,12 @@ function makeService(opts: {
     opts.profileFindUnique ?? jest.fn().mockResolvedValue({ userId: 'u1' });
 
   const tx = {
-    trade: { update: txUpdate, delete: txDelete },
+    trade: {
+      update: txUpdate,
+      updateMany: txUpdateMany,
+      findUnique: txFindUnique,
+      delete: txDelete,
+    },
     riskProfile: { update: profileUpdate, findUnique: profileFindUnique },
     // closeTrade snapshots breach flags before/after settlement for a drawdown push.
     drawdownState: {
@@ -174,6 +183,7 @@ function makeService(opts: {
     govCreate,
     queueAdd,
     txUpdate,
+    txUpdateMany,
     txDelete,
     profileUpdate,
     profileFindUnique,
@@ -387,13 +397,15 @@ describe('TradeLogService.closeTrade', () => {
 
   it('computes PnL + R-multiple and settles balance + drawdown', async () => {
     const findUnique = jest.fn().mockResolvedValue(openTrade);
-    const { service, txUpdate, settleRealizedPnL } = makeService({
+    const { service, txUpdateMany, settleRealizedPnL } = makeService({
       findUnique,
     });
 
     await service.closeTrade('u1', 't1', 1.105); // +0.005 move → +100 PnL, 1R
 
-    const data = dataOf(txUpdate);
+    const data = (
+      txUpdateMany.mock.calls[0][0] as { data: Record<string, unknown> }
+    ).data;
     expect(data.pnl).toBeCloseTo(100, 6);
     expect(data.rMultiple).toBeCloseTo(1, 6);
     expect(data.status).toBe('closed_in_profit');
@@ -406,9 +418,39 @@ describe('TradeLogService.closeTrade', () => {
 
   it('marks a losing close closed_in_loss', async () => {
     const findUnique = jest.fn().mockResolvedValue(openTrade);
-    const { service, txUpdate } = makeService({ findUnique });
+    const { service, txUpdateMany } = makeService({ findUnique });
     await service.closeTrade('u1', 't1', 1.095); // stopped out → -100
-    expect(dataOf(txUpdate).status).toBe('closed_in_loss');
+    expect(dataOf(txUpdateMany).status).toBe('closed_in_loss');
+  });
+
+  it('rejects when the atomic claim loses and does not settle', async () => {
+    const findUnique = jest.fn().mockResolvedValue(openTrade);
+    const txUpdateMany = jest.fn().mockResolvedValue({ count: 0 });
+    const { service, settleRealizedPnL } = makeService({
+      findUnique,
+      txUpdateMany,
+    });
+    await expect(service.closeTrade('u1', 't1', 1.105)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(settleRealizedPnL).not.toHaveBeenCalled();
+  });
+
+  it('settles only once across two attempted closes', async () => {
+    const findUnique = jest.fn().mockResolvedValue(openTrade);
+    const txUpdateMany = jest
+      .fn()
+      .mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValueOnce({ count: 0 });
+    const { service, settleRealizedPnL } = makeService({
+      findUnique,
+      txUpdateMany,
+    });
+    await service.closeTrade('u1', 't1', 1.105);
+    await expect(service.closeTrade('u1', 't1', 1.105)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(settleRealizedPnL).toHaveBeenCalledTimes(1);
   });
 
   it('404s when the trade belongs to another user', async () => {
@@ -444,10 +486,70 @@ describe('TradeLogService.closeTrade', () => {
       .fn()
       .mockRejectedValue(new Error('grading boom'));
     const { service } = makeService({ findUnique, gradeClosedTrade });
-    await expect(service.closeTrade('u1', 't1', 1.105)).resolves.toEqual({
-      id: 't1',
-      status: 'closed_in_profit',
-    });
+    await expect(service.closeTrade('u1', 't1', 1.105)).resolves.toEqual(
+      expect.objectContaining({ id: 't1', status: 'closed_in_profit' }),
+    );
+  });
+});
+
+describe('TradeLogService.settleManualClose', () => {
+  const openTrade = {
+    id: 't1',
+    userId: 'u1',
+    symbol: 'EURUSD',
+    execution: 'buy',
+    entry: 1.1,
+    lot: 0.2,
+    accountCurrency: 'USD',
+    stopLoss: { value: 1.095 },
+    takeProfit: { value: 1.11 },
+    status: 'open',
+  } as any;
+
+  it('settles exactly once after a successful atomic claim', async () => {
+    const txUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const { service, settleRealizedPnL } = makeService({ txUpdateMany });
+    await service.settleManualClose(
+      'u1',
+      openTrade,
+      { status: 'closed_in_profit' } as any,
+      1.105,
+    );
+    expect(txUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 't1', userId: 'u1', status: 'open' },
+      }),
+    );
+    expect(settleRealizedPnL).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects when the atomic claim loses and does not settle', async () => {
+    const txUpdateMany = jest.fn().mockResolvedValue({ count: 0 });
+    const { service, settleRealizedPnL } = makeService({ txUpdateMany });
+    await expect(
+      service.settleManualClose(
+        'u1',
+        openTrade,
+        { status: 'closed_in_profit' } as any,
+        1.105,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(settleRealizedPnL).not.toHaveBeenCalled();
+  });
+
+  it('settles only once across two attempted manual status closes', async () => {
+    const txUpdateMany = jest
+      .fn()
+      .mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValueOnce({ count: 0 });
+    const { service, settleRealizedPnL } = makeService({ txUpdateMany });
+    const data = { status: 'closed_in_profit' } as any;
+
+    await service.settleManualClose('u1', openTrade, data, 1.105);
+    await expect(
+      service.settleManualClose('u1', openTrade, data, 1.105),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(settleRealizedPnL).toHaveBeenCalledTimes(1);
   });
 });
 
