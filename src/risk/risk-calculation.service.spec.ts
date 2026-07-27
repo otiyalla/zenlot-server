@@ -142,6 +142,19 @@ describe('RiskCalculationService.calculate', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
+  it('maps directionally invalid geometry to a 400', async () => {
+    const { service } = makeService();
+    await expect(
+      service.calculate('u1', CURRENCY, {
+        symbol: 'EURUSD',
+        execution: 'buy',
+        entry: 1.1,
+        stopPrice: 1.095,
+        targetPrice: 1.09,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
   it('blocks when projected portfolio exposure exceeds the limit', async () => {
     const getSnapshot = jest.fn().mockResolvedValue({
       openTradeCount: 1,
@@ -187,5 +200,75 @@ describe('RiskCalculationService.calculate', () => {
     expect(result.governance.blockedReason).toBe(
       'Exposition totale du portefeuille après ce trade',
     );
+  });
+});
+
+describe('RiskCalculationService.calculateActiveTrade', () => {
+  it.each([
+    ['buy', 1.105],
+    ['buy', 1.1],
+    ['sell', 1.095],
+    ['sell', 1.1],
+  ] as const)(
+    'allows an active %s stop at %s and reports zero remaining exposure',
+    async (execution, stopPrice) => {
+      const { service, getSnapshot, getState } = makeService();
+      const result = await service.calculateActiveTrade('u1', CURRENCY, {
+        symbol: 'EURUSD',
+        execution,
+        entry: 1.1,
+        stopPrice,
+        targetPrice: execution === 'buy' ? 1.12 : 1.08,
+        lot: 0.2,
+      });
+
+      expect(result.actualCapitalExposure).toBe(0);
+      expect(result.capitalExposurePct).toBe(0);
+      expect(result.rewardPips).toBeCloseTo(200, 6);
+      expect(result.rewardToRisk).toBeNull();
+      expect(getSnapshot).not.toHaveBeenCalled();
+      expect(getState).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['buy', 1.09],
+    ['buy', 1.102],
+    ['sell', 1.11],
+    ['sell', 1.098],
+  ] as const)(
+    'rejects an active %s target with invalid entry/stop ordering',
+    async (execution, targetPrice) => {
+      const { service } = makeService();
+      await expect(
+        service.calculateActiveTrade('u1', CURRENCY, {
+          symbol: 'EURUSD',
+          execution,
+          entry: 1.1,
+          stopPrice: execution === 'buy' ? 1.105 : 1.095,
+          targetPrice,
+          lot: 0.2,
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    },
+  );
+});
+
+describe('RiskCalculationService.validateActiveTradeGeometry', () => {
+  it('validates active geometry without loading profile or market data', () => {
+    const { service, getProfile, resolveExchangeRate } = makeService();
+
+    expect(() =>
+      service.validateActiveTradeGeometry({
+        symbol: 'EURUSD',
+        execution: 'buy',
+        entry: 1.1,
+        stopPrice: 1.105,
+        targetPrice: 1.102,
+        lot: 0.2,
+      }),
+    ).toThrow(BadRequestException);
+    expect(getProfile).not.toHaveBeenCalled();
+    expect(resolveExchangeRate).not.toHaveBeenCalled();
   });
 });

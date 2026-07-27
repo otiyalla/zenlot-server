@@ -217,6 +217,99 @@ export interface RiskCalculationInput {
   lot?: number | null;
 }
 
+export interface RiskCalculationOptions {
+  /**
+   * Open positions may trail their stop through entry to lock profit. This mode
+   * keeps target validation directional but treats an at/beyond-entry stop as
+   * zero remaining downside exposure. Prospective calculations stay strict by
+   * default.
+   */
+  context?: 'prospective' | 'active';
+}
+
+type TradeGeometryInput = Pick<
+  RiskCalculationInput,
+  'direction' | 'entryPrice' | 'stopPrice' | 'targetPrice'
+>;
+
+/**
+ * Validates directional trade geometry at the engine boundary.  The lower-level
+ * sizing helpers intentionally remain direction-agnostic for backwards
+ * compatibility; composed risk calculations must enforce that stops protect
+ * in the adverse direction and targets lie in the profitable direction.
+ */
+function validateTradeGeometry(
+  input: TradeGeometryInput,
+  options: RiskCalculationOptions,
+): void {
+  const { direction, entryPrice, stopPrice, targetPrice } = input;
+  const active = options.context === 'active';
+
+  if (targetPrice !== undefined && targetPrice !== null && targetPrice <= 0) {
+    throw new RiskCalculationError(
+      'targetPrice must be positive when provided',
+    );
+  }
+  if (stopPrice <= 0) {
+    throw new RiskCalculationError('stopPrice must be positive');
+  }
+
+  if (direction === 'long') {
+    if (!active && stopPrice >= entryPrice) {
+      throw new RiskCalculationError(
+        'For long trades, stopPrice must be strictly below entryPrice',
+      );
+    }
+    if (
+      targetPrice !== undefined &&
+      targetPrice !== null &&
+      targetPrice <= entryPrice
+    ) {
+      throw new RiskCalculationError(
+        'For long trades, targetPrice must be strictly above entryPrice',
+      );
+    }
+    if (
+      targetPrice !== undefined &&
+      targetPrice !== null &&
+      stopPrice >= targetPrice
+    ) {
+      throw new RiskCalculationError(
+        'For long trades, stopPrice must be strictly below targetPrice',
+      );
+    }
+    return;
+  }
+
+  if (!active && stopPrice <= entryPrice) {
+    throw new RiskCalculationError(
+      'For short trades, stopPrice must be strictly above entryPrice',
+    );
+  }
+  if (
+    targetPrice !== undefined &&
+    targetPrice !== null &&
+    targetPrice >= entryPrice
+  ) {
+    throw new RiskCalculationError(
+      'For short trades, targetPrice must be strictly below entryPrice',
+    );
+  }
+  if (
+    targetPrice !== undefined &&
+    targetPrice !== null &&
+    stopPrice <= targetPrice
+  ) {
+    throw new RiskCalculationError(
+      'For short trades, stopPrice must be strictly above targetPrice',
+    );
+  }
+}
+
+export function validateActiveTradeGeometry(input: TradeGeometryInput): void {
+  validateTradeGeometry(input, { context: 'active' });
+}
+
 /**
  * Convenience composer: resolves instrument metadata, sizes the position, and
  * attaches reward fields when a target is supplied. Pure — the caller is
@@ -229,6 +322,7 @@ export interface RiskCalculationInput {
  */
 export function computeRiskCalculation(
   input: RiskCalculationInput,
+  options: RiskCalculationOptions = {},
 ): RiskCalculation {
   const {
     pair,
@@ -242,28 +336,46 @@ export function computeRiskCalculation(
     lot,
   } = input;
 
+  validateTradeGeometry(input, options);
+
   const instrument = getInstrumentType(pair);
   const pipSize = getPipSize(pair);
   const contractSize = getContractSize(pair);
   const lotStep = getLotStep(pair);
 
-  const sizing = calculatePositionSize({
-    accountBalance,
-    maxRiskPct,
-    entryPrice,
-    stopPrice,
-    pipSize,
-    contractSize,
-    exchangeRate,
-    lotStep,
-  });
+  const protectsProfit =
+    options.context === 'active' &&
+    (direction === 'long' ? stopPrice >= entryPrice : stopPrice <= entryPrice);
+
+  const sizing = protectsProfit
+    ? calculateProtectedPosition({
+        accountBalance,
+        maxRiskPct,
+        entryPrice,
+        stopPrice,
+        pipSize,
+        contractSize,
+        exchangeRate,
+        lotStep,
+        lot,
+      })
+    : calculatePositionSize({
+        accountBalance,
+        maxRiskPct,
+        entryPrice,
+        stopPrice,
+        pipSize,
+        contractSize,
+        exchangeRate,
+        lotStep,
+      });
 
   // Honour a user-chosen lot: derive exposure from it, but keep the engine's
   // recommendation in `lotSize`.
   let lotSizeRounded = sizing.lotSizeRounded;
   let actualCapitalExposure = sizing.actualCapitalExposure;
   let capitalExposurePct = sizing.capitalExposurePct;
-  if (lot !== undefined && lot !== null && lot > 0) {
+  if (!protectsProfit && lot !== undefined && lot !== null && lot > 0) {
     const priceDistance = Math.abs(entryPrice - stopPrice);
     const valuePerLot = contractSize * exchangeRate;
     lotSizeRounded = floorToStep(lot, lotStep);
@@ -273,15 +385,11 @@ export function computeRiskCalculation(
 
   let rewardPips: number | null = null;
   let rewardToRisk: number | null = null;
-  if (targetPrice !== undefined && targetPrice !== null && targetPrice > 0) {
-    const reward = calculateRewardToRisk(
-      entryPrice,
-      stopPrice,
-      targetPrice,
-      pipSize,
-    );
-    rewardPips = reward.rewardPips;
-    rewardToRisk = reward.rewardToRisk;
+  if (targetPrice !== undefined && targetPrice !== null) {
+    rewardPips = Math.abs(targetPrice - entryPrice) / pipSize;
+    if (!protectsProfit) {
+      rewardToRisk = rewardPips / (Math.abs(entryPrice - stopPrice) / pipSize);
+    }
   }
 
   return {
@@ -301,6 +409,51 @@ export function computeRiskCalculation(
     capitalExposurePct,
     rewardPips,
     rewardToRisk,
+  };
+}
+
+function calculateProtectedPosition({
+  accountBalance,
+  maxRiskPct,
+  entryPrice,
+  stopPrice,
+  pipSize,
+  contractSize,
+  exchangeRate,
+  lotStep = 0.01,
+  lot,
+}: PositionSizeInput & { lot?: number | null }): PositionSizeResult {
+  if (accountBalance <= 0)
+    throw new RiskCalculationError('accountBalance must be positive');
+  if (maxRiskPct <= 0)
+    throw new RiskCalculationError('maxRiskPct must be positive');
+  if (entryPrice <= 0)
+    throw new RiskCalculationError('entryPrice must be positive');
+  if (pipSize <= 0) throw new RiskCalculationError('pipSize must be positive');
+
+  const valuePerLot = contractSize * exchangeRate;
+  if (valuePerLot <= 0) {
+    throw new RiskCalculationError(
+      'contractSize × exchangeRate must be positive',
+    );
+  }
+  if (lot === undefined || lot === null || lot <= 0) {
+    throw new RiskCalculationError(
+      'Active profit-lock calculations require the held lot size',
+    );
+  }
+
+  const lotSizeRounded = floorToStep(lot, lotStep);
+  return {
+    stopDistancePips: Math.abs(entryPrice - stopPrice) / pipSize,
+    pipValue: pipSize * valuePerLot,
+    maxCapitalExposure: accountBalance * (maxRiskPct / 100),
+    // There is no meaningful new-position recommendation after a stop has
+    // crossed entry; report the held size in both lot fields.
+    lotSize: lotSizeRounded,
+    lotSizeRounded,
+    actualCapitalExposure: 0,
+    capitalExposurePct: 0,
   };
 }
 

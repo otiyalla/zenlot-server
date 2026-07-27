@@ -30,6 +30,7 @@ function tradeRow(
     hasGrade?: boolean;
     hasVerdict?: boolean;
     closedDaysAgo?: number;
+    status?: string;
   } = {},
 ) {
   const {
@@ -45,6 +46,7 @@ function tradeRow(
     hasGrade = true,
     hasVerdict = true,
     closedDaysAgo = 1,
+    status = 'closed',
   } = overrides;
 
   const opened = new Date(
@@ -63,7 +65,7 @@ function tradeRow(
     rMultiple,
     suggestedLot: 0.2,
     stopAdjustments: [],
-    status: 'closed',
+    status,
     createdAt: opened,
     closedAt: closed,
     preTradeEvaluations: hasEval
@@ -152,8 +154,9 @@ function makeService(m: Mocks = {}) {
     );
   const enqueue = m.enqueue ?? jest.fn().mockResolvedValue(undefined);
 
+  const tradeFindMany = jest.fn().mockResolvedValue(trades);
   const prisma = {
-    trade: { findMany: jest.fn().mockResolvedValue(trades) },
+    trade: { findMany: tradeFindMany },
     behavioralReport: {
       findFirst: jest.fn().mockResolvedValue(m.latestReport ?? null),
       create: reportCreate,
@@ -170,6 +173,7 @@ function makeService(m: Mocks = {}) {
   return {
     service: new BehavioralReportService(prisma, coaching),
     prisma,
+    tradeFindMany,
     reportCreate,
     enqueue,
   };
@@ -177,6 +181,35 @@ function makeService(m: Mocks = {}) {
 
 describe('BehavioralReportService', () => {
   describe('assembleEvaluatedTrades', () => {
+    it('queries every terminal settlement status used by grading', async () => {
+      const { service, tradeFindMany } = makeService({
+        trades: [
+          tradeRow(1, { status: 'closed_in_profit' }),
+          tradeRow(2, { status: 'closed_in_loss' }),
+          tradeRow(3, { status: 'reached_tp' }),
+          tradeRow(4, { status: 'reached_sl' }),
+        ],
+      });
+
+      await service.assembleEvaluatedTrades(USER_ID);
+
+      expect(tradeFindMany).toHaveBeenCalledWith({
+        where: {
+          userId: USER_ID,
+          status: {
+            in: [
+              'closed',
+              'closed_in_profit',
+              'closed_in_loss',
+              'reached_tp',
+              'reached_sl',
+            ],
+          },
+        },
+        include: expect.any(Object),
+      });
+    });
+
     it('maps a fully-evaluated trade including the checklistSkipped flag', async () => {
       const { service } = makeService({
         trades: [tradeRow(1, { skipped: true })],

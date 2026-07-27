@@ -45,6 +45,8 @@ const setup = {
 
 function makeService(opts: {
   calculate?: jest.Mock;
+  calculateActiveTrade?: jest.Mock;
+  validateActiveTradeGeometry?: jest.Mock;
   tradeCreate?: jest.Mock;
   govCreate?: jest.Mock;
   queueAdd?: jest.Mock;
@@ -54,6 +56,7 @@ function makeService(opts: {
   settleRealizedPnL?: jest.Mock;
   applyBalanceDelta?: jest.Mock;
   txUpdate?: jest.Mock;
+  txUpdateMany?: jest.Mock;
   txDelete?: jest.Mock;
   profileUpdate?: jest.Mock;
   profileFindUnique?: jest.Mock;
@@ -81,6 +84,9 @@ function makeService(opts: {
   const txUpdate =
     opts.txUpdate ??
     jest.fn().mockResolvedValue({ id: 't1', status: 'closed_in_profit' });
+  const txUpdateMany =
+    opts.txUpdateMany ?? jest.fn().mockResolvedValue({ count: 1 });
+  const txFindUnique = jest.fn().mockResolvedValue(undefined);
   const txDelete = opts.txDelete ?? jest.fn().mockResolvedValue({ id: 't1' });
   const profileUpdate = opts.profileUpdate ?? jest.fn().mockResolvedValue({});
   // Defaults to a present profile so the reversal path runs; tests covering the
@@ -89,7 +95,12 @@ function makeService(opts: {
     opts.profileFindUnique ?? jest.fn().mockResolvedValue({ userId: 'u1' });
 
   const tx = {
-    trade: { update: txUpdate, delete: txDelete },
+    trade: {
+      update: txUpdate,
+      updateMany: txUpdateMany,
+      findUnique: txFindUnique,
+      delete: txDelete,
+    },
     riskProfile: { update: profileUpdate, findUnique: profileFindUnique },
     // closeTrade snapshots breach flags before/after settlement for a drawdown push.
     drawdownState: {
@@ -115,7 +126,15 @@ function makeService(opts: {
       .mockImplementation((cb: (t: unknown) => unknown) => cb(tx)),
   } as unknown as PrismaService;
 
-  const riskCalc = { calculate } as unknown as RiskCalculationService;
+  const calculateActiveTrade =
+    opts.calculateActiveTrade ?? jest.fn().mockRejectedValue(new Error());
+  const validateActiveTradeGeometry =
+    opts.validateActiveTradeGeometry ?? jest.fn();
+  const riskCalc = {
+    calculate,
+    calculateActiveTrade,
+    validateActiveTradeGeometry,
+  } as unknown as RiskCalculationService;
   const rateResolver = {
     resolveExchangeRate:
       opts.resolveExchangeRate ?? jest.fn().mockResolvedValue(1),
@@ -174,6 +193,7 @@ function makeService(opts: {
     govCreate,
     queueAdd,
     txUpdate,
+    txUpdateMany,
     txDelete,
     profileUpdate,
     profileFindUnique,
@@ -183,6 +203,8 @@ function makeService(opts: {
     markChecklistSkipped,
     gradeClosedTrade,
     tradeUpdate,
+    calculateActiveTrade,
+    validateActiveTradeGeometry,
   };
 }
 
@@ -202,6 +224,7 @@ describe('TradeLogService.logTrade', () => {
     expect(data.symbol).toBe('EURUSD');
     expect(data.lot).toBe(0.2);
     expect(data.execution).toBe('buy');
+    expect(data.rr).toBe(2);
     expect(data.capitalExposure).toBe(100);
     expect(data.governanceStatus).toBe('approved');
     expect(govCreate).toHaveBeenCalled();
@@ -387,13 +410,15 @@ describe('TradeLogService.closeTrade', () => {
 
   it('computes PnL + R-multiple and settles balance + drawdown', async () => {
     const findUnique = jest.fn().mockResolvedValue(openTrade);
-    const { service, txUpdate, settleRealizedPnL } = makeService({
+    const { service, txUpdateMany, settleRealizedPnL } = makeService({
       findUnique,
     });
 
     await service.closeTrade('u1', 't1', 1.105); // +0.005 move → +100 PnL, 1R
 
-    const data = dataOf(txUpdate);
+    const data = (
+      txUpdateMany.mock.calls[0][0] as { data: Record<string, unknown> }
+    ).data;
     expect(data.pnl).toBeCloseTo(100, 6);
     expect(data.rMultiple).toBeCloseTo(1, 6);
     expect(data.status).toBe('closed_in_profit');
@@ -406,9 +431,39 @@ describe('TradeLogService.closeTrade', () => {
 
   it('marks a losing close closed_in_loss', async () => {
     const findUnique = jest.fn().mockResolvedValue(openTrade);
-    const { service, txUpdate } = makeService({ findUnique });
+    const { service, txUpdateMany } = makeService({ findUnique });
     await service.closeTrade('u1', 't1', 1.095); // stopped out → -100
-    expect(dataOf(txUpdate).status).toBe('closed_in_loss');
+    expect(dataOf(txUpdateMany).status).toBe('closed_in_loss');
+  });
+
+  it('rejects when the atomic claim loses and does not settle', async () => {
+    const findUnique = jest.fn().mockResolvedValue(openTrade);
+    const txUpdateMany = jest.fn().mockResolvedValue({ count: 0 });
+    const { service, settleRealizedPnL } = makeService({
+      findUnique,
+      txUpdateMany,
+    });
+    await expect(service.closeTrade('u1', 't1', 1.105)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(settleRealizedPnL).not.toHaveBeenCalled();
+  });
+
+  it('settles only once across two attempted closes', async () => {
+    const findUnique = jest.fn().mockResolvedValue(openTrade);
+    const txUpdateMany = jest
+      .fn()
+      .mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValueOnce({ count: 0 });
+    const { service, settleRealizedPnL } = makeService({
+      findUnique,
+      txUpdateMany,
+    });
+    await service.closeTrade('u1', 't1', 1.105);
+    await expect(service.closeTrade('u1', 't1', 1.105)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(settleRealizedPnL).toHaveBeenCalledTimes(1);
   });
 
   it('404s when the trade belongs to another user', async () => {
@@ -444,10 +499,70 @@ describe('TradeLogService.closeTrade', () => {
       .fn()
       .mockRejectedValue(new Error('grading boom'));
     const { service } = makeService({ findUnique, gradeClosedTrade });
-    await expect(service.closeTrade('u1', 't1', 1.105)).resolves.toEqual({
-      id: 't1',
-      status: 'closed_in_profit',
-    });
+    await expect(service.closeTrade('u1', 't1', 1.105)).resolves.toEqual(
+      expect.objectContaining({ id: 't1', status: 'closed_in_profit' }),
+    );
+  });
+});
+
+describe('TradeLogService.settleManualClose', () => {
+  const openTrade = {
+    id: 't1',
+    userId: 'u1',
+    symbol: 'EURUSD',
+    execution: 'buy',
+    entry: 1.1,
+    lot: 0.2,
+    accountCurrency: 'USD',
+    stopLoss: { value: 1.095 },
+    takeProfit: { value: 1.11 },
+    status: 'open',
+  } as any;
+
+  it('settles exactly once after a successful atomic claim', async () => {
+    const txUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const { service, settleRealizedPnL } = makeService({ txUpdateMany });
+    await service.settleManualClose(
+      'u1',
+      openTrade,
+      { status: 'closed_in_profit' } as any,
+      1.105,
+    );
+    expect(txUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 't1', userId: 'u1', status: 'open' },
+      }),
+    );
+    expect(settleRealizedPnL).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects when the atomic claim loses and does not settle', async () => {
+    const txUpdateMany = jest.fn().mockResolvedValue({ count: 0 });
+    const { service, settleRealizedPnL } = makeService({ txUpdateMany });
+    await expect(
+      service.settleManualClose(
+        'u1',
+        openTrade,
+        { status: 'closed_in_profit' } as any,
+        1.105,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(settleRealizedPnL).not.toHaveBeenCalled();
+  });
+
+  it('settles only once across two attempted manual status closes', async () => {
+    const txUpdateMany = jest
+      .fn()
+      .mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValueOnce({ count: 0 });
+    const { service, settleRealizedPnL } = makeService({ txUpdateMany });
+    const data = { status: 'closed_in_profit' } as any;
+
+    await service.settleManualClose('u1', openTrade, data, 1.105);
+    await expect(
+      service.settleManualClose('u1', openTrade, data, 1.105),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(settleRealizedPnL).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -456,6 +571,7 @@ describe('TradeLogService.applyStopAdjustment', () => {
     id: 't1',
     userId: 'u1',
     execution: 'buy',
+    rr: 2,
     stopLoss: { value: 1.095, pips: 50 },
     stopAdjustments: [],
     status: 'open',
@@ -491,6 +607,181 @@ describe('TradeLogService.applyStopAdjustment', () => {
 
     const adjustments = dataOf(tradeUpdate).stopAdjustments as unknown[];
     expect(adjustments).toHaveLength(2);
+  });
+
+  it.each([
+    ['buy', 1.095, 1.12],
+    ['sell', 1.105, 1.08],
+  ] as const)(
+    'refreshes tracked open %s trailing-stop metadata without overwriting planned rr',
+    async (execution, newStop, targetPrice) => {
+      const tracked = {
+        ...openTrade,
+        symbol: 'EURUSD',
+        execution,
+        entry: 1.1,
+        lot: 0.2,
+        accountCurrency: 'USD',
+        capitalExposurePct: 1,
+        stopLoss: {
+          value: execution === 'buy' ? 1.09 : 1.11,
+          pips: 100,
+        },
+        takeProfit: { value: targetPrice, pips: 200 },
+      };
+      const findFirst = jest.fn().mockResolvedValue(tracked);
+      const calculateActiveTrade = jest.fn().mockResolvedValue({
+        actualCapitalExposure: 100,
+        capitalExposurePct: 1,
+        rewardToRisk: 4,
+        rewardPips: 200,
+        pipValue: 10,
+        stopPrice: newStop,
+        stopDistancePips: 50,
+        targetPrice,
+        lotSizeRounded: 0.2,
+        exchangeRate: 1,
+      });
+      const { service, tradeUpdate } = makeService({
+        findFirst,
+        calculateActiveTrade,
+      });
+
+      await service.applyStopAdjustment('u1', 't1', newStop, 'trail stop');
+
+      const data = dataOf(tradeUpdate);
+      expect(data).not.toHaveProperty('rr');
+      expect(data).toMatchObject({
+        lot: 0.2,
+        exchangeRate: 1,
+        risk: 100,
+        reward: 400,
+        capitalExposure: 100,
+        capitalExposurePct: 1,
+        stopLoss: { value: newStop, pips: 50 },
+        takeProfit: { value: targetPrice, pips: 200 },
+      });
+    },
+  );
+
+  it.each([
+    ['buy', 1.105, 1.12],
+    ['sell', 1.095, 1.08],
+  ] as const)(
+    'supports a tracked open %s profit-lock stop and refreshes risk metadata',
+    async (execution, newStop, targetPrice) => {
+      const tracked = {
+        ...openTrade,
+        symbol: 'EURUSD',
+        execution,
+        entry: 1.1,
+        lot: 0.2,
+        accountCurrency: 'USD',
+        capitalExposurePct: 1,
+        stopLoss: {
+          value: execution === 'buy' ? 1.09 : 1.11,
+          pips: 100,
+        },
+        takeProfit: { value: targetPrice, pips: 200 },
+      };
+      const findFirst = jest.fn().mockResolvedValue(tracked);
+      const calculateActiveTrade = jest.fn().mockResolvedValue({
+        actualCapitalExposure: 0,
+        capitalExposurePct: 0,
+        rewardToRisk: null,
+        rewardPips: 200,
+        pipValue: 10,
+        stopPrice: newStop,
+        stopDistancePips: 50,
+        targetPrice,
+        lotSizeRounded: 0.2,
+        exchangeRate: 1,
+      });
+      const { service, tradeUpdate } = makeService({
+        findFirst,
+        calculateActiveTrade,
+      });
+
+      await service.applyStopAdjustment('u1', 't1', newStop, 'lock profit');
+
+      expect(calculateActiveTrade).toHaveBeenCalledWith('u1', 'USD', {
+        symbol: 'EURUSD',
+        execution,
+        entry: 1.1,
+        stopPrice: newStop,
+        targetPrice,
+        lot: 0.2,
+      });
+      const data = dataOf(tradeUpdate);
+      expect(data).not.toHaveProperty('rr');
+      expect(data).toMatchObject({
+        lot: 0.2,
+        exchangeRate: 1,
+        risk: 0,
+        reward: 400,
+        capitalExposure: 0,
+        capitalExposurePct: 0,
+        stopLoss: { value: newStop, pips: 50 },
+        takeProfit: { value: targetPrice, pips: 200 },
+      });
+      expect(data.stopAdjustments).toEqual([
+        expect.objectContaining({
+          oldStop: execution === 'buy' ? 1.09 : 1.11,
+          newStop,
+          reason: 'lock profit',
+        }),
+      ]);
+    },
+  );
+
+  it('does not persist a tracked stop at/above the long target', async () => {
+    const findFirst = jest.fn().mockResolvedValue({
+      ...openTrade,
+      symbol: 'EURUSD',
+      entry: 1.1,
+      lot: 0.2,
+      accountCurrency: 'USD',
+      capitalExposurePct: 1,
+      takeProfit: { value: 1.102, pips: 20 },
+    });
+    const calculateActiveTrade = jest
+      .fn()
+      .mockRejectedValue(
+        new BadRequestException('invalid stop/target ordering'),
+      );
+    const { service, tradeUpdate } = makeService({
+      findFirst,
+      calculateActiveTrade,
+    });
+
+    await expect(
+      service.applyStopAdjustment('u1', 't1', 1.105, 'lock profit'),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(tradeUpdate).not.toHaveBeenCalled();
+  });
+
+  it('does not persist invalid active geometry for a legacy trade', async () => {
+    const findFirst = jest.fn().mockResolvedValue({
+      ...openTrade,
+      symbol: 'EURUSD',
+      entry: 1.1,
+      lot: 0.2,
+      accountCurrency: 'USD',
+      capitalExposurePct: null,
+      takeProfit: { value: 1.102, pips: 20 },
+    });
+    const validateActiveTradeGeometry = jest.fn(() => {
+      throw new BadRequestException('invalid stop/target ordering');
+    });
+    const { service, tradeUpdate } = makeService({
+      findFirst,
+      validateActiveTradeGeometry,
+    });
+
+    await expect(
+      service.applyStopAdjustment('u1', 't1', 1.105, 'lock profit'),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(tradeUpdate).not.toHaveBeenCalled();
   });
 
   it('404s when the trade is not found / not owned', async () => {
