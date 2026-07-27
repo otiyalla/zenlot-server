@@ -156,7 +156,21 @@ export class BehavioralReportService {
    */
   async assembleEvaluatedTrades(userId: string): Promise<EvaluatedTrade[]> {
     const trades = await this.prisma.trade.findMany({
-      where: { userId, status: 'closed' },
+      // Settlement writes one of these terminal statuses; the generic
+      // `closed` value is only a legacy/manual state and excludes normally
+      // graded trades from behavioral reports.
+      where: {
+        userId,
+        status: {
+          in: [
+            'closed',
+            'closed_in_profit',
+            'closed_in_loss',
+            'reached_tp',
+            'reached_sl',
+          ],
+        },
+      },
       include: {
         preTradeEvaluations: { orderBy: { evaluatedAt: 'desc' }, take: 1 },
         executionGrades: { orderBy: { gradedAt: 'desc' }, take: 1 },
