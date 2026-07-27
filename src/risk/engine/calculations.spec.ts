@@ -210,6 +210,127 @@ describe('computeRiskCalculation — multi-instrument', () => {
     expect(calc.rewardPips).toBeNull();
     expect(calc.rewardToRisk).toBeNull();
   });
+
+  it.each([
+    ['long stop above entry', { direction: 'long' as const, stopPrice: 1.105 }],
+    [
+      'long stop equal to entry',
+      { direction: 'long' as const, stopPrice: 1.1 },
+    ],
+    [
+      'long target below entry',
+      { direction: 'long' as const, stopPrice: 1.095, targetPrice: 1.09 },
+    ],
+    [
+      'long target equal to entry',
+      { direction: 'long' as const, stopPrice: 1.095, targetPrice: 1.1 },
+    ],
+    [
+      'short stop below entry',
+      { direction: 'short' as const, stopPrice: 1.095 },
+    ],
+    [
+      'short stop equal to entry',
+      { direction: 'short' as const, stopPrice: 1.1 },
+    ],
+    [
+      'short target above entry',
+      { direction: 'short' as const, stopPrice: 1.105, targetPrice: 1.11 },
+    ],
+    [
+      'short target equal to entry',
+      { direction: 'short' as const, stopPrice: 1.105, targetPrice: 1.1 },
+    ],
+  ])('rejects invalid geometry: %s', (_label, geometry) => {
+    expect(() =>
+      computeRiskCalculation({
+        pair: 'EURUSD',
+        accountBalance: 10000,
+        maxRiskPct: 1,
+        exchangeRate: 1,
+        entryPrice: 1.1,
+        ...geometry,
+      }),
+    ).toThrow(RiskCalculationError);
+  });
+
+  it('allows omitted and null targets', () => {
+    for (const targetPrice of [undefined, null]) {
+      const calc = computeRiskCalculation({
+        pair: 'EURUSD',
+        direction: 'long',
+        entryPrice: 1.1,
+        stopPrice: 1.095,
+        targetPrice,
+        accountBalance: 10000,
+        maxRiskPct: 1,
+        exchangeRate: 1,
+      });
+      expect(calc.rewardToRisk).toBeNull();
+    }
+  });
+
+  it.each([
+    ['long', 1.105],
+    ['long', 1.1],
+    ['short', 1.095],
+    ['short', 1.1],
+  ] as const)(
+    'supports an active %s profit-lock/break-even stop at %s with zero downside exposure',
+    (direction, stopPrice) => {
+      const calc = computeRiskCalculation(
+        {
+          pair: 'EURUSD',
+          direction,
+          entryPrice: 1.1,
+          stopPrice,
+          targetPrice: direction === 'long' ? 1.12 : 1.08,
+          accountBalance: 10000,
+          maxRiskPct: 1,
+          exchangeRate: 1,
+          lot: 0.2,
+        },
+        { context: 'active' },
+      );
+
+      expect(calc.lotSizeRounded).toBeCloseTo(0.2, 6);
+      expect(calc.actualCapitalExposure).toBe(0);
+      expect(calc.capitalExposurePct).toBe(0);
+      expect(calc.rewardPips).toBeCloseTo(200, 6);
+      expect(calc.rewardToRisk).toBeNull();
+    },
+  );
+
+  it.each([
+    ['long', 1.09],
+    ['long', 1.1],
+    ['long', 1.102],
+    ['long', 1.105],
+    ['short', 1.11],
+    ['short', 1.1],
+    ['short', 1.098],
+    ['short', 1.095],
+  ] as const)(
+    'keeps target geometry strict for an active %s trade with target %s',
+    (direction, targetPrice) => {
+      expect(() =>
+        computeRiskCalculation(
+          {
+            pair: 'EURUSD',
+            direction,
+            entryPrice: 1.1,
+            stopPrice: direction === 'long' ? 1.105 : 1.095,
+            targetPrice,
+            accountBalance: 10000,
+            maxRiskPct: 1,
+            exchangeRate: 1,
+            lot: 0.2,
+          },
+          { context: 'active' },
+        ),
+      ).toThrow(RiskCalculationError);
+    },
+  );
 });
 
 describe('calculateRewardToRisk', () => {

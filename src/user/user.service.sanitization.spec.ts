@@ -10,7 +10,10 @@ describe('UserService sanitization', () => {
     },
   };
 
-  const gateway = { server: { emit: jest.fn() } };
+  const gateway = {
+    emitUserUpdate: jest.fn(),
+    server: { emit: jest.fn() },
+  };
   const auditService = { log: jest.fn() };
   const emailService = {
     sendWelcomeEmail: jest.fn(),
@@ -123,6 +126,76 @@ describe('UserService sanitization', () => {
     expect(callArg.role).toBeUndefined();
     expect(callArg.emailVerified).toBeUndefined();
     expect(callArg.deleteScheduledFor).toBeUndefined();
+  });
+
+  it('emits profile updates through the scoped gateway method', async () => {
+    const updatedUser = {
+      id: 'u1',
+      fname: 'Alice',
+      email: 'alice@example.com',
+      password: 'hash-1',
+      emailVerificationToken: 'secret',
+    };
+    prisma.user.update.mockResolvedValue(updatedUser);
+
+    await service.update('u1', { fname: 'Alice' } as any);
+
+    expect(gateway.emitUserUpdate).toHaveBeenCalledWith('u1', updatedUser);
+    expect(gateway.server.emit).not.toHaveBeenCalled();
+  });
+
+  it('emits deletion initiation only to the scoped user room', async () => {
+    const existingUser = {
+      id: 'u1',
+      fname: 'Alice',
+      lname: 'Trader',
+      email: 'alice@example.com',
+      language: 'en',
+      timezone: 'UTC',
+      deletedAt: null,
+    };
+    const updatedUser = {
+      ...existingUser,
+      deletedAt: new Date('2026-07-27'),
+      deleteScheduledFor: new Date('2026-08-26'),
+      password: 'hash-1',
+    };
+    prisma.user.findUnique.mockResolvedValue(existingUser);
+    prisma.user.update.mockResolvedValue(updatedUser);
+
+    await service.initiateAccountDeletion('u1');
+
+    expect(gateway.emitUserUpdate).toHaveBeenCalledWith('u1', {
+      ...updatedUser,
+      daysRemaining: expect.any(Number),
+    });
+    expect(gateway.server.emit).not.toHaveBeenCalled();
+  });
+
+  it('emits deletion cancellation only to the scoped user room', async () => {
+    const existingUser = {
+      id: 'u1',
+      fname: 'Alice',
+      lname: 'Trader',
+      email: 'alice@example.com',
+      language: 'en',
+      timezone: 'UTC',
+      deletedAt: new Date('2026-07-27'),
+    };
+    const restoredUser = {
+      ...existingUser,
+      deletedAt: null,
+      deleteScheduledFor: null,
+      password: 'hash-1',
+    };
+    prisma.user.findUnique.mockResolvedValue(existingUser);
+    prisma.user.update.mockResolvedValue(restoredUser);
+    deletionQueue.getJob.mockResolvedValue(null);
+
+    await service.cancelAccountDeletion('u1');
+
+    expect(gateway.emitUserUpdate).toHaveBeenCalledWith('u1', restoredUser);
+    expect(gateway.server.emit).not.toHaveBeenCalled();
   });
 
   it('does not allow callers to choose a privileged role on create', async () => {

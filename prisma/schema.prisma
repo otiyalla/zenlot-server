@@ -325,6 +325,7 @@ model preTradeChecklist {
   checklist   Json
   skipped     Boolean  @default(false)
   submittedAt DateTime @default(now())
+  evaluation  preTradeEvaluation?
 
   @@index([userId])
   @@index([tradeId])
@@ -348,6 +349,8 @@ model preTradeEvaluation {
   recommendation     String
   aiCoaching         String?
   evaluatedAt        DateTime @default(now())
+  checklist          preTradeChecklist? @relation(fields: [checklistId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  checklistId        String? @unique
 
   @@index([userId, evaluatedAt(sort: Desc)])
   @@index([tradeId])

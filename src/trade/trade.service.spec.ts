@@ -12,6 +12,7 @@ describe('TradeService', () => {
   let update: jest.Mock;
   let findFirst: jest.Mock;
   let calculate: jest.Mock;
+  let validateActiveTradeGeometry: jest.Mock;
   let settleManualClose: jest.Mock;
 
   const dataOf = (mock: jest.Mock): Record<string, unknown> => {
@@ -26,6 +27,7 @@ describe('TradeService', () => {
     update = jest.fn().mockResolvedValue({ id: 't1' });
     findFirst = jest.fn();
     calculate = jest.fn();
+    validateActiveTradeGeometry = jest.fn();
     settleManualClose = jest.fn().mockResolvedValue({ id: 't1' });
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -34,7 +36,13 @@ describe('TradeService', () => {
           provide: PrismaService,
           useValue: { trade: { create, update, findFirst } },
         },
-        { provide: RiskCalculationService, useValue: { calculate } },
+        {
+          provide: RiskCalculationService,
+          useValue: {
+            calculateActiveTrade: calculate,
+            validateActiveTradeGeometry,
+          },
+        },
         { provide: TradeLogService, useValue: { settleManualClose } },
       ],
     }).compile();
@@ -89,6 +97,7 @@ describe('TradeService', () => {
       lot: 0.1,
       accountCurrency: 'USD',
       capitalExposurePct: 1,
+      rr: 2,
       stopLoss: { value: 1.09, pips: 10 },
       takeProfit: { value: 1.12, pips: 20 },
     };
@@ -97,41 +106,122 @@ describe('TradeService', () => {
       findFirst.mockResolvedValue(openTracked);
     });
 
-    it('recomputes exposure when an open trade stop is edited', async () => {
-      calculate.mockResolvedValue({
-        calculation: {
-          actualCapitalExposure: 42,
-          capitalExposurePct: 2.5,
-          rewardToRisk: 3,
-          rewardPips: 30,
-          stopPrice: 1.085,
-          stopDistancePips: 15,
-          targetPrice: 1.12,
+    it.each([
+      ['buy', 1.095, 1.12],
+      ['sell', 1.105, 1.08],
+    ] as const)(
+      'recomputes a tracked open %s trailing stop without overwriting planned rr',
+      async (execution, stopPrice, targetPrice) => {
+        findFirst.mockResolvedValue({
+          ...openTracked,
+          execution,
+          stopLoss: {
+            value: execution === 'buy' ? 1.09 : 1.11,
+            pips: 100,
+          },
+          takeProfit: { value: targetPrice, pips: 200 },
+        });
+        calculate.mockResolvedValue({
+          actualCapitalExposure: 50,
+          capitalExposurePct: 1.5,
+          rewardToRisk: 4,
+          rewardPips: 200,
+          pipValue: 10,
+          stopPrice,
+          stopDistancePips: 50,
+          targetPrice,
           lotSizeRounded: 0.1,
           exchangeRate: 1,
-        },
-      });
+        });
 
-      await service.updateForUser('t1', 'u1', {
-        id: 't1',
-        stopLoss: { value: 1.085, pips: 15 },
-      } as unknown as UpdateTradeDto);
+        await service.updateForUser('t1', 'u1', {
+          id: 't1',
+          rr: 99,
+          stopLoss: { value: stopPrice, pips: 1 },
+        } as unknown as UpdateTradeDto);
 
-      const data = dataOf(update);
-      expect(calculate).toHaveBeenCalledTimes(1);
-      expect(data.capitalExposure).toBe(42);
-      expect(data.capitalExposurePct).toBe(2.5);
-      expect(data.risk).toBe(42);
-      expect(data.stopLoss).toEqual({ value: 1.085, pips: 15 });
-    });
+        const data = dataOf(update);
+        expect(calculate).toHaveBeenCalledTimes(1);
+        expect(data).not.toHaveProperty('rr');
+        expect(data).toMatchObject({
+          lot: 0.1,
+          exchangeRate: 1,
+          risk: 50,
+          reward: 200,
+          capitalExposure: 50,
+          capitalExposurePct: 1.5,
+          stopLoss: { value: stopPrice, pips: 50 },
+          takeProfit: { value: targetPrice, pips: 200 },
+        });
+      },
+    );
+
+    it.each([
+      ['buy', 1.105, 1.12],
+      ['sell', 1.095, 1.08],
+    ] as const)(
+      'supports a tracked open %s trade with a profit-lock stop and profitable target',
+      async (execution, stopPrice, targetPrice) => {
+        findFirst.mockResolvedValue({
+          ...openTracked,
+          execution,
+          stopLoss: {
+            value: execution === 'buy' ? 1.09 : 1.11,
+            pips: 10,
+          },
+          takeProfit: { value: targetPrice, pips: 20 },
+        });
+        calculate.mockResolvedValue({
+          actualCapitalExposure: 0,
+          capitalExposurePct: 0,
+          rewardToRisk: null,
+          rewardPips: 200,
+          pipValue: 10,
+          stopPrice,
+          stopDistancePips: 50,
+          targetPrice,
+          lotSizeRounded: 0.1,
+          exchangeRate: 1,
+        });
+
+        await service.updateForUser('t1', 'u1', {
+          id: 't1',
+          stopLoss: { value: stopPrice, pips: 1 },
+          takeProfit: { value: targetPrice, pips: 1 },
+        } as unknown as UpdateTradeDto);
+
+        expect(calculate).toHaveBeenCalledWith('u1', 'USD', {
+          symbol: 'EURUSD',
+          execution,
+          entry: 1.1,
+          stopPrice,
+          targetPrice,
+          lot: 0.1,
+        });
+        const data = dataOf(update);
+        expect(data).not.toHaveProperty('rr');
+        expect(data).toMatchObject({
+          lot: 0.1,
+          exchangeRate: 1,
+          risk: 0,
+          reward: 200,
+          capitalExposure: 0,
+          capitalExposurePct: 0,
+          stopLoss: { value: stopPrice, pips: 50 },
+          takeProfit: { value: targetPrice, pips: 200 },
+        });
+      },
+    );
 
     it('does not recompute when no risk-affecting field changed', async () => {
       await service.updateForUser('t1', 'u1', {
         id: 't1',
         tags: ['review'],
+        rr: 99,
       } as unknown as UpdateTradeDto);
       expect(calculate).not.toHaveBeenCalled();
       expect(dataOf(update)).not.toHaveProperty('capitalExposure');
+      expect(dataOf(update)).not.toHaveProperty('rr');
     });
 
     it('does not recompute a legacy trade with no tracked exposure', async () => {
@@ -141,6 +231,23 @@ describe('TradeService', () => {
         stopLoss: { value: 1.085, pips: 15 },
       } as unknown as UpdateTradeDto);
       expect(calculate).not.toHaveBeenCalled();
+      expect(validateActiveTradeGeometry).toHaveBeenCalled();
+    });
+
+    it('does not persist invalid active geometry for a legacy trade', async () => {
+      findFirst.mockResolvedValue({ ...openTracked, capitalExposurePct: null });
+      validateActiveTradeGeometry.mockImplementation(() => {
+        throw new Error('invalid stop/target ordering');
+      });
+
+      await expect(
+        service.updateForUser('t1', 'u1', {
+          id: 't1',
+          stopLoss: { value: 1.125, pips: 25 },
+        } as unknown as UpdateTradeDto),
+      ).rejects.toThrow('invalid stop/target ordering');
+      expect(calculate).not.toHaveBeenCalled();
+      expect(update).not.toHaveBeenCalled();
     });
 
     it('does not recompute when the trade is being closed', async () => {
@@ -152,15 +259,27 @@ describe('TradeService', () => {
       expect(calculate).not.toHaveBeenCalled();
     });
 
-    it('still saves the edit when sizing fails', async () => {
+    it('does not save a tracked edit when risk recomputation fails', async () => {
       calculate.mockRejectedValue(new Error('balance unset'));
-      await service.updateForUser('t1', 'u1', {
-        id: 't1',
-        entry: 1.105,
-      } as unknown as UpdateTradeDto);
-      // Edit is persisted; exposure fields are simply omitted.
-      expect(update).toHaveBeenCalledTimes(1);
-      expect(dataOf(update)).not.toHaveProperty('capitalExposure');
+      await expect(
+        service.updateForUser('t1', 'u1', {
+          id: 't1',
+          entry: 1.105,
+        } as unknown as UpdateTradeDto),
+      ).rejects.toThrow('balance unset');
+      expect(update).not.toHaveBeenCalled();
+    });
+
+    it('does not persist a target at/below a trailed long stop', async () => {
+      calculate.mockRejectedValue(new Error('invalid stop/target ordering'));
+      await expect(
+        service.updateForUser('t1', 'u1', {
+          id: 't1',
+          stopLoss: { value: 1.105, pips: 5 },
+          takeProfit: { value: 1.102, pips: 2 },
+        } as unknown as UpdateTradeDto),
+      ).rejects.toThrow('invalid stop/target ordering');
+      expect(update).not.toHaveBeenCalled();
     });
   });
 
@@ -183,28 +302,26 @@ describe('TradeService', () => {
       findFirst.mockResolvedValue(openTrade);
     });
 
-    it.each([
-      'closed_in_profit',
-      'closed_in_loss',
-      'reached_tp',
-      'reached_sl',
-    ])('settles PnL when an open trade moves to %s', async (status) => {
-      await service.updateForUser('t1', 'u1', {
-        id: 't1',
-        status,
-        closedPrice: 1.12,
-      } as unknown as UpdateTradeDto);
+    it.each(['closed_in_profit', 'closed_in_loss', 'reached_tp', 'reached_sl'])(
+      'settles PnL when an open trade moves to %s',
+      async (status) => {
+        await service.updateForUser('t1', 'u1', {
+          id: 't1',
+          status,
+          closedPrice: 1.12,
+        } as unknown as UpdateTradeDto);
 
-      expect(settleManualClose).toHaveBeenCalledTimes(1);
-      const [userId, existing, data, exitPrice] =
-        settleManualClose.mock.calls[0];
-      expect(userId).toBe('u1');
-      expect(existing.id).toBe('t1');
-      expect((data as Record<string, unknown>).status).toBe(status);
-      expect(exitPrice).toBe(1.12);
-      // The plain update path is bypassed for a settling close.
-      expect(update).not.toHaveBeenCalled();
-    });
+        expect(settleManualClose).toHaveBeenCalledTimes(1);
+        const [userId, existing, data, exitPrice] =
+          settleManualClose.mock.calls[0];
+        expect(userId).toBe('u1');
+        expect(existing.id).toBe('t1');
+        expect((data as Record<string, unknown>).status).toBe(status);
+        expect(exitPrice).toBe(1.12);
+        // The plain update path is bypassed for a settling close.
+        expect(update).not.toHaveBeenCalled();
+      },
+    );
 
     it('does not allow account currency changes through a closing update', async () => {
       await service.updateForUser('t1', 'u1', {

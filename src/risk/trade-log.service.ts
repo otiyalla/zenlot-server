@@ -304,18 +304,29 @@ export class TradeLogService {
 
     const { updated, before, after } = await this.prisma.$transaction(
       async (tx) => {
-        const updated = await tx.trade.update({
-          where: { id: tradeId },
-          data: {
-            closedPrice: exitPrice,
-            closedExchangeRate: closeExchangeRate,
-            pnl,
-            rMultiple,
-            status,
-            closedAt: new Date(),
-            closedReason: 'manual',
-          },
+        const closeData = {
+          closedPrice: exitPrice,
+          closedExchangeRate: closeExchangeRate,
+          pnl,
+          rMultiple,
+          status,
+          closedAt: new Date(),
+          closedReason: 'manual',
+        };
+        // Claim the still-open row atomically. A concurrent close that loses
+        // this conditional update must not settle PnL or mutate drawdown.
+        const claim = await tx.trade.updateMany({
+          where: { id: tradeId, userId, status: 'open' },
+          data: closeData,
         });
+        if (claim.count !== 1) {
+          throw new BadRequestException('Trade is not open');
+        }
+        // Read back the claimed row so database-managed fields (e.g. updatedAt)
+        // and any client/schema transformations are preserved in the response.
+        const updated =
+          (await tx.trade.findUnique({ where: { id: tradeId } })) ??
+          ({ ...existing, ...closeData } as trade);
 
         // Snapshot circuit-breaker flags around settlement to detect new breaches.
         const before = await tx.drawdownState.findUnique({
@@ -399,6 +410,62 @@ export class TradeLogService {
       adjustment,
     ];
 
+    const takeProfitJson =
+      (existing.takeProfit as { value?: number } | null) ?? {};
+    const targetPrice =
+      typeof takeProfitJson.value === 'number' && takeProfitJson.value > 0
+        ? takeProfitJson.value
+        : undefined;
+    this.riskCalculationService.validateActiveTradeGeometry({
+      symbol: existing.symbol,
+      execution: existing.execution as 'buy' | 'sell',
+      entry: existing.entry,
+      stopPrice: newStop,
+      targetPrice,
+    });
+
+    let riskPatch: Prisma.tradeUpdateInput = {};
+    if (typeof existing.capitalExposurePct === 'number') {
+      const calculation =
+        await this.riskCalculationService.calculateActiveTrade(
+          userId,
+          existing.accountCurrency,
+          {
+            symbol: existing.symbol,
+            execution: existing.execution as 'buy' | 'sell',
+            entry: existing.entry,
+            stopPrice: newStop,
+            targetPrice,
+            lot: existing.lot,
+          },
+        );
+      const reward =
+        calculation.rewardPips !== null
+          ? calculation.rewardPips *
+            calculation.pipValue *
+            calculation.lotSizeRounded
+          : 0;
+
+      riskPatch = {
+        lot: calculation.lotSizeRounded,
+        exchangeRate: calculation.exchangeRate,
+        risk: calculation.actualCapitalExposure,
+        reward,
+        capitalExposure: calculation.actualCapitalExposure,
+        capitalExposurePct: calculation.capitalExposurePct,
+        stopLoss: {
+          ...stopLossJson,
+          value: calculation.stopPrice,
+          pips: calculation.stopDistancePips,
+        } as unknown as Prisma.InputJsonValue,
+        takeProfit: {
+          ...takeProfitJson,
+          value: calculation.targetPrice ?? 0,
+          pips: calculation.rewardPips ?? 0,
+        } as unknown as Prisma.InputJsonValue,
+      };
+    }
+
     return this.prisma.trade.update({
       where: { id: tradeId },
       data: {
@@ -408,6 +475,7 @@ export class TradeLogService {
           value: newStop,
         } as unknown as Prisma.InputJsonValue,
         stopAdjustments: adjustments as unknown as Prisma.InputJsonValue,
+        ...riskPatch,
       },
     });
   }
@@ -496,22 +564,31 @@ export class TradeLogService {
 
     const { updated, before, after } = await this.prisma.$transaction(
       async (tx) => {
-        const updated = await tx.trade.update({
-          where: { id: existing.id },
-          data: {
-            ...data,
-            status,
-            closedPrice: settles ? resolvedExit : null,
-            closedExchangeRate: closeExchangeRate,
-            closedReason:
-              typeof data.closedReason === 'string'
-                ? data.closedReason
-                : 'manual',
-            closedAt: (data.closedAt as Date | undefined) ?? new Date(),
-            pnl,
-            rMultiple,
-          },
+        const closeData = {
+          ...data,
+          status,
+          closedPrice: settles ? resolvedExit : null,
+          closedExchangeRate: closeExchangeRate,
+          closedReason:
+            typeof data.closedReason === 'string'
+              ? data.closedReason
+              : 'manual',
+          closedAt: (data.closedAt as Date | undefined) ?? new Date(),
+          pnl,
+          rMultiple,
+        } as Prisma.tradeUpdateManyMutationInput;
+        // Claim only an open trade owned by this user. This closes the race
+        // between the caller's snapshot and settlement of realized PnL.
+        const claim = await tx.trade.updateMany({
+          where: { id: existing.id, userId, status: 'open' },
+          data: closeData,
         });
+        if (claim.count !== 1) {
+          throw new BadRequestException('Trade is not open');
+        }
+        const updated =
+          (await tx.trade.findUnique({ where: { id: existing.id } })) ??
+          ({ ...existing, ...closeData } as trade);
 
         // Snapshot circuit-breaker flags around settlement to detect new breaches.
         const before = await tx.drawdownState.findUnique({
