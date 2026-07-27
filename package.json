@@ -6,7 +6,7 @@
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
-    "build": "nest build",
+    "build": "prisma generate && nest build",
     "build:with:package": "NODE_OPTIONS=--max_old_space_size=4096 yarn build && yarn copy:env:for:package && yarn copy:prisma && yarn copy:migrations && yarn copy:package && yarn sentry:sourcemaps:optional",
     "copy:env": "cp .env dist/.env",
     "copy:env:for:package": "sh -c 'if [ -n \"${BUILD_ENV_FILE:-}\" ] && [ -f \"$BUILD_ENV_FILE\" ]; then cp \"$BUILD_ENV_FILE\" dist/.env; elif [ -f .env ]; then cp .env dist/.env; else touch dist/.env; fi'",
