@@ -1,3 +1,4 @@
+import { NotFoundException } from '@nestjs/common';
 import { JournalService } from './journal.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateJournalDto } from './dto/create-journal.dto';
@@ -14,6 +15,8 @@ const SAFE_AUTHOR_INCLUDE = {
 
 describe('JournalService', () => {
   let service: JournalService;
+  let journalCreate: jest.Mock;
+  let tradeFindFirst: jest.Mock;
 
   const prisma = {
     journal: {
@@ -45,6 +48,8 @@ describe('JournalService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     service = new JournalService(prisma as unknown as PrismaService);
+    journalCreate = prisma.journal.create as jest.Mock;
+    tradeFindFirst = prisma.trade.findFirst as jest.Mock;
     prisma.journal.create.mockResolvedValue({ id: 'journal-1' });
     prisma.journal.findMany.mockResolvedValue([]);
     prisma.journal.findUnique.mockResolvedValue({ id: 'journal-1' });
@@ -149,5 +154,67 @@ describe('JournalService', () => {
       data: { title: 'Updated review' },
       include: SAFE_AUTHOR_INCLUDE,
     });
+  });
+
+  describe('create', () => {
+    const baseDto = {
+      userId: 'owner-1',
+      symbol: 'EURUSD',
+      title: 'Trading plan',
+      tags: ['plan'],
+      plainText: 'Wait for confirmation',
+      editorState: '{}',
+      isPinned: false,
+      isArchived: false,
+    } as CreateJournalDto;
+
+    it('creates a journal without a trade ownership lookup when tradeId is omitted', async () => {
+      const createdJournal = { id: 'journal-1', ...baseDto };
+      journalCreate.mockResolvedValue(createdJournal);
+
+      await expect(service.create(baseDto)).resolves.toBe(createdJournal);
+
+      expect(tradeFindFirst).not.toHaveBeenCalled();
+      expect(journalCreate).toHaveBeenCalledWith({
+        data: {
+          ...baseDto,
+          tradeId: undefined,
+        },
+        include: SAFE_AUTHOR_INCLUDE,
+      });
+    });
+
+    it('creates a journal linked to a trade owned by the journal user', async () => {
+      const dto = { ...baseDto, tradeId: 'trade-1' };
+      const createdJournal = { id: 'journal-1', ...dto };
+      tradeFindFirst.mockResolvedValue({ id: 'trade-1' });
+      journalCreate.mockResolvedValue(createdJournal);
+
+      await expect(service.create(dto)).resolves.toBe(createdJournal);
+
+      expect(tradeFindFirst).toHaveBeenCalledWith({
+        where: { id: 'trade-1', userId: 'owner-1' },
+        select: { id: true },
+      });
+      expect(journalCreate).toHaveBeenCalledTimes(1);
+    });
+
+    it.each(['a foreign', 'a nonexistent'])(
+      'rejects %s trade without attempting journal creation',
+      async () => {
+        const dto = { ...baseDto, tradeId: 'unavailable-trade' };
+        tradeFindFirst.mockResolvedValue(null);
+
+        await expect(service.create(dto)).rejects.toEqual(
+          new NotFoundException('Trade not found'),
+        );
+
+        expect(tradeFindFirst).toHaveBeenCalledWith({
+          where: { id: 'unavailable-trade', userId: 'owner-1' },
+          select: { id: true },
+        });
+        expect(journalCreate).not.toHaveBeenCalled();
+      },
+    );
   });
 });
