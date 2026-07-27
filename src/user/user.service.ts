@@ -301,10 +301,7 @@ export class UserService {
       userAgent,
     });
     this.analytics.trackUserUpdated(id, updatedFields);
-    this.userGateway.server.emit('updated-user', {
-      ...update,
-      password: undefined,
-    });
+    this.userGateway.emitUserUpdate(id, update);
   }
 
   /**
@@ -345,10 +342,9 @@ export class UserService {
 
     const daysRemaining = this.getDaysRemaining(deleteScheduledFor);
 
-    this.userGateway.server.emit('updated-user', {
+    this.userGateway.emitUserUpdate(id, {
       ...updatedUser,
       daysRemaining,
-      password: undefined,
     });
 
     await this.deletionQueue.add(
@@ -430,10 +426,7 @@ export class UserService {
       });
     }
 
-    this.userGateway.server.emit('updated-user', {
-      ...restoredUser,
-      password: undefined,
-    });
+    this.userGateway.emitUserUpdate(id, restoredUser);
 
     await this.emailService.sendAccountDeletionCancelledNotice(
       user.email,
