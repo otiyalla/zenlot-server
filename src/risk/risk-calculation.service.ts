@@ -10,6 +10,7 @@ import {
   RiskCalculation,
   RiskCalculationError,
   resolveLanguage,
+  validateActiveTradeGeometry as validateEngineActiveTradeGeometry,
 } from './engine';
 import {
   executionToDirection,
@@ -44,6 +45,62 @@ export class RiskCalculationService {
     dto: CalculateRiskDto,
     language: string = 'en',
   ): Promise<CalculateRiskResult> {
+    const { calculation, view, profile } = await this.compute(
+      userId,
+      accountCurrency,
+      dto,
+      'prospective',
+    );
+    const portfolio = await this.portfolioService.getSnapshot(userId);
+    const drawdown = await this.drawdownService.getState(userId);
+    const governance = evaluateGovernance(
+      calculation,
+      portfolio,
+      drawdown,
+      profile,
+      resolveLanguage(language),
+    );
+
+    return { calculation: view, governance };
+  }
+
+  /**
+   * Recomputes derived fields for an already-open position. Unlike prospective
+   * sizing, an active position may move its stop to/beyond entry to lock profit.
+   * Governance is intentionally not re-run because this does not add a position
+   * to the portfolio.
+   */
+  async calculateActiveTrade(
+    userId: string,
+    accountCurrency: string,
+    dto: CalculateRiskDto,
+  ): Promise<RiskCalculationView> {
+    const { view } = await this.compute(userId, accountCurrency, dto, 'active');
+    return view;
+  }
+
+  validateActiveTradeGeometry(dto: CalculateRiskDto): void {
+    try {
+      validateEngineActiveTradeGeometry({
+        direction: executionToDirection(dto.execution),
+        entryPrice: dto.entry,
+        stopPrice: dto.stopPrice,
+        targetPrice: dto.targetPrice ?? null,
+      });
+    } catch (error) {
+      if (error instanceof RiskCalculationError) {
+        throw new BadRequestException(error.message);
+      }
+      throw error;
+    }
+  }
+
+  private async compute(
+    userId: string,
+    accountCurrency: string,
+    dto: CalculateRiskDto,
+    context: 'prospective' | 'active',
+  ) {
     const profile = await this.riskProfileService.getProfile(
       userId,
       accountCurrency,
@@ -62,17 +119,20 @@ export class RiskCalculationService {
 
     let calculation: RiskCalculation;
     try {
-      calculation = computeRiskCalculation({
-        pair: dto.symbol.toUpperCase(),
-        direction,
-        entryPrice: dto.entry,
-        stopPrice: dto.stopPrice,
-        targetPrice: dto.targetPrice ?? null,
-        accountBalance: profile.accountBalance,
-        maxRiskPct: profile.maxRiskPerTradePct,
-        exchangeRate,
-        lot: dto.lot ?? null,
-      });
+      calculation = computeRiskCalculation(
+        {
+          pair: dto.symbol.toUpperCase(),
+          direction,
+          entryPrice: dto.entry,
+          stopPrice: dto.stopPrice,
+          targetPrice: dto.targetPrice ?? null,
+          accountBalance: profile.accountBalance,
+          maxRiskPct: profile.maxRiskPerTradePct,
+          exchangeRate,
+          lot: dto.lot ?? null,
+        },
+        { context },
+      );
     } catch (error) {
       if (error instanceof RiskCalculationError) {
         throw new BadRequestException(error.message);
@@ -80,20 +140,10 @@ export class RiskCalculationService {
       throw error;
     }
 
-    const portfolio = await this.portfolioService.getSnapshot(userId);
-    const drawdown = await this.drawdownService.getState(userId);
-    // RiskProfileResponse is structurally a superset of the engine's RiskProfile.
-    const governance = evaluateGovernance(
-      calculation,
-      portfolio,
-      drawdown,
-      profile,
-      resolveLanguage(language),
-    );
-
     return {
-      calculation: toRiskCalculationView(calculation, exchangeRate),
-      governance,
+      calculation,
+      view: toRiskCalculationView(calculation, exchangeRate),
+      profile,
     };
   }
 }

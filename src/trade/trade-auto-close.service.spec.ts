@@ -205,6 +205,34 @@ describe('TradeAutoCloseService', () => {
     );
   });
 
+  it.each([
+    ['buy', 1.105, 1.12, 1.104],
+    ['sell', 1.095, 1.08, 1.096],
+  ] as const)(
+    'auto-closes a %s profit-lock stop with positive PnL',
+    async (execution, stopPrice, targetPrice, observedPrice) => {
+      const { prisma, quoteService, service } = createSubject([
+        {
+          ...openTrade,
+          execution,
+          stopLoss: { value: stopPrice, pips: 50 },
+          takeProfit: { value: targetPrice, pips: 200 },
+        },
+      ]);
+      quoteService.fxRate.mockResolvedValue({ price: observedPrice });
+
+      await service.scanOpenTrades();
+
+      const data = getLastUpdateArg(prisma.trade.updateMany).data;
+      expect(data.closedPrice).toBe(stopPrice);
+      expect(data.closedReason).toBe('stop_loss');
+      expect(data.status).toBe('reached_sl');
+      expect(data.pnl).toBeCloseTo(100, 6);
+      // R currently uses the active stop as its denominator.
+      expect(data.rMultiple).toBeCloseTo(1, 6);
+    },
+  );
+
   it('requests a symbol quote once in entry orientation and leaves untriggered trades open', async () => {
     const secondTrade = { ...openTrade, id: 'trade-2' };
     const { prisma, quoteService, service } = createSubject([

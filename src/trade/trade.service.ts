@@ -8,10 +8,7 @@ import { SearchTradeDto } from './dto/search-trade.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma, trade } from '../../prisma/generated/prisma/client';
 import { RiskCalculationService } from '../risk/risk-calculation.service';
-import {
-  SETTLED_STATUSES,
-  TradeLogService,
-} from '../risk/trade-log.service';
+import { SETTLED_STATUSES, TradeLogService } from '../risk/trade-log.service';
 
 /**
  * Fields whose change alters a trade's capital exposure or reward sizing, so a
@@ -26,6 +23,13 @@ const RISK_AFFECTING_FIELDS = [
   'lot',
   'execution',
   'symbol',
+] as const;
+
+const GEOMETRY_AFFECTING_FIELDS = [
+  'entry',
+  'stopLoss',
+  'takeProfit',
+  'execution',
 ] as const;
 
 @Injectable()
@@ -236,7 +240,9 @@ export class TradeService {
    * shapes the rest into Prisma update data. `isAutoClosed` is owned by the
    * auto-close job (which updates it directly), never by a client request.
    */
-  private toUpdateData(updateTradeDto: UpdateTradeDto): Prisma.tradeUpdateInput {
+  private toUpdateData(
+    updateTradeDto: UpdateTradeDto,
+  ): Prisma.tradeUpdateInput {
     const {
       id: _,
       createdAt,
@@ -313,8 +319,10 @@ export class TradeService {
    *  - no exposure-affecting field changed;
    *  - the trade predates the risk engine (`capitalExposurePct` is null) and so
    *    never contributed to exposure;
-   *  - sizing fails (e.g. the account balance is unset) — a derived recompute
-   *    must never block the primary edit.
+   *
+   * Tracked trades fail the edit if recomputation fails. Persisting the primary
+   * edit without its derived fields would leave portfolio exposure silently
+   * stale.
    */
   private async buildRiskRecompute(
     userId: string,
@@ -323,7 +331,6 @@ export class TradeService {
   ): Promise<Prisma.tradeUpdateInput | null> {
     const finalStatus = dto.status ?? existing.status;
     if (finalStatus !== 'open') return null;
-    if (existing.capitalExposurePct === null) return null;
 
     const changed = RISK_AFFECTING_FIELDS.some(
       (field) => dto[field] !== undefined,
@@ -339,50 +346,59 @@ export class TradeService {
     const lot = dto.lot ?? existing.lot;
     const execution = (dto.execution ?? existing.execution) as 'buy' | 'sell';
     const symbol = dto.symbol ?? existing.symbol;
+    const targetPrice = rawTarget > 0 ? rawTarget : undefined;
 
-    try {
-      const { calculation } = await this.riskCalculation.calculate(
-        userId,
-        existing.accountCurrency,
-        {
+    if (existing.capitalExposurePct === null) {
+      if (GEOMETRY_AFFECTING_FIELDS.some((field) => dto[field] !== undefined)) {
+        this.riskCalculation.validateActiveTradeGeometry({
           symbol,
           execution,
           entry,
           stopPrice,
-          // The engine treats a non-positive target as "no target".
-          targetPrice: rawTarget > 0 ? rawTarget : undefined,
-          lot: lot > 0 ? lot : undefined,
-        },
-      );
-
-      const reward =
-        calculation.rewardPips !== null && calculation.rewardToRisk !== null
-          ? calculation.actualCapitalExposure * calculation.rewardToRisk
-          : 0;
-
-      return {
-        lot: calculation.lotSizeRounded,
-        exchangeRate: calculation.exchangeRate,
-        rr: calculation.rewardToRisk ?? 0,
-        risk: calculation.actualCapitalExposure,
-        reward,
-        capitalExposure: calculation.actualCapitalExposure,
-        capitalExposurePct: calculation.capitalExposurePct,
-        // Keep the persisted stop/target pips consistent with the recompute.
-        stopLoss: {
-          value: calculation.stopPrice,
-          pips: calculation.stopDistancePips,
-        } as unknown as Prisma.InputJsonValue,
-        takeProfit: {
-          value: calculation.targetPrice ?? 0,
-          pips: calculation.rewardPips ?? 0,
-        } as unknown as Prisma.InputJsonValue,
-      };
-    } catch {
-      // Sizing failed (e.g. account balance unset). Leave the stored exposure
-      // untouched rather than failing the edit the user actually requested.
+          targetPrice,
+        });
+      }
       return null;
     }
+
+    const calculation = await this.riskCalculation.calculateActiveTrade(
+      userId,
+      existing.accountCurrency,
+      {
+        symbol,
+        execution,
+        entry,
+        stopPrice,
+        targetPrice,
+        lot: lot > 0 ? lot : undefined,
+      },
+    );
+
+    const reward =
+      calculation.rewardPips !== null
+        ? calculation.rewardPips *
+          calculation.pipValue *
+          calculation.lotSizeRounded
+        : 0;
+
+    return {
+      lot: calculation.lotSizeRounded,
+      exchangeRate: calculation.exchangeRate,
+      rr: calculation.rewardToRisk ?? 0,
+      risk: calculation.actualCapitalExposure,
+      reward,
+      capitalExposure: calculation.actualCapitalExposure,
+      capitalExposurePct: calculation.capitalExposurePct,
+      // Keep the persisted stop/target pips consistent with the recompute.
+      stopLoss: {
+        value: calculation.stopPrice,
+        pips: calculation.stopDistancePips,
+      } as unknown as Prisma.InputJsonValue,
+      takeProfit: {
+        value: calculation.targetPrice ?? 0,
+        pips: calculation.rewardPips ?? 0,
+      } as unknown as Prisma.InputJsonValue,
+    };
   }
 
   async remove(id: string) {

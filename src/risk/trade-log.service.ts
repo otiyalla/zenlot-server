@@ -399,6 +399,63 @@ export class TradeLogService {
       adjustment,
     ];
 
+    const takeProfitJson =
+      (existing.takeProfit as { value?: number } | null) ?? {};
+    const targetPrice =
+      typeof takeProfitJson.value === 'number' && takeProfitJson.value > 0
+        ? takeProfitJson.value
+        : undefined;
+    this.riskCalculationService.validateActiveTradeGeometry({
+      symbol: existing.symbol,
+      execution: existing.execution as 'buy' | 'sell',
+      entry: existing.entry,
+      stopPrice: newStop,
+      targetPrice,
+    });
+
+    let riskPatch: Prisma.tradeUpdateInput = {};
+    if (typeof existing.capitalExposurePct === 'number') {
+      const calculation =
+        await this.riskCalculationService.calculateActiveTrade(
+          userId,
+          existing.accountCurrency,
+          {
+            symbol: existing.symbol,
+            execution: existing.execution as 'buy' | 'sell',
+            entry: existing.entry,
+            stopPrice: newStop,
+            targetPrice,
+            lot: existing.lot,
+          },
+        );
+      const reward =
+        calculation.rewardPips !== null
+          ? calculation.rewardPips *
+            calculation.pipValue *
+            calculation.lotSizeRounded
+          : 0;
+
+      riskPatch = {
+        lot: calculation.lotSizeRounded,
+        exchangeRate: calculation.exchangeRate,
+        rr: calculation.rewardToRisk ?? 0,
+        risk: calculation.actualCapitalExposure,
+        reward,
+        capitalExposure: calculation.actualCapitalExposure,
+        capitalExposurePct: calculation.capitalExposurePct,
+        stopLoss: {
+          ...stopLossJson,
+          value: calculation.stopPrice,
+          pips: calculation.stopDistancePips,
+        } as unknown as Prisma.InputJsonValue,
+        takeProfit: {
+          ...takeProfitJson,
+          value: calculation.targetPrice ?? 0,
+          pips: calculation.rewardPips ?? 0,
+        } as unknown as Prisma.InputJsonValue,
+      };
+    }
+
     return this.prisma.trade.update({
       where: { id: tradeId },
       data: {
@@ -408,6 +465,7 @@ export class TradeLogService {
           value: newStop,
         } as unknown as Prisma.InputJsonValue,
         stopAdjustments: adjustments as unknown as Prisma.InputJsonValue,
+        ...riskPatch,
       },
     });
   }
