@@ -84,6 +84,11 @@ function makeService(opts: {
   const evalUpdateMany = opts.evalUpdateMany ?? jest.fn().mockResolvedValue({});
 
   const prisma = {
+    $transaction: jest
+      .fn()
+      .mockImplementation(async (operations: Promise<unknown>[]) =>
+        Promise.all(operations),
+      ),
     preTradeChecklist: {
       create: checklistCreate,
       findFirst: checklistFindFirst,
@@ -153,8 +158,13 @@ describe('EvaluationService.submitChecklist', () => {
     expect(result.tradeId).toBeNull();
 
     const arg = evalCreate.mock.calls[0][0] as {
-      data: { planAdherenceTotal: number | null; recommendation: string };
+      data: {
+        checklistId: string;
+        planAdherenceTotal: number | null;
+        recommendation: string;
+      };
     };
+    expect(arg.data.checklistId).toBe('chk-1');
     expect(arg.data.planAdherenceTotal).toBeNull();
     expect(arg.data.recommendation).toBe('proceed');
   });
@@ -214,10 +224,11 @@ describe('EvaluationService.getPreEvalForTrade', () => {
   });
 
   it('maps the persisted evaluation row back to the result contract', async () => {
-    const { service } = makeService({
+    const { service, checklistFindFirst } = makeService({
       evalFindFirst: jest.fn().mockResolvedValue({
         id: 'eval-1',
         tradeId: 't1',
+        checklistId: 'chk-9',
         setupQualityTotal: 90,
         setupQualityGrade: 'A',
         setupBreakdown: [],
@@ -234,6 +245,9 @@ describe('EvaluationService.getPreEvalForTrade', () => {
     const result = await service.getPreEvalForTrade(USER_ID, 't1');
     expect(result.tradeId).toBe('t1');
     expect(result.checklistId).toBe('chk-9');
+    expect(checklistFindFirst).toHaveBeenCalledWith({
+      where: { id: 'chk-9', userId: USER_ID, tradeId: 't1', skipped: false },
+    });
     expect(result.setupQuality.total).toBe(90);
     expect(result.planAdherence).toBeNull();
   });
@@ -280,7 +294,7 @@ describe('EvaluationService.getEvalById', () => {
 });
 
 describe('EvaluationService soft-gate', () => {
-  it('links a checklist + its evaluations to the trade', async () => {
+  it('links only the evaluation belonging to the selected checklist', async () => {
     const { service, checklistUpdate, evalUpdateMany } = makeService({
       checklistFindFirst: jest.fn().mockResolvedValue({
         id: 'chk-1',
@@ -297,8 +311,54 @@ describe('EvaluationService soft-gate', () => {
       data: { tradeId: 't1' },
     });
     expect(evalUpdateMany).toHaveBeenCalledWith({
-      where: { userId: USER_ID, tradeId: null },
+      where: { checklistId: 'chk-1', tradeId: null },
       data: { tradeId: 't1' },
+    });
+  });
+
+  it('does not attach another pending checklist evaluation to the trade', async () => {
+    const evalUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const { service } = makeService({
+      checklistFindFirst: jest.fn().mockResolvedValue({
+        id: 'chk-2',
+        userId: USER_ID,
+        tradeId: null,
+      }),
+      evalUpdateMany,
+    });
+
+    await expect(
+      service.linkChecklistToTrade(USER_ID, 't2', 'chk-2'),
+    ).resolves.toBe(true);
+
+    expect(evalUpdateMany).toHaveBeenCalledTimes(1);
+    expect(evalUpdateMany).toHaveBeenCalledWith({
+      where: { checklistId: 'chk-2', tradeId: null },
+      data: { tradeId: 't2' },
+    });
+    expect(evalUpdateMany).not.toHaveBeenCalledWith({
+      where: { userId: USER_ID, tradeId: null },
+      data: { tradeId: 't2' },
+    });
+  });
+
+  it('leaves legacy evaluations without a checklist relationship unlinked', async () => {
+    const evalUpdateMany = jest.fn().mockResolvedValue({ count: 0 });
+    const { service } = makeService({
+      checklistFindFirst: jest.fn().mockResolvedValue({
+        id: 'chk-legacy',
+        userId: USER_ID,
+        tradeId: null,
+      }),
+      evalUpdateMany,
+    });
+
+    await expect(
+      service.linkChecklistToTrade(USER_ID, 't3', 'chk-legacy'),
+    ).resolves.toBe(true);
+    expect(evalUpdateMany).toHaveBeenCalledWith({
+      where: { checklistId: 'chk-legacy', tradeId: null },
+      data: { tradeId: 't3' },
     });
   });
 

@@ -70,6 +70,7 @@ export class EvaluationService {
       data: {
         userId,
         tradeId: null,
+        checklistId: checklistRow.id,
         setupQualityTotal: setupQuality.total,
         setupQualityGrade: setupQuality.grade,
         setupBreakdown:
@@ -125,10 +126,21 @@ export class EvaluationService {
         'No pre-trade evaluation found for this trade',
       );
     }
-    const checklistRow = await this.prisma.preTradeChecklist.findFirst({
-      where: { userId, tradeId, skipped: false },
-      orderBy: { submittedAt: 'desc' },
-    });
+    // Prefer the explicit relation so multiple checklists on one trade cannot
+    // cause the response to report a different (most-recent) checklist.
+    const checklistRow = evaluationRow.checklistId
+      ? await this.prisma.preTradeChecklist.findFirst({
+          where: {
+            id: evaluationRow.checklistId,
+            userId,
+            tradeId,
+            skipped: false,
+          },
+        })
+      : await this.prisma.preTradeChecklist.findFirst({
+          where: { userId, tradeId, skipped: false },
+          orderBy: { submittedAt: 'desc' },
+        });
     return this.toResult(evaluationRow, checklistRow?.id ?? null);
   }
 
@@ -179,18 +191,21 @@ export class EvaluationService {
       return false;
     }
 
-    await this.prisma.preTradeChecklist.update({
-      where: { id: checklist.id },
-      data: { tradeId },
-    });
-
-    // Back-fill the matching evaluation(s). The checklist→evaluation pair is
-    // created together in submitChecklist, but they are not FK-joined (both
-    // carried tradeId null), so we link the user's still-unlinked evaluations.
-    await this.prisma.preTradeEvaluation.updateMany({
-      where: { userId, tradeId: null },
-      data: { tradeId },
-    });
+    // Keep the checklist and its evaluation in sync if either write fails or
+    // competing trade-link requests arrive concurrently.
+    await this.prisma.$transaction([
+      this.prisma.preTradeChecklist.update({
+        where: { id: checklist.id },
+        data: { tradeId },
+      }),
+      // Back-fill only the evaluation created for this checklist. Legacy rows
+      // may have no checklistId, in which case there is intentionally nothing
+      // to link.
+      this.prisma.preTradeEvaluation.updateMany({
+        where: { checklistId: checklist.id, tradeId: null },
+        data: { tradeId },
+      }),
+    ]);
 
     return true;
   }
