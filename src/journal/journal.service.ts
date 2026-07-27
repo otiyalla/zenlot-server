@@ -7,6 +7,23 @@ import { IJournal } from './interfaces/journal.interface';
 import { Prisma } from '../../prisma/generated/prisma/client';
 //import { TradeService } from 'src/trade/trade.service';
 
+const SAFE_JOURNAL_AUTHOR_SELECT = {
+  id: true,
+  fname: true,
+  lname: true,
+} satisfies Prisma.userSelect;
+
+const SAFE_JOURNAL_AUTHOR_INCLUDE = {
+  author: {
+    select: SAFE_JOURNAL_AUTHOR_SELECT,
+  },
+} satisfies Prisma.journalInclude;
+
+const SAFE_JOURNAL_AUTHOR_AND_TRADE_INCLUDE = {
+  ...SAFE_JOURNAL_AUTHOR_INCLUDE,
+  trade: true,
+} satisfies Prisma.journalInclude;
+
 @Injectable()
 export class JournalService {
   constructor(private readonly prisma: PrismaService) {}
@@ -39,7 +56,7 @@ export class JournalService {
     };
     const journals = this.prisma.journal.create({
       data,
-      include: { author: true },
+      include: SAFE_JOURNAL_AUTHOR_INCLUDE,
     });
     return journals;
   }
@@ -47,7 +64,7 @@ export class JournalService {
   // eslint-disable-next-line @typescript-eslint/require-await
   async findAll(): Promise<IJournal[]> {
     return this.prisma.journal.findMany({
-      include: { author: true },
+      include: SAFE_JOURNAL_AUTHOR_INCLUDE,
       orderBy: { createdAt: 'desc' },
     }) as unknown as IJournal[];
   }
@@ -85,7 +102,7 @@ export class JournalService {
 
     const journals = (await this.prisma.journal.findMany({
       where: { userId },
-      include: { author: true, trade: true },
+      include: SAFE_JOURNAL_AUTHOR_AND_TRADE_INCLUDE,
       orderBy: { createdAt: 'desc' },
     })) as unknown as IJournal[];
 
@@ -97,7 +114,7 @@ export class JournalService {
   async findOne(id: string) {
     const entry = await this.prisma.journal.findUnique({
       where: { id },
-      include: { author: true },
+      include: SAFE_JOURNAL_AUTHOR_INCLUDE,
     });
     if (!entry) throw new NotFoundException('Journal not found');
     return entry;
@@ -106,7 +123,7 @@ export class JournalService {
   async findOneByUser(id: string, userId: string) {
     const entry = await this.prisma.journal.findFirst({
       where: { id, userId },
-      include: { author: true },
+      include: SAFE_JOURNAL_AUTHOR_INCLUDE,
     });
     if (!entry) throw new NotFoundException('Journal not found');
     return entry;
@@ -182,7 +199,7 @@ export class JournalService {
 
     const journals = (await this.prisma.journal.findMany({
       where,
-      include: { author: true },
+      include: SAFE_JOURNAL_AUTHOR_INCLUDE,
       orderBy: { createdAt: 'desc' },
     })) as unknown as IJournal[];
 
@@ -249,7 +266,7 @@ export class JournalService {
       return this.prisma.journal.update({
         where: { id },
         data,
-        include: { author: true },
+        include: SAFE_JOURNAL_AUTHOR_INCLUDE,
       });
   }
 
@@ -289,7 +306,7 @@ export class JournalService {
     return this.prisma.journal.update({
       where: { id },
       data,
-      include: { author: true },
+      include: SAFE_JOURNAL_AUTHOR_INCLUDE,
     });
   }
 
