@@ -19,7 +19,37 @@ const forex_url = 'https://financialmodelingprep.com/stable';
 export class QuoteService {
   private readonly logger = new Logger(QuoteService.name);
   private availableForexCache: AvailableSymbols[] | null = null;
+  private availableForexCachedAt = 0;
+  private availableForexRetryAfter = 0;
   private availableForexRequest: Promise<AvailableSymbols[]> | null = null;
+
+  /**
+   * The forex pair list changes rarely, so cache it in-process and only re-hit
+   * the upstream provider once per TTL window (SCRUM-16). Refreshing on a TTL —
+   * rather than caching forever — is what lets a newly added pair appear without
+   * a server restart, while keeping the list served instantly the rest of the time.
+   */
+  private static readonly AVAILABLE_FOREX_TTL_MS = 48 * 60 * 60 * 1000; // 48h
+  private static readonly AVAILABLE_FOREX_RETRY_DELAY_MS = 60 * 1000; // 1 minute
+
+  /**
+   * The same quote→account conversion rate is resolved repeatedly for one trade:
+   * the display exchange-rate path (get-exchange-rate) and the risk engine's
+   * resolveExchangeRate, which re-runs on every debounced /risk/calculate. Caching
+   * each base/quote for a short TTL (with single-flight de-dup) collapses those
+   * redundant upstream calls into one and keeps the displayed rate and the rate
+   * governance sizes on in sync. The one-shot entry quote (get-quote) and live
+   * auto-close monitoring deliberately bypass this and call fxRate() directly.
+   */
+  private readonly fxRateCache = new Map<
+    string,
+    { price: number; at: number }
+  >();
+  private readonly fxRateInflight = new Map<
+    string,
+    Promise<{ price: number }>
+  >();
+  private static readonly FX_RATE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
   server: Server;
 
@@ -55,7 +85,17 @@ export class QuoteService {
   // This service can be expanded to include methods for fetching quotes, processing data, etc.
   // For now, it serves as a placeholder for future functionality related to quotes.
   async getAvailableForex(): Promise<AvailableSymbols[]> {
-    if (this.availableForexCache) {
+    const isFresh =
+      this.availableForexCache !== null &&
+      Date.now() - this.availableForexCachedAt <
+        QuoteService.AVAILABLE_FOREX_TTL_MS;
+    if (isFresh) {
+      return this.availableForexCache as AvailableSymbols[];
+    }
+    if (
+      this.availableForexCache !== null &&
+      Date.now() < this.availableForexRetryAfter
+    ) {
       return this.availableForexCache;
     }
 
@@ -69,9 +109,13 @@ export class QuoteService {
           }));
 
           this.availableForexCache = data;
+          this.availableForexCachedAt = Date.now();
+          this.availableForexRetryAfter = 0;
           return data;
         } catch (error) {
           if (this.availableForexCache) {
+            this.availableForexRetryAfter =
+              Date.now() + QuoteService.AVAILABLE_FOREX_RETRY_DELAY_MS;
             return this.availableForexCache;
           }
 
@@ -91,6 +135,8 @@ export class QuoteService {
 
   clearAvailableForexCache() {
     this.availableForexCache = null;
+    this.availableForexCachedAt = 0;
+    this.availableForexRetryAfter = 0;
   }
 
   async refreshAvailableForex(): Promise<AvailableSymbols[]> {
@@ -149,7 +195,15 @@ export class QuoteService {
     }
   }
 
-  async fxRate(symbol: { base: string; quote: string }) {
+  /**
+   * Raw quote straight from the provider (no caching). Used for the one-shot
+   * entry-price quote (get-quote) and live auto-close monitoring, which must
+   * always see the freshest price.
+   */
+  async fxRate(symbol: {
+    base: string;
+    quote: string;
+  }): Promise<{ price: number }> {
     try {
       const mapCurrency: Record<string, number> = {
         JPY: 3,
@@ -172,5 +226,55 @@ export class QuoteService {
       Sentry.captureException(error, { extra: { symbol, context: 'fx rate' } });
       throw error;
     }
+  }
+
+  /**
+   * Cached quote→account conversion rate (5-min TTL + single-flight). Used by the
+   * display exchange-rate path (get-exchange-rate) and the risk engine's
+   * resolveExchangeRate, which re-resolve the same rate repeatedly for one trade.
+   */
+  async cachedFxRate(symbol: {
+    base: string;
+    quote: string;
+  }): Promise<{ price: number }> {
+    const key = `${symbol.base}/${symbol.quote}`.toUpperCase();
+
+    const cached = this.fxRateCache.get(key);
+    if (cached && Date.now() - cached.at < QuoteService.FX_RATE_TTL_MS) {
+      return { price: cached.price };
+    }
+
+    // Collapse concurrent resolutions of the same rate into one upstream call.
+    const inflight = this.fxRateInflight.get(key);
+    if (inflight) return inflight;
+
+    const request = (async () => {
+      try {
+        const result = await this.fxRate(symbol);
+        this.fxRateCache.set(key, { price: result.price, at: Date.now() });
+        return result;
+      } catch (error) {
+        // Keep the risk engine available during a provider outage by serving
+        // the last-known rate. Renew its timestamp so repeated calculations do
+        // not retry a degraded provider until the normal TTL has elapsed. A
+        // cold-cache failure must still reach the caller.
+        if (cached) {
+          this.fxRateCache.set(key, { price: cached.price, at: Date.now() });
+          return { price: cached.price };
+        }
+        throw error;
+      } finally {
+        this.fxRateInflight.delete(key);
+      }
+    })();
+
+    this.fxRateInflight.set(key, request);
+    return request;
+  }
+
+  /** Stores a derived rate (for example, an inverted provider quote). */
+  cacheFxRate(symbol: { base: string; quote: string }, price: number): void {
+    const key = `${symbol.base}/${symbol.quote}`.toUpperCase();
+    this.fxRateCache.set(key, { price, at: Date.now() });
   }
 }

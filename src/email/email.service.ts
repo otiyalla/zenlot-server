@@ -39,6 +39,17 @@ export class EmailService {
     return supportEmail;
   }
 
+  /**
+   * App entry point for email call-to-action links. Defaults to the `zenlot://`
+   * custom-scheme deep link, which opens the app at its root (the auth gate
+   * routes a signed-in user straight to Home). The app has no universal/https
+   * links configured yet, so a custom scheme is the way to open the app from an
+   * email. Override via APP_URL once universal links exist.
+   */
+  private getAppUrl(): string {
+    return this.configService.get<string>('APP_URL') || 'zenlot://';
+  }
+
   async sendFeedbackEmail(
     senderEmail: string,
     subject: string,
@@ -302,6 +313,7 @@ export class EmailService {
         fname,
         language,
         supportEmail,
+        ctaUrl: this.getAppUrl(),
       });
 
       const emailOptions: EmailMessage = {

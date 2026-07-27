@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { MarketFxClient } from './market-fx.provider';
+import { ProviderBudget } from '../../candle/util/provider-budget';
 
 const mockRequest = jest.fn();
 
@@ -19,6 +20,11 @@ jest.mock('axios', () => ({
 
 describe('MarketFxClient', () => {
   let client: MarketFxClient;
+  const providerBudget = {
+    canUse: jest.fn().mockReturnValue(true),
+    recordSuccess: jest.fn(),
+    recordFailure: jest.fn(),
+  };
 
   const createModule = (apiKey?: string) =>
     Test.createTestingModule({
@@ -32,11 +38,13 @@ describe('MarketFxClient', () => {
             ),
           },
         },
+        { provide: ProviderBudget, useValue: providerBudget },
       ],
     }).compile();
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    providerBudget.canUse.mockReturnValue(true);
     const module: TestingModule = await createModule('test-api-key');
     client = module.get(MarketFxClient);
   });
@@ -52,6 +60,7 @@ describe('MarketFxClient', () => {
         params: { symbol: 'EUR/USD', apikey: 'test-api-key' },
       });
       expect(result).toEqual({ price: 1.23456 });
+      expect(providerBudget.recordSuccess).toHaveBeenCalledWith('twelvedata');
     });
 
     it('throws when API returns error payload', async () => {
@@ -62,6 +71,10 @@ describe('MarketFxClient', () => {
       await expect(
         client.fxRate({ base: 'GBP', quote: 'USD' }),
       ).rejects.toThrow('Invalid apikey');
+      expect(providerBudget.recordFailure).toHaveBeenCalledWith(
+        'twelvedata',
+        false,
+      );
     });
   });
 
@@ -97,6 +110,16 @@ describe('MarketFxClient', () => {
         percentChange: 0.4,
         isMarketOpen: true,
       });
+      expect(providerBudget.recordSuccess).toHaveBeenCalledWith('twelvedata');
+    });
+
+    it('does not call TwelveData when the shared budget is unavailable', async () => {
+      providerBudget.canUse.mockReturnValue(false);
+
+      await expect(
+        client.getMarketQuote({ base: 'EUR', quote: 'USD' }),
+      ).rejects.toThrow('TwelveData request budget is temporarily unavailable');
+      expect(mockRequest).not.toHaveBeenCalled();
     });
   });
 

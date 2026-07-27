@@ -209,7 +209,7 @@ export class QuoteGateway implements OnModuleInit, OnModuleDestroy {
     @MessageBody() symbol: QuoteRequestDto,
     @ConnectedSocket() client: Socket,
   ): Promise<void> {
-    const quote = await this.quoteService.fxRate(symbol);
+    const quote = await this.quoteService.cachedFxRate(symbol);
     client.emit('exchange-rate-update', quote);
   }
 

@@ -175,6 +175,117 @@ describe('DrawdownService.settleRealizedPnL', () => {
   });
 });
 
+describe('DrawdownService.reconcileBreachFlags', () => {
+  // Balance recovered to 9500 (5% below the 10000 period opens) with the sticky
+  // monthly breach still set from an earlier deeper drawdown.
+  const breachedRow = {
+    userId: 'u1',
+    accountBalance: 9500,
+    peakBalance: 10000,
+    dailyOpenBalance: 10000,
+    weeklyOpenBalance: 10000,
+    monthlyOpenBalance: 10000,
+    dailyBreached: false,
+    weeklyBreached: false,
+    monthlyBreached: true,
+  };
+
+  it('clears a sticky breach when the new limit is above the current drawdown', async () => {
+    const update = jest.fn().mockResolvedValue({});
+    const tx = {
+      drawdownState: {
+        findUnique: jest.fn().mockResolvedValue(breachedRow),
+        create: jest.fn(),
+        update,
+      },
+      riskProfile: { findUnique: jest.fn() },
+    };
+
+    // Raise the monthly limit to 15%; current monthly drawdown is 5% → clear.
+    await new DrawdownService(
+      {} as unknown as PrismaService,
+    ).reconcileBreachFlags(tx as never, 'u1', { maxMonthlyDrawdownPct: 15 });
+
+    expect(dataOf(update)).toEqual({ monthlyBreached: false });
+  });
+
+  it('re-arms a breach when the new limit drops below the current drawdown', async () => {
+    const update = jest.fn().mockResolvedValue({});
+    const tx = {
+      drawdownState: {
+        findUnique: jest.fn().mockResolvedValue({
+          ...breachedRow,
+          monthlyBreached: false,
+        }),
+        create: jest.fn(),
+        update,
+      },
+      riskProfile: { findUnique: jest.fn() },
+    };
+
+    // Tighten the monthly limit to 4%; current monthly drawdown is 5% → breach.
+    await new DrawdownService(
+      {} as unknown as PrismaService,
+    ).reconcileBreachFlags(tx as never, 'u1', { maxMonthlyDrawdownPct: 4 });
+
+    expect(dataOf(update)).toEqual({ monthlyBreached: true });
+  });
+
+  it('only touches the periods whose limit changed', async () => {
+    const update = jest.fn().mockResolvedValue({});
+    const tx = {
+      drawdownState: {
+        findUnique: jest.fn().mockResolvedValue(breachedRow),
+        create: jest.fn(),
+        update,
+      },
+      riskProfile: { findUnique: jest.fn() },
+    };
+
+    await new DrawdownService(
+      {} as unknown as PrismaService,
+    ).reconcileBreachFlags(tx as never, 'u1', { maxMonthlyDrawdownPct: 15 });
+
+    const data = dataOf(update);
+    expect(data).not.toHaveProperty('dailyBreached');
+    expect(data).not.toHaveProperty('weeklyBreached');
+  });
+
+  it('is a no-op when no drawdown limits are provided', async () => {
+    const findUnique = jest.fn();
+    const update = jest.fn();
+    const tx = {
+      drawdownState: { findUnique, create: jest.fn(), update },
+      riskProfile: { findUnique: jest.fn() },
+    };
+
+    await new DrawdownService(
+      {} as unknown as PrismaService,
+    ).reconcileBreachFlags(tx as never, 'u1', {});
+
+    expect(findUnique).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('is a no-op when no drawdown row exists yet', async () => {
+    const update = jest.fn();
+    const tx = {
+      drawdownState: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        create: jest.fn(),
+        update,
+      },
+      riskProfile: { findUnique: jest.fn() },
+    };
+
+    await new DrawdownService(
+      {} as unknown as PrismaService,
+    ).reconcileBreachFlags(tx as never, 'u1', { maxMonthlyDrawdownPct: 15 });
+
+    expect(update).not.toHaveBeenCalled();
+  });
+});
+
 describe('DrawdownService.setManualBalance', () => {
   it('sets the balance directly and recomputes drawdown against open/peak', async () => {
     const update = jest.fn().mockResolvedValue({});

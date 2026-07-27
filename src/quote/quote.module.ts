@@ -4,6 +4,7 @@ import { QuoteGateway } from './quote.gateway';
 import { AuthModule } from '../auth/auth.module';
 import { UniRateClient } from './provider/unirate.provider';
 import { MarketFxClient } from './provider/market-fx.provider';
+import { FmpClient } from './provider/fmp.provider';
 import {
   Currencies,
   FX_MARKET_QUOTE,
@@ -12,21 +13,25 @@ import {
   FxQuote,
 } from './interface/quote.interface';
 import { ConfigService } from '@nestjs/config';
+import { ProviderBudgetModule } from '../candle/util/provider-budget.module';
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, ProviderBudgetModule],
   providers: [
     UniRateClient,
     MarketFxClient,
+    FmpClient,
     {
       provide: FX_QUOTE,
-      inject: [ConfigService, MarketFxClient, UniRateClient],
+      inject: [ConfigService, MarketFxClient, FmpClient, UniRateClient],
       useFactory: (
         configService: ConfigService,
         marketFxClient: MarketFxClient,
+        fmpClient: FmpClient,
         uniRateClient: UniRateClient,
       ): FxQuote => {
         const hasMarketFx = !!configService.get<string>('TWELVEDATA_API_KEY');
+        const hasFmp = !!configService.get<string>('FMP_API_KEY');
         const hasUniRate = !!configService.get<string>('UNIRATE_API_KEY');
         const logger = new Logger('FxQuoteProvider');
 
@@ -36,12 +41,26 @@ import { ConfigService } from '@nestjs/config';
               try {
                 return await marketFxClient.fxRate(symbols);
               } catch (error) {
+                if (!hasFmp && !hasUniRate) {
+                  throw error;
+                }
+
+                logger.warn(
+                  'Market FX failed. Falling back to next fx quote provider.',
+                );
+              }
+            }
+
+            if (hasFmp) {
+              try {
+                return await fmpClient.fxRate(symbols);
+              } catch (error) {
                 if (!hasUniRate) {
                   throw error;
                 }
 
                 logger.warn(
-                  'Market FX failed. Falling back to UniRate for fx quote.',
+                  'FMP failed. Falling back to UniRate for fx quote.',
                 );
               }
             }
@@ -51,7 +70,7 @@ import { ConfigService } from '@nestjs/config';
             }
 
             throw new Error(
-              'No fx quote provider configured. Set TWELVEDATA_API_KEY or UNIRATE_API_KEY.',
+              'No fx quote provider configured. Set TWELVEDATA_API_KEY, FMP_API_KEY, or UNIRATE_API_KEY.',
             );
           },
         };
