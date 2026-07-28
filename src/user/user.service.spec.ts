@@ -7,6 +7,7 @@ import { AuditService } from '../audit/audit.service';
 import { EmailService } from '../email/email.service';
 import { AnalyticsService } from '../analytics/analytics.service';
 import { SocketSessionRegistry } from '../auth/socket-session-registry.service';
+import { UpdateUserDto } from './dto/update-user.dto';
 
 describe('UserService', () => {
   let service: UserService;
@@ -16,6 +17,7 @@ describe('UserService', () => {
   let email: any;
   let queue: any;
   let socketSessions: any;
+  let userGateway: any;
 
   beforeEach(async () => {
     prisma = {
@@ -29,12 +31,14 @@ describe('UserService', () => {
     analytics = {
       trackAccountDeleted: jest.fn(),
       trackAccountDeletionCancelled: jest.fn(),
+      trackUserUpdated: jest.fn(),
     };
     email = {
       sendAccountDeletionCancelledNotice: jest.fn(),
     };
     queue = { getJob: jest.fn() };
     socketSessions = { advanceAuthVersion: jest.fn() };
+    userGateway = { emitUserUpdate: jest.fn() };
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         UserService,
@@ -44,7 +48,7 @@ describe('UserService', () => {
         },
         {
           provide: UserGateway,
-          useValue: { emitUserUpdate: jest.fn() },
+          useValue: userGateway,
         },
         {
           provide: AuditService,
@@ -74,6 +78,33 @@ describe('UserService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  it.each([
+    ['profile changes', { fname: 'Updated', theme: 'dark' }],
+    ['an empty patch', {}],
+  ])('returns the updated user for %s', async (_label, dto) => {
+    const updatedUser = {
+      id: 'user-1',
+      fname: 'Updated',
+      email: 'trader@example.com',
+      password: 'hashed-password',
+      emailVerificationToken: 'verification-secret',
+      emailVerificationTokenExpiry: new Date('2026-08-01'),
+    };
+    prisma.user.update.mockResolvedValue(updatedUser);
+
+    const result = await service.update('user-1', dto as UpdateUserDto);
+
+    expect(result).toEqual({
+      id: 'user-1',
+      fname: 'Updated',
+      email: 'trader@example.com',
+    });
+    expect(userGateway.emitUserUpdate).toHaveBeenCalledWith(
+      'user-1',
+      updatedUser,
+    );
   });
 
   it('revokes existing refresh tokens after a password reset', async () => {
