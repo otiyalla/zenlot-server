@@ -59,6 +59,29 @@ describe('JournalReminderService', () => {
     expect(prisma.notificationPreference.update).not.toHaveBeenCalled();
   });
 
+  it('retries an undelivered reminder after its configured hour', async () => {
+    const { service, prisma, notifications } = setup(false);
+
+    await service.sendDueReminders(now);
+    notifications.notifyJournalReminder.mockResolvedValueOnce(true);
+    await service.sendDueReminders(new Date('2026-06-23T21:15:00.000Z'));
+
+    expect(notifications.notifyJournalReminder).toHaveBeenCalledTimes(2);
+    expect(prisma.notificationPreference.update).toHaveBeenCalledWith({
+      where: { userId: 'user-1' },
+      data: { lastReminderLocalDate: '2026-06-23' },
+    });
+  });
+
+  it('does not send a reminder before its configured hour', async () => {
+    const { service, prisma, notifications } = setup(true);
+
+    await service.sendDueReminders(new Date('2026-06-23T19:15:00.000Z'));
+
+    expect(notifications.notifyJournalReminder).not.toHaveBeenCalled();
+    expect(prisma.notificationPreference.update).not.toHaveBeenCalled();
+  });
+
   it('skips a reminder that was already delivered today', async () => {
     const { service, prisma, notifications } = setup(true);
     prisma.notificationPreference.findMany.mockResolvedValueOnce([

@@ -29,8 +29,10 @@ export class JournalReminderService {
       try {
         const { date, hour } = localDateHour(now, pref.user?.timezone);
 
-        // Only at the user's local reminder hour, and only once per local day.
-        if (hour !== pref.reminderHour) continue;
+        // Once the configured hour has arrived, keep the reminder due for the
+        // rest of the local day. This lets later hourly sweeps retry temporary
+        // push failures and reminders initially suppressed by quiet hours.
+        if (hour < pref.reminderHour) continue;
         if (pref.lastReminderLocalDate === date) continue;
 
         // Only mark the date after a push was accepted. Failed, suppressed, or
