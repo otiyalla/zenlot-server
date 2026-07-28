@@ -315,6 +315,8 @@ export class UserService {
     });
     this.analytics.trackUserUpdated(id, updatedFields);
     this.userGateway.emitUserUpdate(id, update);
+
+    return this.stripPassword(update);
   }
 
   /**
