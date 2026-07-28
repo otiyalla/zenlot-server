@@ -323,6 +323,22 @@ describe('TradeService', () => {
       },
     );
 
+    it('does not allow account currency changes through a closing update', async () => {
+      await service.updateForUser('t1', 'u1', {
+        id: 't1',
+        status: 'closed_in_profit',
+        closedPrice: 1.12,
+        accountCurrency: 'EUR',
+      } as unknown as UpdateTradeDto);
+
+      const [, , data] = settleManualClose.mock.calls[0] as unknown as [
+        string,
+        unknown,
+        Record<string, unknown>,
+      ];
+      expect(data).not.toHaveProperty('accountCurrency');
+    });
+
     it('does NOT settle a neutral close (by design)', async () => {
       await service.updateForUser('t1', 'u1', {
         id: 't1',

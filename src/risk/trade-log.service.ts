@@ -512,13 +512,10 @@ export class TradeLogService {
       Object.entries(data).filter(([, value]) => value !== undefined),
     );
     const settledTrade = { ...existing, ...updateValues } as trade;
-    // Realized PnL is applied to the user's single risk-profile balance. Use
-    // that balance's source-of-truth currency rather than a trade currency that
-    // the client may edit in this same request.
-    const { accountCurrency } = await this.prisma.user.findUniqueOrThrow({
-      where: { id: userId },
-      select: { accountCurrency: true },
-    });
+    // accountCurrency is immutable through TradeService's client update path,
+    // so settlement remains denominated in the trade's original account
+    // currency even when other trade geometry changes in this request.
+    const accountCurrency = existing.accountCurrency;
     const direction = executionToDirection(settledTrade.execution);
     const stopPrice = Number(
       (settledTrade.stopLoss as unknown as { value: number }).value,
@@ -549,14 +546,18 @@ export class TradeLogService {
           exchangeRate: closeExchangeRate,
         })
       : null;
-    const rMultiple = settles
-      ? calculateRMultiple(
-          settledTrade.entry,
-          resolvedExit,
-          stopPrice,
-          direction,
-        )
-      : null;
+    // A stop at entry represents a valid breakeven stop, but it leaves no
+    // initial-risk distance from which to calculate an R-multiple. Preserve the
+    // close and its realized PnL while recording the undefined metric as null.
+    const rMultiple =
+      settles && settledTrade.entry !== stopPrice
+        ? calculateRMultiple(
+            settledTrade.entry,
+            resolvedExit,
+            stopPrice,
+            direction,
+          )
+        : null;
 
     // Ensure a risk profile row exists so the balance increment below succeeds.
     await this.riskProfileService.getProfile(userId, accountCurrency);

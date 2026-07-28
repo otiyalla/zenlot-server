@@ -251,6 +251,7 @@ export class TradeService {
       createdAt,
       updatedAt,
       userId,
+      accountCurrency: _accountCurrency,
       isAutoClosed: _isAutoClosed,
       ...updateData
     } = updateTradeDto;
