@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument */
+/* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-return, @typescript-eslint/require-await */
 import { AuthService } from './auth.service';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -24,6 +24,7 @@ describe('AuthService', () => {
     id: 'user-1',
     email: 'user@example.com',
     password: 'hashed',
+    authVersion: 3,
     isAuthenticated: true,
   };
 
@@ -40,13 +41,17 @@ describe('AuthService', () => {
       verify: jest.fn(),
     } as unknown as JwtService;
     prisma = {
+      user: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
       refreshToken: {
         create: jest.fn(),
         findFirst: jest.fn(),
         updateMany: jest.fn(),
       },
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-      $transaction: jest.fn((callback) => callback(prisma)),
+      $transaction: jest
+        .fn()
+        .mockImplementation(async (callback: any) => callback(prisma)),
     };
     userService = {
       validateUser: jest.fn(),
@@ -97,9 +102,6 @@ describe('AuthService', () => {
   it('signs in and returns tokens', async () => {
     userService.validateUser.mockResolvedValue(user);
     jest
-      .spyOn(service as any, 'revokeAllRefreshTokens')
-      .mockResolvedValue(undefined);
-    jest
       .spyOn(service, 'createRefreshToken')
       .mockResolvedValue('refresh-token');
     (jwtService.sign as jest.Mock).mockReturnValue('access-token');
@@ -110,6 +112,10 @@ describe('AuthService', () => {
       user.email,
       'password',
     );
+    expect(prisma.user.updateMany).toHaveBeenCalledWith({
+      where: { id: user.id, authVersion: user.authVersion },
+      data: { authVersion: { increment: 1 } },
+    });
     // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(jwtService.sign).toHaveBeenCalledWith(
       { email: user.email, sub: user.id },
@@ -233,9 +239,7 @@ describe('AuthService', () => {
   it('fails sign-in when existing session revocation is unavailable', async () => {
     userService.validateUser.mockResolvedValue(user);
     const revocationError = new Error('refresh-token database unavailable');
-    jest
-      .spyOn(service as any, 'revokeAllRefreshTokens')
-      .mockRejectedValue(revocationError);
+    prisma.refreshToken.updateMany.mockRejectedValue(revocationError);
     const createRefreshToken = jest
       .spyOn(service, 'createRefreshToken')
       .mockResolvedValue('unused');
@@ -243,6 +247,19 @@ describe('AuthService', () => {
     await expect(service.signin(user.email, 'password')).rejects.toBe(
       revocationError,
     );
+    expect(createRefreshToken).not.toHaveBeenCalled();
+  });
+
+  it('does not sign in when a password reset wins the credential claim', async () => {
+    userService.validateUser.mockResolvedValue(user);
+    prisma.user.updateMany.mockResolvedValue({ count: 0 });
+    const createRefreshToken = jest.spyOn(service, 'createRefreshToken');
+
+    await expect(
+      service.signin(user.email, 'old-password'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+
+    expect(prisma.refreshToken.updateMany).not.toHaveBeenCalled();
     expect(createRefreshToken).not.toHaveBeenCalled();
   });
 

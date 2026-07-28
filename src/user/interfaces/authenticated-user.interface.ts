@@ -12,6 +12,7 @@ export interface AuthenticatedUser {
   tags: string[];
   createdAt: Date;
   updatedAt: Date;
+  authVersion: number;
   rules: {
     forex: {
       take_profit: { pips: number }[];

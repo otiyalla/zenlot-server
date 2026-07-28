@@ -81,6 +81,13 @@ describe('UserService', () => {
 
     await service.resetPassword('user-1', 'new-password');
 
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: 'user-1' },
+      data: {
+        password: expect.any(String),
+        authVersion: { increment: 1 },
+      },
+    });
     expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
       where: { userId: 'user-1', isRevoked: false },
       data: { isRevoked: true },

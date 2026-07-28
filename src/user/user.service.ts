@@ -214,7 +214,7 @@ export class UserService {
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.user.update({
         where: { id },
-        data: { password: hashedPassword },
+        data: { password: hashedPassword, authVersion: { increment: 1 } },
       });
       await tx.refreshToken.updateMany({
         where: { userId: id, isRevoked: false },

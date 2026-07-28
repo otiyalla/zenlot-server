@@ -115,8 +115,24 @@ export class AuthService {
     // Revoke all existing refresh tokens for this user
     const payload = { email: user.email, sub: user.id };
     try {
-      await this.revokeAllRefreshTokens(user.id);
-      const refreshTokenValue = await this.createRefreshToken(payload);
+      const refreshTokenValue = await this.prisma.$transaction(async (tx) => {
+        // Claim the credential generation that was validated above. Password
+        // resets increment it, so an obsolete password cannot establish a new
+        // session after a concurrent reset.
+        const claimed = await tx.user.updateMany({
+          where: { id: user.id, authVersion: user.authVersion },
+          data: { authVersion: { increment: 1 } },
+        });
+        if (claimed.count !== 1) {
+          throw new UnauthorizedException('Credentials changed during sign-in');
+        }
+
+        await tx.refreshToken.updateMany({
+          where: { userId: user.id, isRevoked: false },
+          data: { isRevoked: true },
+        });
+        return this.createRefreshToken(payload, tx);
+      });
       const options = {
         secret: this.getAccessSecret(),
         expiresIn: this.getAccessExpiresIn(),
@@ -178,7 +194,7 @@ export class AuthService {
 
   async createRefreshToken(
     payload: { email: string; sub: string },
-    client: RefreshTokenClient = this.prisma,
+    db: Pick<PrismaService, 'refreshToken'> = this.prisma,
   ) {
     const token = randomBytes(32).toString('hex');
     const publicRefreshToken = this.jwtService.sign(
@@ -196,7 +212,8 @@ export class AuthService {
     );
 
     try {
-      await client.refreshToken.create({
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+      await (db as any).refreshToken.create({
         data: {
           token,
           userId: payload.sub,
