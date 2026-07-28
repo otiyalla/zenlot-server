@@ -188,6 +188,51 @@ describe('JournalReminderService', () => {
     expect(prisma.notificationPreference.updateMany).not.toHaveBeenCalled();
   });
 
+  it('carries a late reminder past midnight when quiet hours end after the final sweep', async () => {
+    const { service, prisma, notifications } = setup(true);
+    prisma.notificationPreference.findMany.mockResolvedValueOnce([
+      {
+        userId: 'user-1',
+        reminderHour: 23,
+        lastReminderLocalDate: null,
+        quietHoursStart: '22:00',
+        quietHoursEnd: '23:30',
+        user: { timezone: 'UTC' },
+      },
+    ]);
+
+    await service.sendDueReminders(new Date('2026-06-24T00:15:00.000Z'));
+
+    expect(notifications.notifyJournalReminder).toHaveBeenCalledWith('user-1');
+    expect(prisma.notificationPreference.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: {
+          reminderClaimLocalDate: '2026-06-24',
+          reminderClaimedAt: new Date('2026-06-24T00:15:00.000Z'),
+        },
+      }),
+    );
+  });
+
+  it('does not carry an ordinary daytime quiet-hours reminder into a new day', async () => {
+    const { service, prisma, notifications } = setup(true);
+    prisma.notificationPreference.findMany.mockResolvedValueOnce([
+      {
+        userId: 'user-1',
+        reminderHour: 9,
+        lastReminderLocalDate: null,
+        quietHoursStart: '09:00',
+        quietHoursEnd: '10:30',
+        user: { timezone: 'UTC' },
+      },
+    ]);
+
+    await service.sendDueReminders(new Date('2026-06-24T00:15:00.000Z'));
+
+    expect(notifications.notifyJournalReminder).not.toHaveBeenCalled();
+    expect(prisma.notificationPreference.updateMany).not.toHaveBeenCalled();
+  });
+
   it('skips a reminder that was already delivered today', async () => {
     const { service, prisma, notifications } = setup(true);
     prisma.notificationPreference.findMany.mockResolvedValueOnce([

@@ -35,7 +35,7 @@ export class JournalReminderService {
         // push failures and reminders initially suppressed by quiet hours.
         if (
           hour < pref.reminderHour &&
-          !isOvernightQuietHoursCarryoverDue(
+          !isQuietHoursCarryoverDue(
             pref.reminderHour,
             pref.quietHoursStart,
             pref.quietHoursEnd,
@@ -149,11 +149,11 @@ export function localDateHour(
 }
 
 /**
- * A reminder configured in the evening portion of quiet hours cannot be sent
- * before midnight. Keep it due after the wrapping window ends the next morning
- * instead of waiting for the same suppressed hour again.
+ * A reminder configured in late quiet hours may have no eligible hourly sweep
+ * before midnight. Keep it due the next morning, either after an overnight
+ * window ends or after a non-wrapping window ends between 23:00 and midnight.
  */
-function isOvernightQuietHoursCarryoverDue(
+function isQuietHoursCarryoverDue(
   reminderHour: number,
   quietHoursStart: string | null,
   quietHoursEnd: string | null,
@@ -161,12 +161,19 @@ function isOvernightQuietHoursCarryoverDue(
 ): boolean {
   const start = parseHhMm(quietHoursStart);
   const end = parseHhMm(quietHoursEnd);
-  if (start === null || end === null || start <= end) return false;
+  if (start === null || end === null) return false;
 
   const reminderMinute = reminderHour * 60;
+  const reminderFallsInQuietHours =
+    start <= end
+      ? reminderMinute >= start && reminderMinute < end
+      : reminderMinute >= start;
+  const hasNoLaterHourlySweep = start > end || end > 23 * 60;
+
   return (
-    reminderMinute >= start &&
-    localMinute >= end &&
+    reminderFallsInQuietHours &&
+    hasNoLaterHourlySweep &&
+    (start <= end || localMinute >= end) &&
     localMinute < reminderMinute
   );
 }
