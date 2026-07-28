@@ -63,6 +63,63 @@ describe('PriceFeedGateway', () => {
     expect(socket.join).toHaveBeenCalledWith('user_user-1');
   });
 
+  it.each([
+    [
+      'a lowercased custom header',
+      { accesstoken: 'header-token' },
+      'header-token',
+    ],
+    [
+      'a Bearer authorization header',
+      { authorization: '  Bearer bearer-token  ' },
+      'bearer-token',
+    ],
+  ])('authenticates with %s', async (_label, headers, expectedToken) => {
+    let connectionHandler: ((socket: any) => Promise<void>) | undefined;
+    gateway.server = {
+      on: jest.fn((event: string, handler: (socket: any) => Promise<void>) => {
+        if (event === 'connection') connectionHandler = handler;
+      }),
+    } as never;
+    const socket = {
+      id: `header-${expectedToken}`,
+      handshake: { auth: {}, headers },
+      disconnect: jest.fn(),
+      join: jest.fn(),
+      on: jest.fn(),
+    };
+
+    gateway.onModuleInit();
+    await connectionHandler!(socket);
+
+    expect(authService.verifyToken).toHaveBeenCalledWith(expectedToken);
+    expect(socketSessions.register).toHaveBeenCalled();
+    expect(socket.disconnect).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed authorization headers', async () => {
+    let connectionHandler: ((socket: any) => Promise<void>) | undefined;
+    gateway.server = {
+      on: jest.fn((event: string, handler: (socket: any) => Promise<void>) => {
+        if (event === 'connection') connectionHandler = handler;
+      }),
+    } as never;
+    const socket = {
+      id: 'malformed-header',
+      handshake: { auth: {}, headers: { authorization: 'Basic credentials' } },
+      disconnect: jest.fn(),
+      join: jest.fn(),
+      on: jest.fn(),
+    };
+
+    gateway.onModuleInit();
+    await connectionHandler!(socket);
+
+    expect(authService.verifyToken).not.toHaveBeenCalled();
+    expect(socketSessions.register).not.toHaveBeenCalled();
+    expect(socket.disconnect).toHaveBeenCalledWith(true);
+  });
+
   it('disconnects a registered socket when its user-room join fails', async () => {
     let connectionHandler: ((socket: any) => Promise<void>) | undefined;
     gateway.server = {
