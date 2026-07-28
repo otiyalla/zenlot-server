@@ -49,7 +49,9 @@ export class QuoteService {
     string,
     Promise<{ price: number }>
   >();
+  private readonly fxRateRetryAfter = new Map<string, number>();
   private static readonly FX_RATE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+  private static readonly FX_RATE_RETRY_DELAY_MS = 60 * 1000; // 1 minute
   // A provider outage may temporarily use a known-good rate, but never allow
   // that fallback to become an indefinitely refreshed value.
   private static readonly FX_RATE_MAX_STALE_MS = 60 * 60 * 1000; // 1 hour
@@ -247,6 +249,17 @@ export class QuoteService {
       return { price: cached.price };
     }
 
+    const retryAfter = this.fxRateRetryAfter.get(key);
+    const retryCheckedAt = Date.now();
+    if (
+      cached &&
+      retryAfter !== undefined &&
+      retryCheckedAt < retryAfter &&
+      retryCheckedAt - cached.at <= QuoteService.FX_RATE_MAX_STALE_MS
+    ) {
+      return { price: cached.price };
+    }
+
     // Collapse concurrent resolutions of the same rate into one upstream call.
     const inflight = this.fxRateInflight.get(key);
     if (inflight) return inflight;
@@ -255,6 +268,7 @@ export class QuoteService {
       try {
         const result = await this.fxRate(symbol);
         this.fxRateCache.set(key, { price: result.price, at: Date.now() });
+        this.fxRateRetryAfter.delete(key);
         return result;
       } catch (error) {
         // Keep the risk engine available during a short provider outage by
@@ -265,8 +279,13 @@ export class QuoteService {
           cached &&
           Date.now() - cached.at <= QuoteService.FX_RATE_MAX_STALE_MS
         ) {
+          this.fxRateRetryAfter.set(
+            key,
+            Date.now() + QuoteService.FX_RATE_RETRY_DELAY_MS,
+          );
           return { price: cached.price };
         }
+        this.fxRateRetryAfter.delete(key);
         throw error;
       } finally {
         this.fxRateInflight.delete(key);
@@ -281,5 +300,6 @@ export class QuoteService {
   cacheFxRate(symbol: { base: string; quote: string }, price: number): void {
     const key = `${symbol.base}/${symbol.quote}`.toUpperCase();
     this.fxRateCache.set(key, { price, at: Date.now() });
+    this.fxRateRetryAfter.delete(key);
   }
 }
