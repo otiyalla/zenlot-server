@@ -108,21 +108,37 @@ describe('QuoteService', () => {
     ]);
     expect(fxQuote.fxRate).toHaveBeenCalledTimes(2);
 
-    // Serving stale data starts a new TTL window, avoiding another provider
-    // attempt on every calculation while the upstream remains unavailable.
+    // The stale fallback does not renew its timestamp, so the provider is
+    // retried again after the normal TTL instead of being suppressed forever.
     nowSpy.mockReturnValue(10 * 60 * 1000);
     await expect(
       service.cachedFxRate({ base: 'USD', quote: 'EUR' }),
     ).resolves.toEqual({ price: 1.25 });
-    expect(fxQuote.fxRate).toHaveBeenCalledTimes(2);
+    expect(fxQuote.fxRate).toHaveBeenCalledTimes(3);
 
-    // Once the renewed TTL expires, a later request may attempt recovery.
+    // A later retry can recover with a fresh provider value.
     nowSpy.mockReturnValue(10 * 60 * 1000 + 2);
     fxQuote.fxRate.mockResolvedValueOnce({ price: 1.3 });
     await expect(
       service.cachedFxRate({ base: 'USD', quote: 'EUR' }),
     ).resolves.toEqual({ price: 1.3 });
-    expect(fxQuote.fxRate).toHaveBeenCalledTimes(3);
+    expect(fxQuote.fxRate).toHaveBeenCalledTimes(4);
+
+    nowSpy.mockRestore();
+  });
+
+  it('rejects a provider failure once the cached rate exceeds its maximum age', async () => {
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(0);
+    fxQuote.fxRate.mockResolvedValueOnce({ price: 1.25 });
+    await service.cachedFxRate({ base: 'USD', quote: 'EUR' });
+
+    nowSpy.mockReturnValue(60 * 60 * 1000 + 1);
+    fxQuote.fxRate.mockRejectedValueOnce(new Error('provider unavailable'));
+
+    await expect(
+      service.cachedFxRate({ base: 'USD', quote: 'EUR' }),
+    ).rejects.toThrow('provider unavailable');
+    expect(fxQuote.fxRate).toHaveBeenCalledTimes(2);
 
     nowSpy.mockRestore();
   });
