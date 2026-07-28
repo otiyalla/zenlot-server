@@ -108,21 +108,21 @@ describe('QuoteService', () => {
     ]);
     expect(fxQuote.fxRate).toHaveBeenCalledTimes(2);
 
-    // The stale fallback does not renew its timestamp, so the provider is
-    // retried again after the normal TTL instead of being suppressed forever.
-    nowSpy.mockReturnValue(10 * 60 * 1000);
+    // A failed refresh gets a short retry backoff without changing the
+    // original successful-fetch timestamp.
+    nowSpy.mockReturnValue(5 * 60 * 1000 + 30 * 1000);
     await expect(
       service.cachedFxRate({ base: 'USD', quote: 'EUR' }),
     ).resolves.toEqual({ price: 1.25 });
-    expect(fxQuote.fxRate).toHaveBeenCalledTimes(3);
+    expect(fxQuote.fxRate).toHaveBeenCalledTimes(2);
 
-    // A later retry can recover with a fresh provider value.
-    nowSpy.mockReturnValue(10 * 60 * 1000 + 2);
+    // Once the retry window expires, a later attempt can recover.
+    nowSpy.mockReturnValue(6 * 60 * 1000 + 2);
     fxQuote.fxRate.mockResolvedValueOnce({ price: 1.3 });
     await expect(
       service.cachedFxRate({ base: 'USD', quote: 'EUR' }),
     ).resolves.toEqual({ price: 1.3 });
-    expect(fxQuote.fxRate).toHaveBeenCalledTimes(4);
+    expect(fxQuote.fxRate).toHaveBeenCalledTimes(3);
 
     nowSpy.mockRestore();
   });
