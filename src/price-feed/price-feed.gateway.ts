@@ -95,16 +95,17 @@ export class PriceFeedGateway implements OnModuleInit {
       return authToken.trim();
     }
 
-    const headerToken = socket.handshake?.headers?.['accessToken'];
+    // Node normalizes incoming header names to lowercase.
+    const headerToken = socket.handshake?.headers?.['accesstoken'];
     if (typeof headerToken === 'string' && headerToken.trim()) {
       return headerToken.trim();
     }
 
     const authorization = socket.handshake?.headers?.authorization;
     if (typeof authorization === 'string') {
-      const match = authorization.match(/^Bearer\\s+(.+)$/i);
+      const match = /^Bearer\s+(\S+)$/i.exec(authorization.trim());
       if (match?.[1]) {
-        return match[1].trim();
+        return match[1];
       }
     }
 
