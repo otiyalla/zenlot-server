@@ -107,7 +107,7 @@ export class FeedbackService {
     return {
       id: feedback?.id,
       message: 'Feedback submitted successfully',
-      emailSent: true,
+      emailSent,
     };
   }
 
