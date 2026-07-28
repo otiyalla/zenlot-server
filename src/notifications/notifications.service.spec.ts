@@ -101,6 +101,24 @@ describe('NotificationsService dispatch', () => {
     await expect(service.notifyJournalReminder('u1')).resolves.toBe(true);
   });
 
+  it('preserves successful delivery when marking tokens used fails', async () => {
+    const { service, markUsed, disableTokens } = setup({ allowed: true });
+    markUsed.mockRejectedValueOnce(new Error('database unavailable'));
+
+    await expect(service.notifyJournalReminder('u1')).resolves.toBe(true);
+    expect(disableTokens).toHaveBeenCalledWith([], 'DeviceNotRegistered');
+  });
+
+  it('preserves successful delivery when disabling invalid tokens fails', async () => {
+    const { service, disableTokens } = setup({
+      allowed: true,
+      sendResult: { sentTokens: ['t1'], invalidTokens: ['t2'] },
+    });
+    disableTokens.mockRejectedValueOnce(new Error('database unavailable'));
+
+    await expect(service.notifyJournalReminder('u1')).resolves.toBe(true);
+  });
+
   it('respects the preference toggle for the weekly behavioral push', async () => {
     const { service, send } = setup({ allowed: false });
     await service.notifyBehavioralReport('u1', {

@@ -174,12 +174,27 @@ export class NotificationsService {
         message,
       );
 
-      await this.pushTokens.markUsed(result.sentTokens);
-      await this.pushTokens.disableTokens(
-        result.invalidTokens,
-        'DeviceNotRegistered',
-      );
-      return result.sentTokens.length > 0;
+      const deliveryAccepted = result.sentTokens.length > 0;
+      const bookkeepingResults = await Promise.allSettled([
+        this.pushTokens.markUsed(result.sentTokens),
+        this.pushTokens.disableTokens(
+          result.invalidTokens,
+          'DeviceNotRegistered',
+        ),
+      ]);
+
+      for (const bookkeepingResult of bookkeepingResults) {
+        if (bookkeepingResult.status === 'rejected') {
+          this.logger.error(
+            `Failed to reconcile push tokens for user ${userId}`,
+          );
+          Sentry.captureException(bookkeepingResult.reason, {
+            extra: { userId, context: 'NotificationsService.dispatch' },
+          });
+        }
+      }
+
+      return deliveryAccepted;
     } catch (error) {
       this.logger.error(`Failed to dispatch notification to user ${userId}`);
       Sentry.captureException(error, {
