@@ -2,10 +2,12 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
 import { Namespace, Socket } from 'socket.io';
 import { UserGateway } from './user.gateway';
+import { PrismaService } from '../prisma/prisma.service';
 
 describe('UserGateway', () => {
   let gateway: UserGateway;
   let jwtService: { verifyAsync: jest.Mock };
+  let prisma: { user: { findUnique: jest.Mock } };
   let middleware: (socket: Socket, next: (error?: Error) => void) => void;
 
   const registerMiddleware = () => {
@@ -43,12 +45,21 @@ describe('UserGateway', () => {
 
   beforeEach(async () => {
     jwtService = { verifyAsync: jest.fn() };
+    prisma = {
+      user: {
+        findUnique: jest.fn().mockResolvedValue({ authVersion: 3 }),
+      },
+    };
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         UserGateway,
         {
           provide: JwtService,
           useValue: jwtService,
+        },
+        {
+          provide: PrismaService,
+          useValue: prisma,
         },
       ],
     }).compile();
@@ -83,13 +94,43 @@ describe('UserGateway', () => {
   });
 
   it('rejects a valid JWT without a string user identity', async () => {
-    jwtService.verifyAsync.mockResolvedValue({ sub: 123 });
+    jwtService.verifyAsync.mockResolvedValue({ sub: 123, authVersion: 3 });
 
     const { error, socket } = await connect({
       auth: { accessToken: 'valid-token' },
     });
 
     expect(error).toEqual(new Error('Unauthorized'));
+    expect(socket.join).not.toHaveBeenCalled();
+  });
+
+  it('rejects an access token after the user auth version changes', async () => {
+    jwtService.verifyAsync.mockResolvedValue({
+      sub: 'verified-user',
+      authVersion: 2,
+    });
+
+    const { error, socket } = await connect({
+      auth: { accessToken: 'old-access-token' },
+    });
+
+    expect(error).toEqual(new Error('Unauthorized'));
+    expect(prisma.user.findUnique).toHaveBeenCalledWith({
+      where: { id: 'verified-user' },
+      select: { authVersion: true },
+    });
+    expect(socket.join).not.toHaveBeenCalled();
+  });
+
+  it('rejects a legacy access token without an auth version', async () => {
+    jwtService.verifyAsync.mockResolvedValue({ sub: 'verified-user' });
+
+    const { error, socket } = await connect({
+      auth: { accessToken: 'legacy-access-token' },
+    });
+
+    expect(error).toEqual(new Error('Unauthorized'));
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
     expect(socket.join).not.toHaveBeenCalled();
   });
 
@@ -101,7 +142,10 @@ describe('UserGateway', () => {
   ])(
     'accepts a valid token from %s and joins its verified room',
     async (_label, handshake) => {
-      jwtService.verifyAsync.mockResolvedValue({ sub: 'verified-user' });
+      jwtService.verifyAsync.mockResolvedValue({
+        sub: 'verified-user',
+        authVersion: 3,
+      });
 
       const { error, socket } = await connect(handshake);
 

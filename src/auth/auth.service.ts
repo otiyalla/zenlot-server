@@ -23,6 +23,7 @@ import { CreateUserDto } from '../user/dto/create-user.dto';
 interface AccessTokenPayload {
   email: string;
   sub: string;
+  authVersion: number;
 }
 
 interface RefreshTokenPayload {
@@ -45,6 +46,7 @@ interface StoredUser {
   tags: string[];
   createdAt: Date;
   updatedAt: Date;
+  authVersion: number;
   password?: string | null;
   isAuthenticated?: boolean;
 }
@@ -113,7 +115,11 @@ export class AuthService {
     }
 
     // Revoke all existing refresh tokens for this user
-    const payload = { email: user.email, sub: user.id };
+    const payload: AccessTokenPayload = {
+      email: user.email,
+      sub: user.id,
+      authVersion: user.authVersion + 1,
+    };
     try {
       const refreshTokenValue = await this.prisma.$transaction(async (tx) => {
         // Claim the credential generation that was validated above. Password
@@ -176,8 +182,19 @@ export class AuthService {
       const decoded = this.jwtService.verify<AccessTokenPayload>(token, {
         secret: this.getAccessSecret(),
       });
+      if (
+        typeof decoded.sub !== 'string' ||
+        typeof decoded.email !== 'string' ||
+        !Number.isInteger(decoded.authVersion)
+      ) {
+        throw new UnauthorizedException('Access token is missing auth version');
+      }
       const user = await this.userService.findByEmail(decoded.email);
-      if (!user) {
+      if (
+        !user ||
+        user.id !== decoded.sub ||
+        user.authVersion !== decoded.authVersion
+      ) {
         throw new NotFoundException('User not found');
       }
       const newUser = { ...user, password: undefined };
@@ -297,7 +314,11 @@ export class AuthService {
 
         // Revoke first so a failed revocation never leaves the old token
         // usable while a replacement token has already been persisted.
-        const newPayload = { email: user.email, sub: user.id };
+        const newPayload: AccessTokenPayload = {
+          email: user.email,
+          sub: user.id,
+          authVersion: user.authVersion,
+        };
         const newRefreshTokenValue = await this.rotateRefreshToken(
           token,
           newPayload,
@@ -358,7 +379,11 @@ export class AuthService {
       throw new NotFoundException('User could not be created');
     }
 
-    const payload = { email: newUser.email, sub: newUser.id };
+    const payload: AccessTokenPayload = {
+      email: newUser.email,
+      sub: newUser.id,
+      authVersion: newUser.authVersion,
+    };
 
     const refreshTokenValue = await this.createRefreshToken(payload);
 
@@ -502,11 +527,19 @@ export class AuthService {
 
   private rotateRefreshToken(
     token: string,
-    payload: { email: string; sub: string },
+    payload: AccessTokenPayload,
   ): Promise<string> {
-    // Claim the old token and create its replacement in one transaction. This
-    // prevents a concurrent password reset from being followed by a new session.
+    // Lock the same user row that password reset updates before touching refresh
+    // tokens. Reset-first makes this conditional claim fail; rotation-first makes
+    // reset wait and then revoke the replacement created below.
     return this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.user.updateMany({
+        where: { id: payload.sub, authVersion: payload.authVersion },
+        data: { authVersion: payload.authVersion },
+      });
+      if (claimed.count !== 1) {
+        throw new UnauthorizedException('Credentials changed during refresh');
+      }
       await this.revokeRefreshToken(token, tx);
       return this.createRefreshToken(payload, tx);
     });
@@ -544,7 +577,11 @@ export class AuthService {
 
       // Revoke first so a failed revocation never leaves the old token
       // usable while a replacement token has already been persisted.
-      const payload = { email: user.email, sub: user.id };
+      const payload: AccessTokenPayload = {
+        email: user.email,
+        sub: user.id,
+        authVersion: user.authVersion,
+      };
       const newRefreshTokenValue = await this.rotateRefreshToken(
         token,
         payload,

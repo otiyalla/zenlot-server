@@ -6,10 +6,12 @@ import {
 } from '@nestjs/websockets';
 import { Namespace, Socket } from 'socket.io';
 import { getCorsOrigins } from '../config/cors.config';
+import { PrismaService } from '../prisma/prisma.service';
 
 interface AccessTokenPayload {
   sub?: unknown;
   id?: unknown;
+  authVersion?: unknown;
 }
 
 interface AuthenticatedSocketData {
@@ -56,7 +58,10 @@ export class UserGateway implements OnGatewayInit {
   @WebSocketServer()
   server: Namespace;
 
-  constructor(private readonly jwtService: JwtService) {}
+  constructor(
+    private readonly jwtService: JwtService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   afterInit(server: Namespace): void {
     server.use((socket, next) => {
@@ -81,8 +86,15 @@ export class UserGateway implements OnGatewayInit {
     const payload =
       await this.jwtService.verifyAsync<AccessTokenPayload>(token);
     const userId = this.getVerifiedUserId(payload);
-    if (!userId) {
+    if (!userId || !Number.isInteger(payload.authVersion)) {
       throw new Error('Access token has no valid user identity');
+    }
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { authVersion: true },
+    });
+    if (!user || user.authVersion !== payload.authVersion) {
+      throw new Error('Access token credential generation is invalid');
     }
 
     socket.data.userId = userId;
