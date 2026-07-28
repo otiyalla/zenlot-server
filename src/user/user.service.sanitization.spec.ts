@@ -39,6 +39,7 @@ describe('UserService sanitization', () => {
     auditService as any,
     emailService as any,
     analytics as any,
+    { advanceAuthVersion: jest.fn() } as any,
     deletionQueue as any,
   );
 

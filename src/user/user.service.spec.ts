@@ -6,6 +6,7 @@ import { UserGateway } from './user.gateway';
 import { AuditService } from '../audit/audit.service';
 import { EmailService } from '../email/email.service';
 import { AnalyticsService } from '../analytics/analytics.service';
+import { SocketSessionRegistry } from '../auth/socket-session-registry.service';
 
 describe('UserService', () => {
   let service: UserService;
@@ -14,6 +15,7 @@ describe('UserService', () => {
   let analytics: any;
   let email: any;
   let queue: any;
+  let socketSessions: any;
 
   beforeEach(async () => {
     prisma = {
@@ -32,6 +34,7 @@ describe('UserService', () => {
       sendAccountDeletionCancelledNotice: jest.fn(),
     };
     queue = { getJob: jest.fn() };
+    socketSessions = { advanceAuthVersion: jest.fn() };
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         UserService,
@@ -56,6 +59,10 @@ describe('UserService', () => {
           useValue: analytics,
         },
         {
+          provide: SocketSessionRegistry,
+          useValue: socketSessions,
+        },
+        {
           provide: getQueueToken('deletion'),
           useValue: queue,
         },
@@ -71,7 +78,9 @@ describe('UserService', () => {
 
   it('revokes existing refresh tokens after a password reset', async () => {
     const prisma = {
-      user: { update: jest.fn().mockResolvedValue({ id: 'user-1' }) },
+      user: {
+        update: jest.fn().mockResolvedValue({ id: 'user-1', authVersion: 4 }),
+      },
       refreshToken: { updateMany: jest.fn().mockResolvedValue({ count: 2 }) },
       $transaction: jest
         .fn()
@@ -92,6 +101,7 @@ describe('UserService', () => {
       where: { userId: 'user-1', isRevoked: false },
       data: { isRevoked: true },
     });
+    expect(socketSessions.advanceAuthVersion).toHaveBeenCalledWith('user-1', 4);
   });
 
   it('fails the password reset when refresh-token revocation fails', async () => {
@@ -110,6 +120,7 @@ describe('UserService', () => {
     await expect(service.resetPassword('user-1', 'new-password')).rejects.toBe(
       revocationError,
     );
+    expect(socketSessions.advanceAuthVersion).not.toHaveBeenCalled();
   });
 
   it('permanently deletes a due scheduled account and records the audit', async () => {

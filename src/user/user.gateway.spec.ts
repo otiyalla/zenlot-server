@@ -3,11 +3,13 @@ import { JwtService } from '@nestjs/jwt';
 import { Namespace, Socket } from 'socket.io';
 import { UserGateway } from './user.gateway';
 import { PrismaService } from '../prisma/prisma.service';
+import { SocketSessionRegistry } from '../auth/socket-session-registry.service';
 
 describe('UserGateway', () => {
   let gateway: UserGateway;
   let jwtService: { verifyAsync: jest.Mock };
   let prisma: { user: { findUnique: jest.Mock } };
+  let socketSessions: { register: jest.Mock };
   let middleware: (socket: Socket, next: (error?: Error) => void) => void;
 
   const registerMiddleware = () => {
@@ -34,6 +36,7 @@ describe('UserGateway', () => {
         headers: handshake.headers ?? {},
       },
       join: jest.fn().mockResolvedValue(undefined),
+      disconnect: jest.fn(),
     };
 
     return new Promise<{ error?: Error; socket: typeof socket }>((resolve) => {
@@ -50,6 +53,7 @@ describe('UserGateway', () => {
         findUnique: jest.fn().mockResolvedValue({ authVersion: 3 }),
       },
     };
+    socketSessions = { register: jest.fn().mockReturnValue(true) };
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         UserGateway,
@@ -60,6 +64,10 @@ describe('UserGateway', () => {
         {
           provide: PrismaService,
           useValue: prisma,
+        },
+        {
+          provide: SocketSessionRegistry,
+          useValue: socketSessions,
         },
       ],
     }).compile();
@@ -151,10 +159,103 @@ describe('UserGateway', () => {
 
       expect(error).toBeUndefined();
       expect(jwtService.verifyAsync).toHaveBeenCalledWith('valid-token');
-      expect(socket.data).toEqual({ userId: 'verified-user' });
+      expect(socket.data).toEqual({
+        userId: 'verified-user',
+        authVersion: 3,
+      });
       expect(socket.join).toHaveBeenCalledWith('user:verified-user');
+      expect(socketSessions.register).toHaveBeenCalledWith(
+        socket,
+        'verified-user',
+        3,
+        '/user',
+      );
     },
   );
+
+  it('fails closed when a handshake becomes stale before registration', async () => {
+    jwtService.verifyAsync.mockResolvedValue({
+      sub: 'verified-user',
+      authVersion: 3,
+    });
+    socketSessions.register.mockReturnValue(false);
+
+    const { error } = await connect({
+      auth: { accessToken: 'stale-during-handshake' },
+    });
+
+    expect(error).toEqual(new Error('Unauthorized'));
+  });
+
+  it('disconnects a registered socket when its room join fails', async () => {
+    jwtService.verifyAsync.mockResolvedValue({
+      sub: 'verified-user',
+      authVersion: 3,
+    });
+    const joinError = new Error('adapter unavailable');
+    const socket = {
+      data: {},
+      handshake: {
+        auth: { accessToken: 'valid-token' },
+        headers: {},
+      },
+      join: jest.fn().mockRejectedValue(joinError),
+      disconnect: jest.fn(),
+    };
+
+    const error = await new Promise<Error | undefined>((resolve) => {
+      middleware(socket as unknown as Socket, resolve);
+    });
+
+    expect(error).toEqual(new Error('Unauthorized'));
+    expect(socketSessions.register).toHaveBeenCalledWith(
+      socket,
+      'verified-user',
+      3,
+      '/user',
+    );
+    expect(socket.disconnect).toHaveBeenCalledWith(true);
+  });
+
+  it('leaves a room joined after the session was revoked mid-join', async () => {
+    jwtService.verifyAsync.mockResolvedValue({
+      sub: 'verified-user',
+      authVersion: 3,
+    });
+    let resolveJoin!: () => void;
+    let joinStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      joinStarted = resolve;
+    });
+    const socket = {
+      data: {} as Record<string, unknown>,
+      disconnected: false,
+      handshake: {
+        auth: { accessToken: 'valid-token' },
+        headers: {},
+      },
+      join: jest.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveJoin = resolve;
+            joinStarted();
+          }),
+      ),
+      leave: jest.fn().mockResolvedValue(undefined),
+      disconnect: jest.fn(),
+    };
+    const connection = new Promise<Error | undefined>((resolve) => {
+      middleware(socket as unknown as Socket, resolve);
+    });
+
+    await started;
+    socket.data.authSessionRevoked = true;
+    resolveJoin();
+
+    await expect(connection).resolves.toEqual(new Error('Unauthorized'));
+    expect(socket.leave).toHaveBeenCalledWith('user:verified-user');
+    expect(socket.disconnect).toHaveBeenCalledWith(true);
+  });
 
   it('targets only each requested owner room and allowlists the payload', () => {
     const roomEmits = new Map<string, jest.Mock>();

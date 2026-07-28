@@ -10,6 +10,7 @@ import { AuthGuard } from './auth.guard';
 import { EmailModule } from '../email/email.module';
 import { AnalyticsModule } from '../analytics/analytics.module';
 import { AuditModule } from '../audit/audit.module';
+import { SocketSessionModule } from './socket-session.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { AuditModule } from '../audit/audit.module';
     EmailModule,
     AnalyticsModule,
     AuditModule,
+    SocketSessionModule,
     JwtModule.registerAsync({
       global: true,
       inject: [ConfigService],

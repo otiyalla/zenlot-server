@@ -9,6 +9,7 @@ import { EmailService } from '../email/email.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AnalyticsService } from '../analytics/analytics.service';
 import { AuditService } from '../audit/audit.service';
+import { SocketSessionRegistry } from './socket-session-registry.service';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -19,6 +20,7 @@ describe('AuthService', () => {
   let emailService: any;
   let analytics: any;
   let auditService: any;
+  let socketSessions: any;
 
   const user = {
     id: 'user-1',
@@ -83,6 +85,9 @@ describe('AuthService', () => {
     auditService = {
       log: jest.fn(),
     };
+    socketSessions = {
+      advanceAuthVersion: jest.fn(),
+    };
 
     service = new AuthService(
       jwtService,
@@ -92,6 +97,7 @@ describe('AuthService', () => {
       configService,
       analytics as unknown as AnalyticsService,
       auditService as unknown as AuditService,
+      socketSessions as unknown as SocketSessionRegistry,
     );
   });
 
@@ -116,6 +122,10 @@ describe('AuthService', () => {
       where: { id: user.id, authVersion: user.authVersion },
       data: { authVersion: { increment: 1 } },
     });
+    expect(socketSessions.advanceAuthVersion).toHaveBeenCalledWith(
+      user.id,
+      user.authVersion + 1,
+    );
     // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(jwtService.sign).toHaveBeenCalledWith(
       {

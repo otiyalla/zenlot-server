@@ -7,6 +7,10 @@ import {
 import { Namespace, Socket } from 'socket.io';
 import { getCorsOrigins } from '../config/cors.config';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  isSocketSessionRevoked,
+  SocketSessionRegistry,
+} from '../auth/socket-session-registry.service';
 
 interface AccessTokenPayload {
   sub?: unknown;
@@ -16,6 +20,8 @@ interface AccessTokenPayload {
 
 interface AuthenticatedSocketData {
   userId: string;
+  authVersion: number;
+  authSessionRevoked?: boolean;
 }
 
 type AuthenticatedSocket = Socket<
@@ -61,6 +67,7 @@ export class UserGateway implements OnGatewayInit {
   constructor(
     private readonly jwtService: JwtService,
     private readonly prisma: PrismaService,
+    private readonly socketSessions: SocketSessionRegistry,
   ) {}
 
   afterInit(server: Namespace): void {
@@ -98,7 +105,23 @@ export class UserGateway implements OnGatewayInit {
     }
 
     socket.data.userId = userId;
-    await socket.join(this.getUserRoom(userId));
+    socket.data.authVersion = user.authVersion;
+    if (
+      !this.socketSessions.register(socket, userId, user.authVersion, '/user')
+    ) {
+      throw new Error('Access token credential generation is stale');
+    }
+    try {
+      const userRoom = this.getUserRoom(userId);
+      await socket.join(userRoom);
+      if (socket.disconnected || isSocketSessionRevoked(socket)) {
+        await socket.leave(userRoom);
+        throw new Error('Socket disconnected during room join');
+      }
+    } catch (error) {
+      socket.disconnect(true);
+      throw error;
+    }
   }
 
   private extractAccessToken(socket: Socket): string | undefined {

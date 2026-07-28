@@ -3,6 +3,15 @@ import { WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { getCorsOrigins } from '../config/cors.config';
 import { AuthService } from '../auth/auth.service';
+import {
+  isSocketSessionRevoked,
+  SocketSessionRegistry,
+} from '../auth/socket-session-registry.service';
+
+interface AuthUser {
+  id: string;
+  authVersion: number;
+}
 
 @WebSocketGateway({
   cors: {
@@ -18,7 +27,10 @@ export class PriceFeedGateway implements OnModuleInit {
   @WebSocketServer()
   server: Server;
 
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly socketSessions: SocketSessionRegistry,
+  ) {}
 
   private getUserRoom(userId: string): string {
     return `user_${userId}`;
@@ -26,31 +38,52 @@ export class PriceFeedGateway implements OnModuleInit {
 
   onModuleInit() {
     // Handle client connections
-    this.server.on('connection', (socket: Socket) => {
-      void (async () => {
+    this.server.on('connection', async (socket: Socket) => {
+      try {
         const accessToken = this.extractAccessToken(socket);
         if (!accessToken) {
-          this.logger.warn(
-            `Price feed socket missing access token: ${socket.id}`,
-          );
-          socket.disconnect(true);
-          return;
+          throw new Error('Missing access token');
         }
 
-        const user = await this.authService.verifyToken(accessToken);
-        if (!user) {
-          this.logger.warn(`Price feed socket auth failed: ${socket.id}`);
-          socket.disconnect(true);
+        const user = (await this.authService.verifyToken(
+          accessToken,
+        )) as AuthUser | null;
+        if (!user?.id || !Number.isInteger(user.authVersion)) {
+          throw new Error('Invalid socket identity');
+        }
+        if (
+          !this.socketSessions.register(
+            socket,
+            user.id,
+            user.authVersion,
+            '/price-feed',
+          )
+        ) {
           return;
         }
 
         (socket as Socket & { user: typeof user }).user = user;
+        const userRoom = this.getUserRoom(user.id);
+        await socket.join(userRoom);
+        if (socket.disconnected || isSocketSessionRevoked(socket)) {
+          await socket.leave(userRoom);
+          throw new Error('Socket disconnected during room join');
+        }
         this.logger.log(`Price Feed Client connected: ${socket.id}`);
-        void socket.join(this.getUserRoom(user.id));
         socket.on('disconnect', () => {
           this.logger.log(`Price Feed Client disconnected: ${socket.id}`);
         });
-      })();
+      } catch (_error) {
+        this.logger.warn(`Price feed socket auth/setup failed: ${socket.id}`);
+        try {
+          socket.disconnect(true);
+        } catch (disconnectError) {
+          this.logger.error(
+            'Failed to disconnect rejected socket',
+            disconnectError,
+          );
+        }
+      }
     });
   }
 

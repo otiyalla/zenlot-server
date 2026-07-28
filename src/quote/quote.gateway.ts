@@ -12,9 +12,14 @@ import { Namespace, Server, Socket } from 'socket.io';
 import { getCorsOrigins } from '../config/cors.config';
 import { AuthService } from '../auth/auth.service';
 import { QuoteRequestDto } from './dto/quote-request.dto';
+import {
+  isSocketSessionRevoked,
+  SocketSessionRegistry,
+} from '../auth/socket-session-registry.service';
 
 interface AuthUser {
   id: string;
+  authVersion: number;
 }
 
 interface AuthenticatedSocket extends Socket {
@@ -45,6 +50,7 @@ export class QuoteGateway implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly quoteService: QuoteService,
     private readonly authService: AuthService,
+    private readonly socketSessions: SocketSessionRegistry,
   ) {}
 
   private getUserRoom(userId: string): string {
@@ -64,48 +70,73 @@ export class QuoteGateway implements OnModuleInit, OnModuleDestroy {
     this.server.setMaxListeners(20);
 
     this.server.on('connection', async (socket: Socket) => {
-      const accessToken = this.extractAccessToken(socket);
-      if (!accessToken) {
-        this.logger.warn(`Socket missing access token: ${socket.id}`);
-        socket.disconnect(true);
-        return;
-      }
+      try {
+        const accessToken = this.extractAccessToken(socket);
+        if (!accessToken) {
+          throw new Error('Missing access token');
+        }
 
-      const user = (await this.authService.verifyToken(
-        accessToken,
-      )) as AuthUser | null;
-      if (!user?.id) {
-        this.logger.warn(`Socket auth failed: ${socket.id}`);
-        socket.disconnect(true);
-        return;
-      }
+        const user = (await this.authService.verifyToken(
+          accessToken,
+        )) as AuthUser | null;
+        if (!user?.id || !Number.isInteger(user.authVersion)) {
+          throw new Error('Invalid socket identity');
+        }
+        if (
+          !this.socketSessions.register(
+            socket,
+            user.id,
+            user.authVersion,
+            '/quote',
+          )
+        ) {
+          return;
+        }
 
-      const authenticatedSocket = socket as AuthenticatedSocket;
-      authenticatedSocket.user = user;
-      this.logger.log(
-        `Client connected: ${socket.id} - Total connected: ${this.getConnectedClientsCount()}`,
-      );
-      this.connectedSockets.add(socket.id);
+        const authenticatedSocket = socket as AuthenticatedSocket;
+        authenticatedSocket.user = user;
 
-      // Join user to their personal room
-      const userRoom = this.getUserRoom(user.id);
-      authenticatedSocket.userRoom = userRoom;
-      void socket.join(userRoom);
+        // Join user to their personal room before treating the socket as ready.
+        const userRoom = this.getUserRoom(user.id);
+        authenticatedSocket.userRoom = userRoom;
+        await socket.join(userRoom);
+        if (socket.disconnected || isSocketSessionRevoked(socket)) {
+          await socket.leave(userRoom);
+          throw new Error('Socket disconnected during room join');
+        }
 
-      socket.on('disconnect', () => {
+        this.connectedSockets.add(socket.id);
         this.logger.log(
-          `Client disconnected: ${socket.id} - Total connected: ${this.getConnectedClientsCount()}`,
+          `Client connected: ${socket.id} - Total connected: ${this.getConnectedClientsCount()}`,
         );
-        this.clearSockets(socket);
-      });
-
-      socket.on('error', (error) => {
-        this.logger.error('Socket error', error);
-        Sentry.captureException(error, {
-          extra: { socketId: socket.id, context: 'QuoteGateway.socketError' },
+        socket.on('disconnect', () => {
+          this.logger.log(
+            `Client disconnected: ${socket.id} - Total connected: ${this.getConnectedClientsCount()}`,
+          );
+          this.clearSockets(socket);
         });
-        this.clearSockets(socket);
-      });
+
+        socket.on('error', (error) => {
+          this.logger.error('Socket error', error);
+          Sentry.captureException(error, {
+            extra: { socketId: socket.id, context: 'QuoteGateway.socketError' },
+          });
+          this.clearSockets(socket);
+        });
+      } catch (error) {
+        this.logger.warn(`Socket auth/setup failed: ${socket.id}`);
+        Sentry.captureException(error, {
+          extra: { socketId: socket.id, context: 'QuoteGateway.connection' },
+        });
+        try {
+          socket.disconnect(true);
+        } catch (disconnectError) {
+          this.logger.error(
+            'Failed to disconnect rejected socket',
+            disconnectError,
+          );
+        }
+      }
     });
   }
 
@@ -191,7 +222,9 @@ export class QuoteGateway implements OnModuleInit, OnModuleDestroy {
 
   @SubscribeMessage('list-quotes')
   async handleEvent(@ConnectedSocket() client: Socket): Promise<void> {
+    if (isSocketSessionRevoked(client)) return;
     const quotes = await this.quoteService.getAvailableForex();
+    if (isSocketSessionRevoked(client)) return;
     client.emit('list-quote-update', quotes);
   }
 
@@ -200,7 +233,9 @@ export class QuoteGateway implements OnModuleInit, OnModuleDestroy {
     @MessageBody() symbol: QuoteRequestDto,
     @ConnectedSocket() client: Socket,
   ): Promise<void> {
+    if (isSocketSessionRevoked(client)) return;
     const quote = await this.quoteService.fxRate(symbol);
+    if (isSocketSessionRevoked(client)) return;
     client.emit('quote-update', quote);
   }
 
@@ -209,7 +244,9 @@ export class QuoteGateway implements OnModuleInit, OnModuleDestroy {
     @MessageBody() symbol: QuoteRequestDto,
     @ConnectedSocket() client: Socket,
   ): Promise<void> {
+    if (isSocketSessionRevoked(client)) return;
     const quote = await this.quoteService.cachedFxRate(symbol);
+    if (isSocketSessionRevoked(client)) return;
     client.emit('exchange-rate-update', quote);
   }
 

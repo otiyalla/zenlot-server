@@ -10,9 +10,15 @@ import { CANDLE_PROVIDERS, CandleProvider } from './interface/candle.interface';
 import { CandleLiveService } from './candle-live.service';
 import { CandleGateway } from './candle.gateway';
 import { ProviderBudgetModule } from './util/provider-budget.module';
+import { SocketSessionModule } from '../auth/socket-session.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, ProviderBudgetModule],
+  imports: [
+    PrismaModule,
+    AuthModule,
+    ProviderBudgetModule,
+    SocketSessionModule,
+  ],
   controllers: [CandleController],
   providers: [
     TwelveDataCandleProvider,

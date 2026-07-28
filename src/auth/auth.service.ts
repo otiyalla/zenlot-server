@@ -19,6 +19,7 @@ import { randomBytes } from 'crypto';
 import { AnalyticsService } from '../analytics/analytics.service';
 import { AuditService } from '../audit/audit.service';
 import { CreateUserDto } from '../user/dto/create-user.dto';
+import { SocketSessionRegistry } from './socket-session-registry.service';
 
 interface AccessTokenPayload {
   email: string;
@@ -63,6 +64,7 @@ export class AuthService {
     private readonly config: ConfigService,
     private readonly analytics: AnalyticsService,
     private readonly auditService: AuditService,
+    private readonly socketSessions: SocketSessionRegistry,
   ) {}
 
   private getAccessSecret(): string | undefined {
@@ -139,6 +141,7 @@ export class AuthService {
         });
         return this.createRefreshToken(payload, tx);
       });
+      this.socketSessions.advanceAuthVersion(user.id, payload.authVersion);
       const options = {
         secret: this.getAccessSecret(),
         expiresIn: this.getAccessExpiresIn(),

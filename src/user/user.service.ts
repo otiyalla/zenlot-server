@@ -18,6 +18,7 @@ import { EmailService } from '../email/email.service';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { AnalyticsService } from '../analytics/analytics.service';
+import { SocketSessionRegistry } from '../auth/socket-session-registry.service';
 
 @Injectable()
 export class UserService {
@@ -31,6 +32,7 @@ export class UserService {
     private readonly auditService: AuditService,
     private readonly emailService: EmailService,
     private readonly analytics: AnalyticsService,
+    private readonly socketSessions: SocketSessionRegistry,
     @InjectQueue('deletion') private deletionQueue: Queue,
   ) {}
 
@@ -208,10 +210,9 @@ export class UserService {
   async resetPassword(id: string, newPassword: string) {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(newPassword, salt);
-    // Keep the credential update and session revocation atomic. If revocation
-    // is unavailable, the password change is rolled back and old sessions are
-    // not left usable while reporting a failed operation.
-    return this.prisma.$transaction(async (tx) => {
+    // Keep the credential update and persisted refresh-token revocation atomic.
+    // Live sockets are contained immediately after this transaction commits.
+    const updated = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.user.update({
         where: { id },
         data: { password: hashedPassword, authVersion: { increment: 1 } },
@@ -222,6 +223,8 @@ export class UserService {
       });
       return updated;
     });
+    this.socketSessions.advanceAuthVersion(id, updated.authVersion);
+    return updated;
   }
 
   async findByEmail(email: string) {
