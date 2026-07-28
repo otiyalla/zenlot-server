@@ -29,6 +29,8 @@ interface RefreshTokenPayload {
   token: string;
 }
 
+type RefreshTokenClient = Pick<PrismaService, 'refreshToken'>;
+
 interface StoredUser {
   id: string;
   email: string;
@@ -174,7 +176,10 @@ export class AuthService {
     }
   }
 
-  async createRefreshToken(payload: { email: string; sub: string }) {
+  async createRefreshToken(
+    payload: { email: string; sub: string },
+    client: RefreshTokenClient = this.prisma,
+  ) {
     const token = randomBytes(32).toString('hex');
     const publicRefreshToken = this.jwtService.sign(
       { token },
@@ -191,8 +196,7 @@ export class AuthService {
     );
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-      await (this.prisma as any).refreshToken.create({
+      await client.refreshToken.create({
         data: {
           token,
           userId: payload.sub,
@@ -276,11 +280,11 @@ export class AuthService {
 
         // Revoke first so a failed revocation never leaves the old token
         // usable while a replacement token has already been persisted.
-        await this.revokeRefreshToken(token);
-
-        // Generate new tokens only after the old session is invalidated.
         const newPayload = { email: user.email, sub: user.id };
-        const newRefreshTokenValue = await this.createRefreshToken(newPayload);
+        const newRefreshTokenValue = await this.rotateRefreshToken(
+          token,
+          newPayload,
+        );
         this.analytics.trackTokensRefreshed(user.id, 'verify');
         this.analytics.trackSessionVerified(user.id, true);
         await this.auditService.log({
@@ -451,17 +455,23 @@ export class AuthService {
     }
   }
 
-  private async revokeRefreshToken(token: string): Promise<void> {
+  private async revokeRefreshToken(
+    token: string,
+    client: RefreshTokenClient = this.prisma,
+  ): Promise<void> {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-      await (this.prisma as any).refreshToken.updateMany({
+      const result = await client.refreshToken.updateMany({
         where: {
           token: token,
+          isRevoked: false,
         },
         data: {
           isRevoked: true,
         },
       });
+      if (result.count !== 1) {
+        throw new UnauthorizedException('Refresh token is no longer valid');
+      }
     } catch (error) {
       this.logger.warn('Could not revoke refresh token');
       Sentry.captureException(error, {
@@ -471,6 +481,18 @@ export class AuthService {
       // refresh token remains valid.
       throw error;
     }
+  }
+
+  private rotateRefreshToken(
+    token: string,
+    payload: { email: string; sub: string },
+  ): Promise<string> {
+    // Claim the old token and create its replacement in one transaction. This
+    // prevents a concurrent password reset from being followed by a new session.
+    return this.prisma.$transaction(async (tx) => {
+      await this.revokeRefreshToken(token, tx);
+      return this.createRefreshToken(payload, tx);
+    });
   }
 
   private parseExpiration(expiration: string): number {
@@ -506,8 +528,10 @@ export class AuthService {
       // Revoke first so a failed revocation never leaves the old token
       // usable while a replacement token has already been persisted.
       const payload = { email: user.email, sub: user.id };
-      await this.revokeRefreshToken(token);
-      const newRefreshTokenValue = await this.createRefreshToken(payload);
+      const newRefreshTokenValue = await this.rotateRefreshToken(
+        token,
+        payload,
+      );
       this.analytics.trackTokensRefreshed(user.id, 'refresh');
       await this.auditService.log({
         userId: user.id,
