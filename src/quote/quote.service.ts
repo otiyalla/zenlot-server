@@ -50,6 +50,9 @@ export class QuoteService {
     Promise<{ price: number }>
   >();
   private static readonly FX_RATE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+  // A provider outage may temporarily use a known-good rate, but never allow
+  // that fallback to become an indefinitely refreshed value.
+  private static readonly FX_RATE_MAX_STALE_MS = 60 * 60 * 1000; // 1 hour
 
   server: Server;
 
@@ -254,12 +257,14 @@ export class QuoteService {
         this.fxRateCache.set(key, { price: result.price, at: Date.now() });
         return result;
       } catch (error) {
-        // Keep the risk engine available during a provider outage by serving
-        // the last-known rate. Renew its timestamp so repeated calculations do
-        // not retry a degraded provider until the normal TTL has elapsed. A
-        // cold-cache failure must still reach the caller.
-        if (cached) {
-          this.fxRateCache.set(key, { price: cached.price, at: Date.now() });
+        // Keep the risk engine available during a short provider outage by
+        // serving the last-known rate. Preserve its original timestamp so the
+        // fallback cannot extend its own lifetime indefinitely. A cold-cache or
+        // excessively stale failure must still reach the caller.
+        if (
+          cached &&
+          Date.now() - cached.at <= QuoteService.FX_RATE_MAX_STALE_MS
+        ) {
           return { price: cached.price };
         }
         throw error;
