@@ -143,6 +143,31 @@ describe('QuoteService', () => {
     nowSpy.mockRestore();
   });
 
+  it('does not let retry backoff extend the maximum cached rate age', async () => {
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(0);
+    fxQuote.fxRate.mockResolvedValueOnce({ price: 1.25 });
+    await service.cachedFxRate({ base: 'USD', quote: 'EUR' });
+
+    // Start a retry backoff just before the maximum stale age is reached.
+    nowSpy.mockReturnValue(60 * 60 * 1000 - 1);
+    fxQuote.fxRate.mockRejectedValueOnce(new Error('provider unavailable'));
+    await expect(
+      service.cachedFxRate({ base: 'USD', quote: 'EUR' }),
+    ).resolves.toEqual({ price: 1.25 });
+
+    // The maximum age takes precedence even though the retry window is active.
+    nowSpy.mockReturnValue(60 * 60 * 1000 + 1);
+    fxQuote.fxRate.mockRejectedValueOnce(
+      new Error('provider still unavailable'),
+    );
+    await expect(
+      service.cachedFxRate({ base: 'USD', quote: 'EUR' }),
+    ).rejects.toThrow('provider still unavailable');
+    expect(fxQuote.fxRate).toHaveBeenCalledTimes(3);
+
+    nowSpy.mockRestore();
+  });
+
   it('propagates cachedFxRate failures when no cached rate exists', async () => {
     fxQuote.fxRate.mockRejectedValueOnce(new Error('provider unavailable'));
 

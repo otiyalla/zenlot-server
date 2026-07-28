@@ -250,7 +250,13 @@ export class QuoteService {
     }
 
     const retryAfter = this.fxRateRetryAfter.get(key);
-    if (cached && retryAfter !== undefined && Date.now() < retryAfter) {
+    const retryCheckedAt = Date.now();
+    if (
+      cached &&
+      retryAfter !== undefined &&
+      retryCheckedAt < retryAfter &&
+      retryCheckedAt - cached.at <= QuoteService.FX_RATE_MAX_STALE_MS
+    ) {
       return { price: cached.price };
     }
 
