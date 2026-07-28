@@ -61,6 +61,7 @@ function makeService(opts: {
   profileUpdate?: jest.Mock;
   profileFindUnique?: jest.Mock;
   getProfile?: jest.Mock;
+  userFindUniqueOrThrow?: jest.Mock;
   linkChecklistToTrade?: jest.Mock;
   markChecklistSkipped?: jest.Mock;
   gradeClosedTrade?: jest.Mock;
@@ -114,6 +115,11 @@ function makeService(opts: {
   const tradeUpdate =
     opts.tradeUpdate ?? jest.fn().mockResolvedValue({ id: 't1' });
   const prisma = {
+    user: {
+      findUniqueOrThrow:
+        opts.userFindUniqueOrThrow ??
+        jest.fn().mockResolvedValue({ accountCurrency: 'USD' }),
+    },
     trade: {
       create: tradeCreate,
       findUnique: opts.findUnique ?? jest.fn(),
@@ -563,6 +569,49 @@ describe('TradeLogService.settleManualClose', () => {
       service.settleManualClose('u1', openTrade, data, 1.105),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(settleRealizedPnL).toHaveBeenCalledTimes(1);
+  });
+
+  it('settles using geometry edited in the same close request', async () => {
+    const { service, settleRealizedPnL } = makeService({});
+
+    await service.settleManualClose(
+      'u1',
+      openTrade,
+      {
+        status: 'closed_in_profit',
+        entry: 1.105,
+        lot: 0.2,
+        execution: 'buy',
+        stopLoss: { value: 1.1 },
+        takeProfit: { value: 1.13 },
+      } as any,
+      1.12,
+    );
+
+    expect(settleRealizedPnL).toHaveBeenCalledWith(
+      expect.anything(),
+      'u1',
+      expect.closeTo(300, 6),
+    );
+  });
+
+  it('settles in the user account currency when the trade currency is edited', async () => {
+    const resolveExchangeRate = jest.fn().mockResolvedValue(1);
+    const getProfile = jest.fn().mockResolvedValue({ overrideMode: 'simple' });
+    const { service } = makeService({ resolveExchangeRate, getProfile });
+
+    await service.settleManualClose(
+      'u1',
+      openTrade,
+      {
+        status: 'closed_in_profit',
+        accountCurrency: 'EUR',
+      } as never,
+      1.12,
+    );
+
+    expect(resolveExchangeRate).toHaveBeenCalledWith('EURUSD', 'USD');
+    expect(getProfile).toHaveBeenCalledWith('u1', 'USD');
   });
 });
 

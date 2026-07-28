@@ -19,15 +19,19 @@ import { randomBytes } from 'crypto';
 import { AnalyticsService } from '../analytics/analytics.service';
 import { AuditService } from '../audit/audit.service';
 import { CreateUserDto } from '../user/dto/create-user.dto';
+import { SocketSessionRegistry } from './socket-session-registry.service';
 
 interface AccessTokenPayload {
   email: string;
   sub: string;
+  authVersion: number;
 }
 
 interface RefreshTokenPayload {
   token: string;
 }
+
+type RefreshTokenClient = Pick<PrismaService, 'refreshToken'>;
 
 interface StoredUser {
   id: string;
@@ -43,6 +47,7 @@ interface StoredUser {
   tags: string[];
   createdAt: Date;
   updatedAt: Date;
+  authVersion: number;
   password?: string | null;
   isAuthenticated?: boolean;
 }
@@ -59,6 +64,7 @@ export class AuthService {
     private readonly config: ConfigService,
     private readonly analytics: AnalyticsService,
     private readonly auditService: AuditService,
+    private readonly socketSessions: SocketSessionRegistry,
   ) {}
 
   private getAccessSecret(): string | undefined {
@@ -111,10 +117,31 @@ export class AuthService {
     }
 
     // Revoke all existing refresh tokens for this user
-    const payload = { email: user.email, sub: user.id };
+    const payload: AccessTokenPayload = {
+      email: user.email,
+      sub: user.id,
+      authVersion: user.authVersion + 1,
+    };
     try {
-      await this.revokeAllRefreshTokens(user.id);
-      const refreshTokenValue = await this.createRefreshToken(payload);
+      const refreshTokenValue = await this.prisma.$transaction(async (tx) => {
+        // Claim the credential generation that was validated above. Password
+        // resets increment it, so an obsolete password cannot establish a new
+        // session after a concurrent reset.
+        const claimed = await tx.user.updateMany({
+          where: { id: user.id, authVersion: user.authVersion },
+          data: { authVersion: { increment: 1 } },
+        });
+        if (claimed.count !== 1) {
+          throw new UnauthorizedException('Credentials changed during sign-in');
+        }
+
+        await tx.refreshToken.updateMany({
+          where: { userId: user.id, isRevoked: false },
+          data: { isRevoked: true },
+        });
+        return this.createRefreshToken(payload, tx);
+      });
+      this.socketSessions.advanceAuthVersion(user.id, payload.authVersion);
       const options = {
         secret: this.getAccessSecret(),
         expiresIn: this.getAccessExpiresIn(),
@@ -158,8 +185,19 @@ export class AuthService {
       const decoded = this.jwtService.verify<AccessTokenPayload>(token, {
         secret: this.getAccessSecret(),
       });
+      if (
+        typeof decoded.sub !== 'string' ||
+        typeof decoded.email !== 'string' ||
+        !Number.isInteger(decoded.authVersion)
+      ) {
+        throw new UnauthorizedException('Access token is missing auth version');
+      }
       const user = await this.userService.findByEmail(decoded.email);
-      if (!user) {
+      if (
+        !user ||
+        user.id !== decoded.sub ||
+        user.authVersion !== decoded.authVersion
+      ) {
         throw new NotFoundException('User not found');
       }
       const newUser = { ...user, password: undefined };
@@ -174,7 +212,10 @@ export class AuthService {
     }
   }
 
-  async createRefreshToken(payload: { email: string; sub: string }) {
+  async createRefreshToken(
+    payload: { email: string; sub: string },
+    db: Pick<PrismaService, 'refreshToken'> = this.prisma,
+  ) {
     const token = randomBytes(32).toString('hex');
     const publicRefreshToken = this.jwtService.sign(
       { token },
@@ -192,7 +233,7 @@ export class AuthService {
 
     try {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-      await (this.prisma as any).refreshToken.create({
+      await (db as any).refreshToken.create({
         data: {
           token,
           userId: payload.sub,
@@ -274,10 +315,17 @@ export class AuthService {
       if (!payload && refreshToken) {
         const { user, token } = await this.verifyRefreshToken(refreshToken);
 
-        // Generate new tokens
-        const newPayload = { email: user.email, sub: user.id };
-        const newRefreshTokenValue = await this.createRefreshToken(newPayload);
-        await this.revokeRefreshToken(token);
+        // Revoke first so a failed revocation never leaves the old token
+        // usable while a replacement token has already been persisted.
+        const newPayload: AccessTokenPayload = {
+          email: user.email,
+          sub: user.id,
+          authVersion: user.authVersion,
+        };
+        const newRefreshTokenValue = await this.rotateRefreshToken(
+          token,
+          newPayload,
+        );
         this.analytics.trackTokensRefreshed(user.id, 'verify');
         this.analytics.trackSessionVerified(user.id, true);
         await this.auditService.log({
@@ -334,7 +382,11 @@ export class AuthService {
       throw new NotFoundException('User could not be created');
     }
 
-    const payload = { email: newUser.email, sub: newUser.id };
+    const payload: AccessTokenPayload = {
+      email: newUser.email,
+      sub: newUser.id,
+      authVersion: newUser.authVersion,
+    };
 
     const refreshTokenValue = await this.createRefreshToken(payload);
 
@@ -438,34 +490,62 @@ export class AuthService {
         },
       });
     } catch (error) {
-      this.logger.warn(
-        'RefreshToken model not yet available. Please run: npx prisma generate',
-      );
+      this.logger.warn('Could not revoke refresh tokens for user');
       Sentry.captureException(error, {
         extra: { userId, context: 'revokeAllRefreshTokens' },
       });
+      // Revocation is a security boundary. Never report sign-in/sign-out or
+      // rotation success when the database could not invalidate old tokens.
+      throw error;
     }
   }
 
-  private async revokeRefreshToken(token: string): Promise<void> {
+  private async revokeRefreshToken(
+    token: string,
+    client: RefreshTokenClient = this.prisma,
+  ): Promise<void> {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-      await (this.prisma as any).refreshToken.updateMany({
+      const result = await client.refreshToken.updateMany({
         where: {
           token: token,
+          isRevoked: false,
         },
         data: {
           isRevoked: true,
         },
       });
+      if (result.count !== 1) {
+        throw new UnauthorizedException('Refresh token is no longer valid');
+      }
     } catch (error) {
-      this.logger.warn(
-        'RefreshToken model not yet available. Please run: npx prisma generate',
-      );
+      this.logger.warn('Could not revoke refresh token');
       Sentry.captureException(error, {
         extra: { context: 'revokeRefreshToken' },
       });
+      // A failed rotation must not be reported as successful while the old
+      // refresh token remains valid.
+      throw error;
     }
+  }
+
+  private rotateRefreshToken(
+    token: string,
+    payload: AccessTokenPayload,
+  ): Promise<string> {
+    // Lock the same user row that password reset updates before touching refresh
+    // tokens. Reset-first makes this conditional claim fail; rotation-first makes
+    // reset wait and then revoke the replacement created below.
+    return this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.user.updateMany({
+        where: { id: payload.sub, authVersion: payload.authVersion },
+        data: { authVersion: payload.authVersion },
+      });
+      if (claimed.count !== 1) {
+        throw new UnauthorizedException('Credentials changed during refresh');
+      }
+      await this.revokeRefreshToken(token, tx);
+      return this.createRefreshToken(payload, tx);
+    });
   }
 
   private parseExpiration(expiration: string): number {
@@ -498,10 +578,17 @@ export class AuthService {
         throw new UnauthorizedException('Invalid refresh token');
       }
 
-      // Generate new tokens
-      const payload = { email: user.email, sub: user.id };
-      const newRefreshTokenValue = await this.createRefreshToken(payload);
-      await this.revokeRefreshToken(token);
+      // Revoke first so a failed revocation never leaves the old token
+      // usable while a replacement token has already been persisted.
+      const payload: AccessTokenPayload = {
+        email: user.email,
+        sub: user.id,
+        authVersion: user.authVersion,
+      };
+      const newRefreshTokenValue = await this.rotateRefreshToken(
+        token,
+        payload,
+      );
       this.analytics.trackTokensRefreshed(user.id, 'refresh');
       await this.auditService.log({
         userId: user.id,

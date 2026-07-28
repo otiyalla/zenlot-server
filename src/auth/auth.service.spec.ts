@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument */
+/* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-return, @typescript-eslint/require-await */
 import { AuthService } from './auth.service';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -9,6 +9,7 @@ import { EmailService } from '../email/email.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AnalyticsService } from '../analytics/analytics.service';
 import { AuditService } from '../audit/audit.service';
+import { SocketSessionRegistry } from './socket-session-registry.service';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -19,11 +20,13 @@ describe('AuthService', () => {
   let emailService: any;
   let analytics: any;
   let auditService: any;
+  let socketSessions: any;
 
   const user = {
     id: 'user-1',
     email: 'user@example.com',
     password: 'hashed',
+    authVersion: 3,
     isAuthenticated: true,
   };
 
@@ -40,11 +43,17 @@ describe('AuthService', () => {
       verify: jest.fn(),
     } as unknown as JwtService;
     prisma = {
+      user: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
       refreshToken: {
         create: jest.fn(),
         findFirst: jest.fn(),
         updateMany: jest.fn(),
       },
+      $transaction: jest
+        .fn()
+        .mockImplementation(async (callback: any) => callback(prisma)),
     };
     userService = {
       validateUser: jest.fn(),
@@ -76,6 +85,9 @@ describe('AuthService', () => {
     auditService = {
       log: jest.fn(),
     };
+    socketSessions = {
+      advanceAuthVersion: jest.fn(),
+    };
 
     service = new AuthService(
       jwtService,
@@ -85,6 +97,7 @@ describe('AuthService', () => {
       configService,
       analytics as unknown as AnalyticsService,
       auditService as unknown as AuditService,
+      socketSessions as unknown as SocketSessionRegistry,
     );
   });
 
@@ -94,9 +107,6 @@ describe('AuthService', () => {
 
   it('signs in and returns tokens', async () => {
     userService.validateUser.mockResolvedValue(user);
-    jest
-      .spyOn(service as any, 'revokeAllRefreshTokens')
-      .mockResolvedValue(undefined);
     jest
       .spyOn(service, 'createRefreshToken')
       .mockResolvedValue('refresh-token');
@@ -108,9 +118,21 @@ describe('AuthService', () => {
       user.email,
       'password',
     );
+    expect(prisma.user.updateMany).toHaveBeenCalledWith({
+      where: { id: user.id, authVersion: user.authVersion },
+      data: { authVersion: { increment: 1 } },
+    });
+    expect(socketSessions.advanceAuthVersion).toHaveBeenCalledWith(
+      user.id,
+      user.authVersion + 1,
+    );
     // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(jwtService.sign).toHaveBeenCalledWith(
-      { email: user.email, sub: user.id },
+      {
+        email: user.email,
+        sub: user.id,
+        authVersion: user.authVersion + 1,
+      },
       expect.objectContaining({ secret: configMock.JWT_SECRET }),
     );
     expect(result).toEqual(
@@ -122,6 +144,26 @@ describe('AuthService', () => {
           isAuthenticated: true,
         }),
       }),
+    );
+  });
+
+  it('signs up with the initial auth version in the access token', async () => {
+    userService.create.mockResolvedValue(user);
+    jest
+      .spyOn(service, 'createRefreshToken')
+      .mockResolvedValue('refresh-token');
+    (jwtService.sign as jest.Mock).mockReturnValue('access-token');
+
+    await service.signup({ email: user.email } as any);
+
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    expect(jwtService.sign).toHaveBeenCalledWith(
+      {
+        email: user.email,
+        sub: user.id,
+        authVersion: user.authVersion,
+      },
+      expect.objectContaining({ secret: configMock.JWT_SECRET }),
     );
   });
 
@@ -208,6 +250,29 @@ describe('AuthService', () => {
     });
   });
 
+  it('rejects an access token after the user auth version changes', async () => {
+    (jwtService.verify as jest.Mock).mockReturnValue({
+      email: user.email,
+      sub: user.id,
+      authVersion: user.authVersion - 1,
+    });
+    userService.findByEmail.mockResolvedValue(user);
+
+    await expect(service.verifyToken('old-access-token')).resolves.toBeNull();
+  });
+
+  it('rejects a legacy access token without an auth version', async () => {
+    (jwtService.verify as jest.Mock).mockReturnValue({
+      email: user.email,
+      sub: user.id,
+    });
+
+    await expect(
+      service.verifyToken('legacy-access-token'),
+    ).resolves.toBeNull();
+    expect(userService.findByEmail).not.toHaveBeenCalled();
+  });
+
   it('rejects revoked refresh tokens', async () => {
     (jwtService.verify as jest.Mock).mockReturnValue({
       token: 'revoked-token',
@@ -226,6 +291,84 @@ describe('AuthService', () => {
         }),
       }),
     );
+  });
+
+  it('fails sign-in when existing session revocation is unavailable', async () => {
+    userService.validateUser.mockResolvedValue(user);
+    const revocationError = new Error('refresh-token database unavailable');
+    prisma.refreshToken.updateMany.mockRejectedValue(revocationError);
+    const createRefreshToken = jest
+      .spyOn(service, 'createRefreshToken')
+      .mockResolvedValue('unused');
+
+    await expect(service.signin(user.email, 'password')).rejects.toBe(
+      revocationError,
+    );
+    expect(createRefreshToken).not.toHaveBeenCalled();
+  });
+
+  it('does not sign in when a password reset wins the credential claim', async () => {
+    userService.validateUser.mockResolvedValue(user);
+    prisma.user.updateMany.mockResolvedValue({ count: 0 });
+    const createRefreshToken = jest.spyOn(service, 'createRefreshToken');
+
+    await expect(
+      service.signin(user.email, 'old-password'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+
+    expect(prisma.refreshToken.updateMany).not.toHaveBeenCalled();
+    expect(createRefreshToken).not.toHaveBeenCalled();
+  });
+
+  it('fails refresh rotation when old-token revocation is unavailable', async () => {
+    jest.spyOn(service, 'verifyToken').mockResolvedValue(null);
+    jest
+      .spyOn(service, 'verifyRefreshToken')
+      .mockResolvedValue({ user, token: 'old-db-token' } as any);
+    jest
+      .spyOn(service, 'createRefreshToken')
+      .mockResolvedValue('new-refresh-token');
+    const revocationError = new Error('refresh-token database unavailable');
+    jest
+      .spyOn(service as any, 'revokeRefreshToken')
+      .mockRejectedValue(revocationError);
+
+    await expect(
+      service.verify('expired-access-token', 'valid-refresh-token'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('fails sign-out when session revocation is unavailable', async () => {
+    const revocationError = new Error('refresh-token database unavailable');
+    jest
+      .spyOn(service as any, 'revokeAllRefreshTokens')
+      .mockRejectedValue(revocationError);
+
+    await expect(service.signout(user.id)).rejects.toBe(revocationError);
+    expect(analytics.trackUserSignedOut).not.toHaveBeenCalled();
+    expect(analytics.trackAuthFailed).toHaveBeenCalledWith(
+      user.id,
+      'signout',
+      'server_error',
+    );
+  });
+
+  it('does not mint a replacement token when refresh revocation fails', async () => {
+    jest
+      .spyOn(service, 'verifyRefreshToken')
+      .mockResolvedValue({ user, token: 'old-db-token' } as any);
+    const revoke = jest
+      .spyOn(service as any, 'revokeRefreshToken')
+      .mockRejectedValue(new Error('refresh-token database unavailable'));
+    const createRefreshToken = jest
+      .spyOn(service, 'createRefreshToken')
+      .mockResolvedValue('must-not-be-created');
+
+    await expect(
+      service.refreshTokens('old-public-token'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(revoke).toHaveBeenCalledWith('old-db-token', prisma);
+    expect(createRefreshToken).not.toHaveBeenCalled();
   });
 
   it('returns the verified payload when the access token is valid', async () => {
@@ -259,10 +402,21 @@ describe('AuthService', () => {
 
     // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(jwtService.sign).toHaveBeenCalledWith(
-      { email: 'user@example.com', sub: 'user-1' },
+      {
+        email: 'user@example.com',
+        sub: 'user-1',
+        authVersion: user.authVersion,
+      },
       expect.objectContaining({ secret: configMock.JWT_SECRET }),
     );
-    expect(revokeSpy).toHaveBeenCalledWith('refresh-db-token');
+    expect(prisma.user.updateMany).toHaveBeenCalledWith({
+      where: { id: user.id, authVersion: user.authVersion },
+      data: { authVersion: user.authVersion },
+    });
+    expect(revokeSpy).toHaveBeenCalledWith('refresh-db-token', prisma);
+    expect(prisma.user.updateMany.mock.invocationCallOrder[0]).toBeLessThan(
+      revokeSpy.mock.invocationCallOrder[0],
+    );
     expect(result).toEqual(
       expect.objectContaining({
         id: 'user-1',
@@ -271,6 +425,70 @@ describe('AuthService', () => {
         refreshToken: 'new-refresh-token',
       }),
     );
+  });
+
+  it('does not rotate a refresh token already claimed concurrently', async () => {
+    jest
+      .spyOn(service, 'verifyRefreshToken')
+      .mockResolvedValue({ user, token: 'old-db-token' } as any);
+    prisma.refreshToken.updateMany.mockResolvedValue({ count: 0 });
+    const createRefreshToken = jest.spyOn(service, 'createRefreshToken');
+
+    await expect(
+      service.refreshTokens('old-public-token'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+      where: { token: 'old-db-token', isRevoked: false },
+      data: { isRevoked: true },
+    });
+    expect(createRefreshToken).not.toHaveBeenCalled();
+  });
+
+  it('includes the current auth version in dedicated refresh access tokens', async () => {
+    jest
+      .spyOn(service, 'verifyRefreshToken')
+      .mockResolvedValue({ user, token: 'old-db-token' } as any);
+    jest
+      .spyOn(service as any, 'revokeRefreshToken')
+      .mockResolvedValue(undefined);
+    jest
+      .spyOn(service, 'createRefreshToken')
+      .mockResolvedValue('new-refresh-token');
+    (jwtService.sign as jest.Mock).mockReturnValue('new-access-token');
+
+    await service.refreshTokens('old-public-token');
+
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    expect(jwtService.sign).toHaveBeenCalledWith(
+      {
+        email: user.email,
+        sub: user.id,
+        authVersion: user.authVersion,
+      },
+      expect.objectContaining({ secret: configMock.JWT_SECRET }),
+    );
+  });
+
+  it('does not rotate after password reset changes the auth version', async () => {
+    jest
+      .spyOn(service, 'verifyRefreshToken')
+      .mockResolvedValue({ user, token: 'old-db-token' } as any);
+    prisma.user.updateMany.mockResolvedValue({ count: 0 });
+    const revoke = jest.spyOn(service as any, 'revokeRefreshToken');
+    const createRefreshToken = jest.spyOn(service, 'createRefreshToken');
+
+    await expect(
+      service.refreshTokens('old-public-token'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+
+    expect(prisma.user.updateMany).toHaveBeenCalledWith({
+      where: { id: user.id, authVersion: user.authVersion },
+      data: { authVersion: user.authVersion },
+    });
+    expect(revoke).not.toHaveBeenCalled();
+    expect(createRefreshToken).not.toHaveBeenCalled();
   });
 
   it('resetPassword passes user language to sendPasswordResentEmail', async () => {

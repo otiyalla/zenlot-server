@@ -13,9 +13,14 @@ import { AuthService } from '../auth/auth.service';
 import { CandleLiveService, candleRoomKey } from './candle-live.service';
 import { isTimeframe, Timeframe } from './interface/candle.interface';
 import { normalizePair } from './util/symbol.util';
+import {
+  isSocketSessionRevoked,
+  SocketSessionRegistry,
+} from '../auth/socket-session-registry.service';
 
 interface AuthUser {
   id: string;
+  authVersion: number;
 }
 
 interface CandleRoom {
@@ -60,6 +65,7 @@ export class CandleGateway implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly liveService: CandleLiveService,
     private readonly authService: AuthService,
+    private readonly socketSessions: SocketSessionRegistry,
   ) {}
 
   onModuleInit() {
@@ -71,30 +77,55 @@ export class CandleGateway implements OnModuleInit, OnModuleDestroy {
     });
 
     this.server.on('connection', async (socket: Socket) => {
-      const accessToken = this.extractAccessToken(socket);
-      if (!accessToken) {
-        socket.disconnect(true);
-        return;
-      }
-      const user = (await this.authService.verifyToken(
-        accessToken,
-      )) as AuthUser | null;
-      if (!user?.id) {
-        socket.disconnect(true);
-        return;
-      }
+      try {
+        const accessToken = this.extractAccessToken(socket);
+        if (!accessToken) {
+          throw new Error('Missing access token');
+        }
+        const user = (await this.authService.verifyToken(
+          accessToken,
+        )) as AuthUser | null;
+        if (!user?.id || !Number.isInteger(user.authVersion)) {
+          throw new Error('Invalid socket identity');
+        }
+        if (
+          !this.socketSessions.register(
+            socket,
+            user.id,
+            user.authVersion,
+            '/candle',
+          )
+        ) {
+          return;
+        }
 
-      const authed = socket as AuthenticatedSocket;
-      authed.user = user;
-      authed.candleRooms = new Map();
+        const authed = socket as AuthenticatedSocket;
+        authed.user = user;
+        authed.candleRooms = new Map();
 
-      socket.on('disconnect', () => this.cleanup(authed));
-      socket.on('error', (error) => {
-        Sentry.captureException(error, {
-          extra: { socketId: socket.id, context: 'CandleGateway.socketError' },
+        socket.on('disconnect', () => this.cleanup(authed));
+        socket.on('error', (error) => {
+          Sentry.captureException(error, {
+            extra: {
+              socketId: socket.id,
+              context: 'CandleGateway.socketError',
+            },
+          });
+          this.cleanup(authed);
         });
-        this.cleanup(authed);
-      });
+      } catch (error) {
+        Sentry.captureException(error, {
+          extra: { socketId: socket.id, context: 'CandleGateway.connection' },
+        });
+        try {
+          socket.disconnect(true);
+        } catch (disconnectError) {
+          this.logger.error(
+            'Failed to disconnect rejected socket',
+            disconnectError,
+          );
+        }
+      }
     });
   }
 
@@ -103,6 +134,7 @@ export class CandleGateway implements OnModuleInit, OnModuleDestroy {
     @MessageBody() body: SubscribePayload,
     @ConnectedSocket() client: AuthenticatedSocket,
   ): Promise<void> {
+    if (isSocketSessionRevoked(client)) return;
     if (!client.user || !client.candleRooms) {
       client.disconnect(true);
       return;
@@ -124,6 +156,14 @@ export class CandleGateway implements OnModuleInit, OnModuleDestroy {
     this.liveService.subscribe(pair, timeframe);
     try {
       await client.join(key);
+      if (client.disconnected || isSocketSessionRevoked(client)) {
+        if (client.candleRooms.get(key) === room) {
+          client.candleRooms.delete(key);
+          this.liveService.unsubscribe(pair, timeframe);
+        }
+        await client.leave(key);
+        return;
+      }
     } catch (error) {
       if (client.candleRooms.get(key) === room) {
         client.candleRooms.delete(key);
@@ -137,7 +177,11 @@ export class CandleGateway implements OnModuleInit, OnModuleDestroy {
     // Push the current bar immediately so the client doesn't wait a full cycle.
     try {
       const bar = await this.liveService.getLiveBar(pair, timeframe);
-      if (bar && client.candleRooms.get(key) === room) {
+      if (
+        bar &&
+        !isSocketSessionRevoked(client) &&
+        client.candleRooms.get(key) === room
+      ) {
         client.emit('candle:update', { symbol: pair, timeframe, bar });
       }
     } catch (error) {
@@ -152,6 +196,7 @@ export class CandleGateway implements OnModuleInit, OnModuleDestroy {
     @MessageBody() body: SubscribePayload,
     @ConnectedSocket() client: AuthenticatedSocket,
   ): void {
+    if (isSocketSessionRevoked(client)) return;
     if (!client.user || !client.candleRooms) {
       client.disconnect(true);
       return;

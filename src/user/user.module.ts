@@ -7,6 +7,7 @@ import { AuditModule } from '../audit/audit.module';
 import { EmailModule } from '../email/email.module';
 import { BullModule } from '@nestjs/bullmq';
 import { AnalyticsModule } from '../analytics/analytics.module';
+import { SocketSessionModule } from '../auth/socket-session.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { AnalyticsModule } from '../analytics/analytics.module';
     AuditModule,
     EmailModule,
     AnalyticsModule,
+    SocketSessionModule,
     BullModule.registerQueue({
       name: 'deletion',
     }),

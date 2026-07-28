@@ -14,9 +14,10 @@ import {
 } from './interface/quote.interface';
 import { ConfigService } from '@nestjs/config';
 import { ProviderBudgetModule } from '../candle/util/provider-budget.module';
+import { SocketSessionModule } from '../auth/socket-session.module';
 
 @Module({
-  imports: [AuthModule, ProviderBudgetModule],
+  imports: [AuthModule, ProviderBudgetModule, SocketSessionModule],
   providers: [
     UniRateClient,
     MarketFxClient,

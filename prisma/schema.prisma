@@ -160,6 +160,7 @@ model user {
   tags                         String[]
   language                     String
   password                     String
+  authVersion                  Int                     @default(0)
   accountCurrency              String
   theme                        String                  @default("system")
   rules                        Json

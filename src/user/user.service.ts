@@ -18,6 +18,7 @@ import { EmailService } from '../email/email.service';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { AnalyticsService } from '../analytics/analytics.service';
+import { SocketSessionRegistry } from '../auth/socket-session-registry.service';
 
 @Injectable()
 export class UserService {
@@ -31,6 +32,7 @@ export class UserService {
     private readonly auditService: AuditService,
     private readonly emailService: EmailService,
     private readonly analytics: AnalyticsService,
+    private readonly socketSessions: SocketSessionRegistry,
     @InjectQueue('deletion') private deletionQueue: Queue,
   ) {}
 
@@ -208,10 +210,21 @@ export class UserService {
   async resetPassword(id: string, newPassword: string) {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(newPassword, salt);
-    return this.prisma.user.update({
-      where: { id },
-      data: { password: hashedPassword },
+    // Keep the credential update and persisted refresh-token revocation atomic.
+    // Live sockets are contained immediately after this transaction commits.
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.user.update({
+        where: { id },
+        data: { password: hashedPassword, authVersion: { increment: 1 } },
+      });
+      await tx.refreshToken.updateMany({
+        where: { userId: id, isRevoked: false },
+        data: { isRevoked: true },
+      });
+      return updated;
     });
+    this.socketSessions.advanceAuthVersion(id, updated.authVersion);
+    return updated;
   }
 
   async findByEmail(email: string) {
