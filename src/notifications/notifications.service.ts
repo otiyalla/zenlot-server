@@ -98,8 +98,8 @@ export class NotificationsService {
     );
   }
 
-  async notifyJournalReminder(userId: string): Promise<void> {
-    await this.dispatch(userId, (locale) =>
+  async notifyJournalReminder(userId: string): Promise<boolean> {
+    return this.dispatch(userId, (locale) =>
       buildJournalReminderContent(locale, {
         category: NotificationCategory.JournalReminder,
         route: '/(protected)/(tabs)/journal',
@@ -135,13 +135,13 @@ export class NotificationsService {
   private async dispatch(
     userId: string,
     build: (locale: string) => NotificationContent,
-  ): Promise<void> {
+  ): Promise<boolean> {
     try {
       const user = await this.prisma.user.findUnique({
         where: { id: userId },
         select: { language: true, timezone: true },
       });
-      if (!user) return;
+      if (!user) return false;
 
       const pref = await this.preferences.getOrCreate(userId);
       const content = build(user.language ?? 'en');
@@ -154,11 +154,11 @@ export class NotificationsService {
           user.timezone,
         )
       ) {
-        return;
+        return false;
       }
 
       const tokens = await this.pushTokens.getEnabledTokens(userId);
-      if (tokens.length === 0) return;
+      if (tokens.length === 0) return false;
 
       const message: Omit<ExpoPushMessage, 'to'> = {
         title: content.title,
@@ -179,11 +179,13 @@ export class NotificationsService {
         result.invalidTokens,
         'DeviceNotRegistered',
       );
+      return result.sentTokens.length > 0;
     } catch (error) {
       this.logger.error(`Failed to dispatch notification to user ${userId}`);
       Sentry.captureException(error, {
         extra: { userId, context: 'NotificationsService.dispatch' },
       });
+      return false;
     }
   }
 }

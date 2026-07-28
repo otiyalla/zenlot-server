@@ -33,13 +33,17 @@ export class JournalReminderService {
         if (hour !== pref.reminderHour) continue;
         if (pref.lastReminderLocalDate === date) continue;
 
-        // Stamp the date first so a mid-loop crash can't double-send on retry.
+        // Only mark the date after a push was accepted. Failed, suppressed, or
+        // tokenless deliveries must remain eligible for a later retry.
+        const delivered = await this.notifications.notifyJournalReminder(
+          pref.userId,
+        );
+        if (!delivered) continue;
+
         await this.prisma.notificationPreference.update({
           where: { userId: pref.userId },
           data: { lastReminderLocalDate: date },
         });
-
-        await this.notifications.notifyJournalReminder(pref.userId);
       } catch (error) {
         this.logger.warn(
           `Failed to send journal reminder for user ${pref.userId}`,
