@@ -35,16 +35,28 @@ export class JournalReminderService {
         if (hour < pref.reminderHour) continue;
         if (pref.lastReminderLocalDate === date) continue;
 
-        // Only mark the date after a push was accepted. Failed, suppressed, or
-        // tokenless deliveries must remain eligible for a later retry.
+        // Claim the local date before crossing the push-transport boundary.
+        // Besides serialising concurrent sweeps, the durable claim ensures a
+        // process exit after Expo accepts the push cannot replay it later.
+        const claim = await this.prisma.notificationPreference.updateMany({
+          where: {
+            userId: pref.userId,
+            NOT: { lastReminderLocalDate: date },
+          },
+          data: { lastReminderLocalDate: date },
+        });
+        if (claim.count === 0) continue;
+
         const delivered = await this.notifications.notifyJournalReminder(
           pref.userId,
         );
-        if (!delivered) continue;
+        if (delivered) continue;
 
-        await this.prisma.notificationPreference.update({
-          where: { userId: pref.userId },
-          data: { lastReminderLocalDate: date },
+        // A definite non-delivery is safe to retry. Make the release
+        // conditional so it cannot overwrite a newer day's claim.
+        await this.prisma.notificationPreference.updateMany({
+          where: { userId: pref.userId, lastReminderLocalDate: date },
+          data: { lastReminderLocalDate: null },
         });
       } catch (error) {
         this.logger.warn(

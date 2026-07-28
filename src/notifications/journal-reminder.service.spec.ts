@@ -15,7 +15,7 @@ describe('JournalReminderService', () => {
     const prisma = {
       notificationPreference: {
         findMany: jest.fn().mockResolvedValue([pref]),
-        update: jest.fn().mockResolvedValue(pref),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
     };
     const notifications = {
@@ -31,20 +31,23 @@ describe('JournalReminderService', () => {
     };
   }
 
-  it('marks a reminder delivered only after push acceptance', async () => {
+  it('durably claims a reminder before dispatch', async () => {
     const { service, prisma, notifications } = setup(true);
 
     await service.sendDueReminders(now);
 
     expect(notifications.notifyJournalReminder).toHaveBeenCalledWith('user-1');
-    expect(prisma.notificationPreference.update).toHaveBeenCalledWith({
-      where: { userId: 'user-1' },
+    expect(prisma.notificationPreference.updateMany).toHaveBeenCalledWith({
+      where: {
+        userId: 'user-1',
+        NOT: { lastReminderLocalDate: '2026-06-23' },
+      },
       data: { lastReminderLocalDate: '2026-06-23' },
     });
     expect(
-      notifications.notifyJournalReminder.mock.invocationCallOrder[0],
+      prisma.notificationPreference.updateMany.mock.invocationCallOrder[0],
     ).toBeLessThan(
-      prisma.notificationPreference.update.mock.invocationCallOrder[0],
+      notifications.notifyJournalReminder.mock.invocationCallOrder[0],
     );
   });
 
@@ -56,7 +59,13 @@ describe('JournalReminderService', () => {
 
     await service.sendDueReminders(now);
 
-    expect(prisma.notificationPreference.update).not.toHaveBeenCalled();
+    expect(prisma.notificationPreference.updateMany).toHaveBeenLastCalledWith({
+      where: {
+        userId: 'user-1',
+        lastReminderLocalDate: '2026-06-23',
+      },
+      data: { lastReminderLocalDate: null },
+    });
   });
 
   it('retries an undelivered reminder after its configured hour', async () => {
@@ -67,10 +76,7 @@ describe('JournalReminderService', () => {
     await service.sendDueReminders(new Date('2026-06-23T21:15:00.000Z'));
 
     expect(notifications.notifyJournalReminder).toHaveBeenCalledTimes(2);
-    expect(prisma.notificationPreference.update).toHaveBeenCalledWith({
-      where: { userId: 'user-1' },
-      data: { lastReminderLocalDate: '2026-06-23' },
-    });
+    expect(prisma.notificationPreference.updateMany).toHaveBeenCalledTimes(3);
   });
 
   it('does not send a reminder before its configured hour', async () => {
@@ -79,7 +85,7 @@ describe('JournalReminderService', () => {
     await service.sendDueReminders(new Date('2026-06-23T19:15:00.000Z'));
 
     expect(notifications.notifyJournalReminder).not.toHaveBeenCalled();
-    expect(prisma.notificationPreference.update).not.toHaveBeenCalled();
+    expect(prisma.notificationPreference.updateMany).not.toHaveBeenCalled();
   });
 
   it('skips a reminder that was already delivered today', async () => {
@@ -96,6 +102,15 @@ describe('JournalReminderService', () => {
     await service.sendDueReminders(now);
 
     expect(notifications.notifyJournalReminder).not.toHaveBeenCalled();
-    expect(prisma.notificationPreference.update).not.toHaveBeenCalled();
+    expect(prisma.notificationPreference.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('does not dispatch when another sweep already claimed the reminder', async () => {
+    const { service, prisma, notifications } = setup(true);
+    prisma.notificationPreference.updateMany.mockResolvedValueOnce({ count: 0 });
+
+    await service.sendDueReminders(now);
+
+    expect(notifications.notifyJournalReminder).not.toHaveBeenCalled();
   });
 });
