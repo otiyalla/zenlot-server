@@ -1,4 +1,5 @@
 import {
+  AUTH_VERSION_FLOOR_GRACE_MS,
   AuthenticatedSocketNamespace,
   SocketSessionRegistry,
 } from './socket-session-registry.service';
@@ -52,7 +53,13 @@ describe('SocketSessionRegistry', () => {
   let registry: SocketSessionRegistry;
 
   beforeEach(() => {
+    jest.useFakeTimers();
     registry = new SocketSessionRegistry();
+  });
+
+  afterEach(() => {
+    registry.onModuleDestroy();
+    jest.useRealTimers();
   });
 
   it('disconnects sockets authenticated before reset across every private namespace', () => {
@@ -152,5 +159,98 @@ describe('SocketSessionRegistry', () => {
     );
     expect(socket.connected).toBe(false);
     expect(socket.disconnect).toHaveBeenCalledTimes(2);
+  });
+
+  it('expires a floor after the last socket disconnects and the grace window passes', () => {
+    const socket = new TestSocket('closed-socket');
+    registry.register(socket as never, 'user-1', 4, '/user');
+    socket.disconnect(true);
+
+    jest.advanceTimersByTime(AUTH_VERSION_FLOOR_GRACE_MS - 1);
+    const staleInsideGrace = new TestSocket('stale-inside-grace');
+    expect(
+      registry.register(staleInsideGrace as never, 'user-1', 3, '/quote'),
+    ).toBe(false);
+
+    jest.advanceTimersByTime(1);
+    const socketAfterExpiry = new TestSocket('socket-after-expiry');
+    expect(
+      registry.register(socketAfterExpiry as never, 'user-1', 3, '/quote'),
+    ).toBe(true);
+  });
+
+  it('keeps the floor while the user has an active socket', () => {
+    const activeSocket = new TestSocket('active-socket');
+    registry.register(activeSocket as never, 'user-1', 4, '/candle');
+
+    jest.advanceTimersByTime(AUTH_VERSION_FLOOR_GRACE_MS * 2);
+    const staleSocket = new TestSocket('stale-socket');
+    expect(
+      registry.register(staleSocket as never, 'user-1', 3, '/price-feed'),
+    ).toBe(false);
+  });
+
+  it('rejects a stale registration during the post-advance grace window', () => {
+    registry.advanceAuthVersion('user-1', 4);
+    jest.advanceTimersByTime(AUTH_VERSION_FLOOR_GRACE_MS - 1);
+
+    const staleSocket = new TestSocket('late-stale-socket');
+    expect(registry.register(staleSocket as never, 'user-1', 3, '/user')).toBe(
+      false,
+    );
+  });
+
+  it('cancels a pending floor expiry when a current socket registers', () => {
+    registry.advanceAuthVersion('user-1', 4);
+    expect(jest.getTimerCount()).toBe(1);
+
+    const currentSocket = new TestSocket('current-socket');
+    expect(
+      registry.register(currentSocket as never, 'user-1', 4, '/quote'),
+    ).toBe(true);
+    expect(jest.getTimerCount()).toBe(0);
+
+    jest.advanceTimersByTime(AUTH_VERSION_FLOOR_GRACE_MS * 2);
+    const staleSocket = new TestSocket('stale-after-original-expiry');
+    expect(registry.register(staleSocket as never, 'user-1', 3, '/quote')).toBe(
+      false,
+    );
+  });
+
+  it('does not let an old cleanup callback erase a newer floor', () => {
+    const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
+    registry.advanceAuthVersion('user-1', 4);
+    const oldCleanup = setTimeoutSpy.mock.calls[0][0] as () => void;
+
+    registry.advanceAuthVersion('user-1', 5);
+    oldCleanup();
+
+    const staleSocket = new TestSocket('stale-after-new-floor');
+    expect(
+      registry.register(staleSocket as never, 'user-1', 4, '/candle'),
+    ).toBe(false);
+    setTimeoutSpy.mockRestore();
+  });
+
+  it('unrefs cleanup timers and clears them on module destroy', () => {
+    const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
+    registry.advanceAuthVersion('user-1', 4);
+    const timer = setTimeoutSpy.mock.results[0].value as NodeJS.Timeout;
+
+    expect(timer.hasRef()).toBe(false);
+    expect(jest.getTimerCount()).toBe(1);
+
+    registry.onModuleDestroy();
+    expect(jest.getTimerCount()).toBe(0);
+    setTimeoutSpy.mockRestore();
+  });
+
+  it('detaches active socket cleanup listeners on module destroy', () => {
+    const socket = new TestSocket('active-at-destroy');
+    registry.register(socket as never, 'user-1', 4, '/price-feed');
+
+    registry.onModuleDestroy();
+
+    expect(socket.off).toHaveBeenCalledWith('disconnect', expect.any(Function));
   });
 });
