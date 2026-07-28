@@ -12,6 +12,7 @@ import { NotificationsService } from './notifications.service';
  */
 @Injectable()
 export class JournalReminderService {
+  private static readonly CLAIM_LEASE_MS = 15 * 60 * 1000;
   private readonly logger = new Logger(JournalReminderService.name);
 
   constructor(
@@ -27,36 +28,75 @@ export class JournalReminderService {
 
     for (const pref of prefs) {
       try {
-        const { date, hour } = localDateHour(now, pref.user?.timezone);
+        const { date, hour, minute } = localDateHour(now, pref.user?.timezone);
 
         // Once the configured hour has arrived, keep the reminder due for the
         // rest of the local day. This lets later hourly sweeps retry temporary
         // push failures and reminders initially suppressed by quiet hours.
-        if (hour < pref.reminderHour) continue;
+        if (
+          hour < pref.reminderHour &&
+          !isOvernightQuietHoursCarryoverDue(
+            pref.reminderHour,
+            pref.quietHoursStart,
+            pref.quietHoursEnd,
+            hour * 60 + minute,
+          )
+        ) {
+          continue;
+        }
         if (pref.lastReminderLocalDate === date) continue;
 
-        // Claim the local date before crossing the push-transport boundary.
-        // Besides serialising concurrent sweeps, the durable claim ensures a
-        // process exit after Expo accepts the push cannot replay it later.
+        // Lease the local date before crossing the push-transport boundary.
+        // The lease serialises concurrent sweeps but, unlike the delivered
+        // marker, becomes recoverable if this worker exits before dispatch.
+        const leaseExpiresBefore = new Date(
+          now.getTime() - JournalReminderService.CLAIM_LEASE_MS,
+        );
         const claim = await this.prisma.notificationPreference.updateMany({
           where: {
             userId: pref.userId,
-            NOT: { lastReminderLocalDate: date },
+            OR: [
+              { lastReminderLocalDate: null },
+              { lastReminderLocalDate: { not: date } },
+            ],
+            AND: [
+              {
+                OR: [
+                  { reminderClaimLocalDate: { not: date } },
+                  { reminderClaimedAt: null },
+                  { reminderClaimedAt: { lt: leaseExpiresBefore } },
+                ],
+              },
+            ],
           },
-          data: { lastReminderLocalDate: date },
+          data: {
+            reminderClaimLocalDate: date,
+            reminderClaimedAt: now,
+          },
         });
         if (claim.count === 0) continue;
 
         const delivered = await this.notifications.notifyJournalReminder(
           pref.userId,
         );
-        if (delivered) continue;
-
-        // A definite non-delivery is safe to retry. Make the release
-        // conditional so it cannot overwrite a newer day's claim.
+        // Complete or release only the lease owned by this attempt, so a slow
+        // worker cannot overwrite a replacement lease after its own expires.
         await this.prisma.notificationPreference.updateMany({
-          where: { userId: pref.userId, lastReminderLocalDate: date },
-          data: { lastReminderLocalDate: null },
+          where: {
+            userId: pref.userId,
+            reminderClaimLocalDate: date,
+            reminderClaimedAt: now,
+          },
+          data: delivered
+            ? {
+                lastReminderLocalDate: date,
+                reminderClaimLocalDate: null,
+                reminderClaimedAt: null,
+              }
+            : {
+                reminderClaimLocalDate: null,
+                reminderClaimedAt: null,
+              },
         });
       } catch (error) {
         this.logger.warn(
@@ -81,7 +121,7 @@ export class JournalReminderService {
 export function localDateHour(
   now: Date,
   timezone: string | null | undefined,
-): { date: string; hour: number } {
+): { date: string; hour: number; minute: number } {
   const tz = timezone || 'UTC';
   const fmt = (zone: string): Intl.DateTimeFormatPart[] =>
     new Intl.DateTimeFormat('en-CA', {
@@ -90,6 +130,7 @@ export function localDateHour(
       month: '2-digit',
       day: '2-digit',
       hour: '2-digit',
+      minute: '2-digit',
       hour12: false,
     }).formatToParts(now);
 
@@ -103,5 +144,35 @@ export function localDateHour(
     parts.find((p) => p.type === type)?.value ?? '';
   const date = `${get('year')}-${get('month')}-${get('day')}`;
   const hour = Number(get('hour')) % 24;
-  return { date, hour };
+  const minute = Number(get('minute'));
+  return { date, hour, minute };
+}
+
+/**
+ * A reminder configured in the evening portion of quiet hours cannot be sent
+ * before midnight. Keep it due after the wrapping window ends the next morning
+ * instead of waiting for the same suppressed hour again.
+ */
+function isOvernightQuietHoursCarryoverDue(
+  reminderHour: number,
+  quietHoursStart: string | null,
+  quietHoursEnd: string | null,
+  localMinute: number,
+): boolean {
+  const start = parseHhMm(quietHoursStart);
+  const end = parseHhMm(quietHoursEnd);
+  if (start === null || end === null || start <= end) return false;
+
+  const reminderMinute = reminderHour * 60;
+  return (
+    reminderMinute >= start &&
+    localMinute >= end &&
+    localMinute < reminderMinute
+  );
+}
+
+function parseHhMm(value: string | null): number | null {
+  if (!value || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value)) return null;
+  const [hour, minute] = value.split(':').map(Number);
+  return hour * 60 + minute;
 }
