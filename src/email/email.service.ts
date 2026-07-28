@@ -13,6 +13,18 @@ import {
   buildWelcomeTemplate,
 } from './templates';
 
+const HTML_ESCAPE_MAP: Record<string, string> = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+};
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => HTML_ESCAPE_MAP[character]);
+}
+
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
@@ -69,7 +81,7 @@ export class EmailService {
       <!-- Header -->
         <div style="background-color:#f7f9fc; padding:15px 20px; text-align:center; border-radius:8px;">
           <h3 style="font-family:Arial, sans-serif; color:#333333; margin:0;">
-            📩 New ${type} Submission
+            📩 New ${escapeHtml(type)} Submission
           </h3>
         </div>
 
@@ -77,15 +89,15 @@ export class EmailService {
         <div style="background-color:#ffffff; padding:24px; border-radius:8px; font-family:Arial, sans-serif; color:#444444; margin-top:16px;">
 
           <p style="font-size:16px; margin:0;">
-            <strong>From:</strong> <a href="mailto:${senderEmail}" style="color:#1A73E8; text-decoration:none;">${senderEmail}</a>
+            <strong>From:</strong> <a href="mailto:${escapeHtml(senderEmail)}" style="color:#1A73E8; text-decoration:none;">${escapeHtml(senderEmail)}</a>
           </p>
 
           <p style="font-size:16px; margin-top:8px;">
-            <strong>Type:</strong> ${type}
+            <strong>Type:</strong> ${escapeHtml(type)}
           </p>
 
           <p style="font-size:16px; margin-top:8px;">
-            <strong>Subject:</strong> ${subject || '—'}
+            <strong>Subject:</strong> ${escapeHtml(subject || '—')}
           </p>
 
           <hr style="border:none; border-top:1px solid #E0E0E0; margin:20px 0;" />
@@ -95,7 +107,7 @@ export class EmailService {
           </p>
 
           <div style="font-size:15px; line-height:1.6; color:#444444;">
-            ${message.replace(/\n/g, '<br/>')}
+            ${escapeHtml(message).replace(/\n/g, '<br/>')}
           </div>
 
           <hr style="border:none; border-top:1px solid #E0E0E0; margin:20px 0;" />

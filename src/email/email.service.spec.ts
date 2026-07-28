@@ -92,6 +92,40 @@ describe('EmailService', () => {
     );
   });
 
+  it('escapes untrusted feedback fields before inserting them into HTML', async () => {
+    await service.sendFeedbackEmail(
+      'attacker@example.com" onmouseover="alert(1)',
+      '<img src=x onerror=alert(1)>',
+      '<script>alert(1)</script>\n<img src=x onerror=alert(2)>',
+      '<a href="javascript:alert(3)">bug</a>',
+    );
+
+    const message = transport.send.mock.calls[0][0];
+    expect(message.html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+    expect(message.html).toContain('&lt;img src=x onerror=alert(2)&gt;');
+    expect(message.html).toContain(
+      'attacker@example.com&quot; onmouseover=&quot;alert(1)',
+    );
+    expect(message.html).toContain(
+      '&lt;a href=&quot;javascript:alert(3)&quot;&gt;',
+    );
+    expect(message.html).not.toContain('<script>alert(1)</script>');
+    expect(message.html).not.toContain('<img src=x onerror=alert(2)>');
+  });
+
+  it('preserves ordinary feedback text and line breaks after escaping', async () => {
+    await service.sendFeedbackEmail(
+      'trader@example.com',
+      'Great feature',
+      'Please add dark mode.\nThank you!',
+      'feature',
+    );
+
+    const message = transport.send.mock.calls[0][0];
+    expect(message.html).toContain('Great feature');
+    expect(message.html).toContain('Please add dark mode.<br/>Thank you!');
+  });
+
   it('sendAccountDeletionNotice localizes subject and ICS content for French', async () => {
     const result = await service.sendAccountDeletionNotice(
       'user@example.com',
