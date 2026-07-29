@@ -37,13 +37,12 @@ export class JournalReminderService {
           persistedDueDate ??
           latestReminderDueDate(date, hour, pref.reminderHour);
 
-        // Do not backfill a reminder from before the preference existed. This
-        // distinguishes a newly-created preference before today's reminder
-        // hour from an established preference whose last sweep was missed.
+        // Do not backfill a reminder from before the latest opt-in. Existing
+        // rows are migrated with createdAt as this boundary, preserving the
+        // historical behavior until the category is explicitly re-enabled.
         if (
-          !persistedDueDate &&
-          preferenceWasCreatedAfterDueDate(
-            pref.createdAt,
+          preferenceWasEnabledAfterDueDate(
+            pref.journalRemindersEnabledAt,
             pref.user?.timezone,
             dueDate,
             pref.reminderHour,
@@ -51,7 +50,14 @@ export class JournalReminderService {
         ) {
           continue;
         }
-        if (pref.lastReminderLocalDate === dueDate) continue;
+        // ISO local dates sort chronologically. A later delivery also satisfies
+        // an older due date that can appear after reminderHour is moved later.
+        if (
+          pref.lastReminderLocalDate &&
+          pref.lastReminderLocalDate >= dueDate
+        ) {
+          continue;
+        }
 
         // Lease the due date before crossing the push-transport boundary. The
         // date remains persisted after retryable failures, so a local-midnight
@@ -62,11 +68,14 @@ export class JournalReminderService {
         const claim = await this.prisma.notificationPreference.updateMany({
           where: {
             userId: pref.userId,
+            pushEnabled: true,
+            journalReminders: true,
+            journalRemindersEnabledAt: pref.journalRemindersEnabledAt,
             AND: [
               {
                 OR: [
                   { lastReminderLocalDate: null },
-                  { lastReminderLocalDate: { not: dueDate } },
+                  { lastReminderLocalDate: { lt: dueDate } },
                 ],
               },
               {
@@ -95,23 +104,53 @@ export class JournalReminderService {
         );
         // Complete or release only the lease owned by this attempt, so a slow
         // worker cannot overwrite a replacement lease after its own expires.
-        await this.prisma.notificationPreference.updateMany({
-          where: {
-            userId: pref.userId,
-            reminderClaimLocalDate: dueDate,
-            reminderClaimedAt: now,
-          },
-          data: delivered
-            ? {
+        if (delivered) {
+          const completion =
+            await this.prisma.notificationPreference.updateMany({
+              where: {
+                userId: pref.userId,
+                reminderClaimLocalDate: dueDate,
+                reminderClaimedAt: now,
+                OR: [
+                  { lastReminderLocalDate: null },
+                  { lastReminderLocalDate: { lt: dueDate } },
+                ],
+              },
+              data: {
                 lastReminderLocalDate: dueDate,
                 reminderClaimLocalDate: null,
                 reminderClaimedAt: null,
-              }
-            : {
+              },
+            });
+
+          // A newer delivery may have won while this worker was sending. Release
+          // only this attempt's lease without overwriting the later date.
+          if (completion.count === 0) {
+            await this.prisma.notificationPreference.updateMany({
+              where: {
+                userId: pref.userId,
                 reminderClaimLocalDate: dueDate,
+                reminderClaimedAt: now,
+              },
+              data: {
+                reminderClaimLocalDate: null,
                 reminderClaimedAt: null,
               },
-        });
+            });
+          }
+        } else {
+          await this.prisma.notificationPreference.updateMany({
+            where: {
+              userId: pref.userId,
+              reminderClaimLocalDate: dueDate,
+              reminderClaimedAt: now,
+            },
+            data: {
+              reminderClaimLocalDate: dueDate,
+              reminderClaimedAt: null,
+            },
+          });
+        }
       } catch (error) {
         this.logger.warn(
           `Failed to send journal reminder for user ${pref.userId}`,
@@ -174,13 +213,13 @@ function latestReminderDueDate(
   return previousDate.toISOString().slice(0, 10);
 }
 
-function preferenceWasCreatedAfterDueDate(
-  createdAt: Date,
+function preferenceWasEnabledAfterDueDate(
+  enabledAt: Date,
   timezone: string | null | undefined,
   dueDate: string,
   reminderHour: number,
 ): boolean {
-  const created = localDateHour(createdAt, timezone);
-  if (created.date !== dueDate) return created.date > dueDate;
-  return created.hour * 60 + created.minute > reminderHour * 60;
+  const enabled = localDateHour(enabledAt, timezone);
+  if (enabled.date !== dueDate) return enabled.date > dueDate;
+  return enabled.hour * 60 + enabled.minute > reminderHour * 60;
 }

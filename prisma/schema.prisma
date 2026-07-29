@@ -229,6 +229,10 @@ model notificationPreference {
   drawdownAlerts        Boolean  @default(true)
   governanceAlerts      Boolean  @default(true)
   journalReminders      Boolean  @default(true)
+  // The instant journal reminders most recently transitioned from off to on.
+  // This is the scheduling boundary used to avoid backfilling reminders that
+  // became due while the category was disabled.
+  journalRemindersEnabledAt DateTime @default(now())
   // Weekly behavioral-intelligence review push (Phase 2 Inc 3). On by default.
   behavioralReports     Boolean  @default(true)
   // Optional quiet-hours window in the user's local time, "HH:mm" 24h. When both

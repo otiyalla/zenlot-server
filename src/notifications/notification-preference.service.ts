@@ -29,11 +29,59 @@ export class NotificationPreferenceService {
     dto: UpdateNotificationPreferenceDto,
   ): Promise<notificationPreference> {
     // Ensure a row exists, then patch only the provided fields.
-    await this.getOrCreate(userId);
-    return this.prisma.notificationPreference.update({
-      where: { userId },
-      data: { ...dto },
-    });
+    let existing = await this.getOrCreate(userId);
+
+    if (dto.journalReminders !== true) {
+      return this.prisma.notificationPreference.update({
+        where: { userId },
+        data: { ...dto },
+      });
+    }
+
+    // Compare-and-swap on the toggle so an overlapping disable cannot land
+    // between this read and write without forcing a retry. On retry, the false
+    // state is observed and this request records a real re-enable boundary.
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const journalRemindersReEnabled = !existing.journalReminders;
+      const update = await this.prisma.notificationPreference.updateMany({
+        where: {
+          userId,
+          journalReminders: existing.journalReminders,
+        },
+        data: {
+          ...dto,
+          ...(journalRemindersReEnabled
+            ? {
+                journalRemindersEnabledAt: new Date(),
+                reminderClaimLocalDate: null,
+                reminderClaimedAt: null,
+              }
+            : {}),
+        },
+      });
+
+      if (update.count === 1) {
+        const updated = await this.prisma.notificationPreference.findUnique({
+          where: { userId },
+        });
+        if (!updated) {
+          throw new Error(`Notification preferences disappeared for ${userId}`);
+        }
+        return updated;
+      }
+
+      const refreshed = await this.prisma.notificationPreference.findUnique({
+        where: { userId },
+      });
+      if (!refreshed) {
+        throw new Error(`Notification preferences disappeared for ${userId}`);
+      }
+      existing = refreshed;
+    }
+
+    throw new Error(
+      `Notification preferences changed too frequently for ${userId}`,
+    );
   }
 
   /**

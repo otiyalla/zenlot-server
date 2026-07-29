@@ -17,10 +17,13 @@ const basePref = (
     drawdownAlerts: true,
     governanceAlerts: true,
     journalReminders: true,
+    journalRemindersEnabledAt: new Date(),
     quietHoursStart: null,
     quietHoursEnd: null,
     reminderHour: 20,
     lastReminderLocalDate: null,
+    reminderClaimLocalDate: null,
+    reminderClaimedAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,
@@ -130,5 +133,131 @@ describe('NotificationPreferenceService.isAllowed', () => {
         now,
       ),
     ).toBe(true);
+  });
+});
+
+describe('NotificationPreferenceService.update', () => {
+  const reEnabledAt = new Date('2026-06-23T19:00:00.000Z');
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  function setup(existing: notificationPreference) {
+    const prisma = {
+      notificationPreference: {
+        findUnique: jest.fn().mockResolvedValue(existing),
+        create: jest.fn(),
+        update: jest.fn().mockResolvedValue(existing),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+    };
+
+    return {
+      service: new NotificationPreferenceService(
+        prisma as unknown as PrismaService,
+      ),
+      prisma,
+    };
+  }
+
+  it('records the actual re-enable boundary and clears an older claim', async () => {
+    jest.useFakeTimers().setSystemTime(reEnabledAt);
+    const { service, prisma } = setup(
+      basePref({
+        journalReminders: false,
+        journalRemindersEnabledAt: new Date('2026-06-20T12:00:00.000Z'),
+        reminderClaimLocalDate: '2026-06-22',
+        reminderClaimedAt: new Date('2026-06-22T20:00:00.000Z'),
+      }),
+    );
+
+    await service.update('u1', { journalReminders: true });
+
+    expect(prisma.notificationPreference.updateMany).toHaveBeenCalledWith({
+      where: { userId: 'u1', journalReminders: false },
+      data: {
+        journalReminders: true,
+        journalRemindersEnabledAt: reEnabledAt,
+        reminderClaimLocalDate: null,
+        reminderClaimedAt: null,
+      },
+    });
+  });
+
+  it('preserves the opt-in boundary when reminders are already enabled', async () => {
+    const enabledAt = new Date('2026-06-20T12:00:00.000Z');
+    const { service, prisma } = setup(
+      basePref({
+        journalReminders: true,
+        journalRemindersEnabledAt: enabledAt,
+      }),
+    );
+
+    await service.update('u1', {
+      journalReminders: true,
+      reminderHour: 21,
+    });
+
+    expect(prisma.notificationPreference.updateMany).toHaveBeenCalledWith({
+      where: { userId: 'u1', journalReminders: true },
+      data: {
+        journalReminders: true,
+        reminderHour: 21,
+      },
+    });
+  });
+
+  it('does not move the opt-in boundary when reminders are disabled', async () => {
+    const { service, prisma } = setup(basePref());
+
+    await service.update('u1', { journalReminders: false });
+
+    expect(prisma.notificationPreference.update).toHaveBeenCalledWith({
+      where: { userId: 'u1' },
+      data: { journalReminders: false },
+    });
+  });
+
+  it('retries against a concurrent disable and records the resulting re-enable', async () => {
+    jest.useFakeTimers().setSystemTime(reEnabledAt);
+    const initiallyEnabled = basePref({ journalReminders: true });
+    const concurrentlyDisabled = basePref({ journalReminders: false });
+    const { service, prisma } = setup(initiallyEnabled);
+    prisma.notificationPreference.findUnique
+      .mockReset()
+      .mockResolvedValueOnce(initiallyEnabled)
+      .mockResolvedValueOnce(concurrentlyDisabled)
+      .mockResolvedValueOnce(
+        basePref({
+          journalReminders: true,
+          journalRemindersEnabledAt: reEnabledAt,
+        }),
+      );
+    prisma.notificationPreference.updateMany
+      .mockResolvedValueOnce({ count: 0 })
+      .mockResolvedValueOnce({ count: 1 });
+
+    await service.update('u1', { journalReminders: true });
+
+    expect(prisma.notificationPreference.updateMany).toHaveBeenNthCalledWith(
+      1,
+      {
+        where: { userId: 'u1', journalReminders: true },
+        data: { journalReminders: true },
+      },
+    );
+    expect(prisma.notificationPreference.updateMany).toHaveBeenNthCalledWith(
+      2,
+      {
+        where: { userId: 'u1', journalReminders: false },
+        data: {
+          journalReminders: true,
+          journalRemindersEnabledAt: reEnabledAt,
+          reminderClaimLocalDate: null,
+          reminderClaimedAt: null,
+        },
+      },
+    );
   });
 });
