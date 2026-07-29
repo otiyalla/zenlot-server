@@ -62,8 +62,9 @@ export class JournalReminderService {
         // Lease the due date before crossing the push-transport boundary. The
         // date remains persisted after retryable failures, so a local-midnight
         // rollover cannot turn an outstanding reminder into today's schedule.
+        const claimedAt = new Date();
         const leaseExpiresBefore = new Date(
-          now.getTime() - JournalReminderService.CLAIM_LEASE_MS,
+          claimedAt.getTime() - JournalReminderService.CLAIM_LEASE_MS,
         );
         const claim = await this.prisma.notificationPreference.updateMany({
           where: {
@@ -94,7 +95,7 @@ export class JournalReminderService {
           },
           data: {
             reminderClaimLocalDate: dueDate,
-            reminderClaimedAt: now,
+            reminderClaimedAt: claimedAt,
           },
         });
         if (claim.count === 0) continue;
@@ -110,7 +111,7 @@ export class JournalReminderService {
               where: {
                 userId: pref.userId,
                 reminderClaimLocalDate: dueDate,
-                reminderClaimedAt: now,
+                reminderClaimedAt: claimedAt,
                 OR: [
                   { lastReminderLocalDate: null },
                   { lastReminderLocalDate: { lt: dueDate } },
@@ -130,7 +131,7 @@ export class JournalReminderService {
               where: {
                 userId: pref.userId,
                 reminderClaimLocalDate: dueDate,
-                reminderClaimedAt: now,
+                reminderClaimedAt: claimedAt,
               },
               data: {
                 reminderClaimLocalDate: null,
@@ -143,7 +144,7 @@ export class JournalReminderService {
             where: {
               userId: pref.userId,
               reminderClaimLocalDate: dueDate,
-              reminderClaimedAt: now,
+              reminderClaimedAt: claimedAt,
             },
             data: {
               reminderClaimLocalDate: dueDate,

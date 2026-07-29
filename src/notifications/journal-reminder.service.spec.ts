@@ -5,6 +5,14 @@ import { NotificationsService } from './notifications.service';
 describe('JournalReminderService', () => {
   const now = new Date('2026-06-23T20:15:00.000Z');
 
+  beforeEach(() => {
+    jest.useFakeTimers().setSystemTime(now);
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   function setup(delivered: boolean) {
     const pref = {
       userId: 'user-1',
@@ -202,6 +210,7 @@ describe('JournalReminderService', () => {
 
   it('recovers the previous due date when an outage spans the only 23:00 sweep', async () => {
     const { service, prisma, notifications } = setup(true);
+    const afterMidnight = new Date('2026-06-24T00:15:00.000Z');
     prisma.notificationPreference.findMany.mockResolvedValueOnce([
       {
         userId: 'user-1',
@@ -217,14 +226,15 @@ describe('JournalReminderService', () => {
       },
     ]);
 
-    await service.sendDueReminders(new Date('2026-06-24T00:15:00.000Z'));
+    jest.setSystemTime(afterMidnight);
+    await service.sendDueReminders(afterMidnight);
 
     expect(notifications.notifyJournalReminder).toHaveBeenCalledWith('user-1');
     expect(prisma.notificationPreference.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         data: {
           reminderClaimLocalDate: '2026-06-23',
-          reminderClaimedAt: new Date('2026-06-24T00:15:00.000Z'),
+          reminderClaimedAt: afterMidnight,
         },
       }),
     );
@@ -413,6 +423,85 @@ describe('JournalReminderService', () => {
     );
   });
 
+  it('gives a later user a fresh lease timestamp even when the sweep instant is stale', async () => {
+    const { service, prisma, notifications, pref } = setup(true);
+    prisma.notificationPreference.findMany.mockResolvedValueOnce([
+      pref,
+      {
+        ...pref,
+        userId: 'user-2',
+      },
+    ]);
+    const laterClaimedAt = new Date('2026-06-23T20:31:00.000Z');
+    notifications.notifyJournalReminder.mockImplementation((userId: string) => {
+      if (userId === 'user-1') {
+        jest.setSystemTime(laterClaimedAt);
+      }
+      return Promise.resolve(true);
+    });
+
+    await service.sendDueReminders(now);
+
+    expect(prisma.notificationPreference.updateMany).toHaveBeenNthCalledWith(
+      3,
+      {
+        where: {
+          userId: 'user-2',
+          pushEnabled: true,
+          journalReminders: true,
+          journalRemindersEnabledAt: new Date('2026-06-23T00:00:00.000Z'),
+          AND: [
+            {
+              OR: [
+                { lastReminderLocalDate: null },
+                { lastReminderLocalDate: { lt: '2026-06-23' } },
+              ],
+            },
+            {
+              OR: [
+                { reminderClaimLocalDate: null },
+                {
+                  reminderClaimLocalDate: '2026-06-23',
+                  OR: [
+                    { reminderClaimedAt: null },
+                    {
+                      reminderClaimedAt: {
+                        lt: new Date('2026-06-23T20:16:00.000Z'),
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        data: {
+          reminderClaimLocalDate: '2026-06-23',
+          reminderClaimedAt: laterClaimedAt,
+        },
+      },
+    );
+    expect(prisma.notificationPreference.updateMany).toHaveBeenNthCalledWith(
+      4,
+      {
+        where: {
+          userId: 'user-2',
+          reminderClaimLocalDate: '2026-06-23',
+          reminderClaimedAt: laterClaimedAt,
+          OR: [
+            { lastReminderLocalDate: null },
+            { lastReminderLocalDate: { lt: '2026-06-23' } },
+          ],
+        },
+        data: {
+          lastReminderLocalDate: '2026-06-23',
+          reminderClaimLocalDate: null,
+          reminderClaimedAt: null,
+        },
+      },
+    );
+  });
+
   it('reclaims an expired lease so a terminated worker cannot lose the reminder', async () => {
     const { service, prisma, notifications, pref } = setup(true);
     prisma.notificationPreference.findMany
@@ -429,7 +518,9 @@ describe('JournalReminderService', () => {
     );
 
     await service.sendDueReminders(now);
-    await service.sendDueReminders(new Date('2026-06-23T20:31:00.000Z'));
+    const afterLeaseExpiry = new Date('2026-06-23T20:31:00.000Z');
+    jest.setSystemTime(afterLeaseExpiry);
+    await service.sendDueReminders(afterLeaseExpiry);
 
     expect(notifications.notifyJournalReminder).toHaveBeenCalledTimes(2);
   });

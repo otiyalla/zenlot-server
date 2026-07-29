@@ -31,21 +31,29 @@ export class NotificationPreferenceService {
     // Ensure a row exists, then patch only the provided fields.
     let existing = await this.getOrCreate(userId);
 
-    if (dto.journalReminders !== true) {
+    if (dto.pushEnabled !== true && dto.journalReminders !== true) {
       return this.prisma.notificationPreference.update({
         where: { userId },
         data: { ...dto },
       });
     }
 
-    // Compare-and-swap on the toggle so an overlapping disable cannot land
-    // between this read and write without forcing a retry. On retry, the false
-    // state is observed and this request records a real re-enable boundary.
+    // Compare-and-swap on both toggles so overlapping master/category updates
+    // cannot change whether reminders are effectively enabled without forcing a
+    // retry. On retry, the latest state is observed and the request that
+    // completes a false-to-true effective transition records its boundary.
     for (let attempt = 0; attempt < 5; attempt += 1) {
-      const journalRemindersReEnabled = !existing.journalReminders;
+      const remindersWereEnabled =
+        existing.pushEnabled && existing.journalReminders;
+      const remindersWillBeEnabled =
+        (dto.pushEnabled ?? existing.pushEnabled) &&
+        (dto.journalReminders ?? existing.journalReminders);
+      const journalRemindersReEnabled =
+        !remindersWereEnabled && remindersWillBeEnabled;
       const update = await this.prisma.notificationPreference.updateMany({
         where: {
           userId,
+          pushEnabled: existing.pushEnabled,
           journalReminders: existing.journalReminders,
         },
         data: {
