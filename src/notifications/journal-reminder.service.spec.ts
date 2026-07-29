@@ -30,6 +30,7 @@ describe('JournalReminderService', () => {
     const prisma = {
       notificationPreference: {
         findMany: jest.fn().mockResolvedValue([pref]),
+        findUnique: jest.fn().mockResolvedValue(null),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
     };
@@ -101,6 +102,7 @@ describe('JournalReminderService', () => {
         userId: 'user-1',
         reminderClaimLocalDate: '2026-06-23',
         reminderClaimedAt: now,
+        user: { timezone: 'UTC' },
         OR: [
           { lastReminderLocalDate: null },
           { lastReminderLocalDate: { lt: '2026-06-23' } },
@@ -359,7 +361,6 @@ describe('JournalReminderService', () => {
       {
         where: {
           userId: 'user-1',
-          reminderClaimLocalDate: '2026-06-23',
           reminderClaimedAt: now,
         },
         data: {
@@ -400,7 +401,6 @@ describe('JournalReminderService', () => {
       {
         where: {
           userId: 'user-1',
-          reminderClaimLocalDate: '2026-06-23',
           reminderClaimedAt: now,
           OR: [
             { reminderHour: { not: 20 } },
@@ -650,6 +650,12 @@ describe('JournalReminderService', () => {
         journalRemindersEnabledAt: new Date('2026-06-20T00:00:00.000Z'),
       },
     ]);
+    prisma.notificationPreference.findUnique.mockResolvedValueOnce({
+      reminderClaimLocalDate: '2026-06-23',
+      reminderClaimedAt: now,
+      lastReminderLocalDate: '2026-06-24',
+      user: { timezone: 'UTC' },
+    });
     prisma.notificationPreference.updateMany
       .mockResolvedValueOnce({ count: 1 })
       .mockResolvedValueOnce({ count: 0 })
@@ -664,6 +670,7 @@ describe('JournalReminderService', () => {
           userId: 'user-1',
           reminderClaimLocalDate: '2026-06-23',
           reminderClaimedAt: now,
+          user: { timezone: 'UTC' },
           OR: [
             { lastReminderLocalDate: null },
             { lastReminderLocalDate: { lt: '2026-06-23' } },
@@ -683,12 +690,428 @@ describe('JournalReminderService', () => {
           userId: 'user-1',
           reminderClaimLocalDate: '2026-06-23',
           reminderClaimedAt: now,
+          lastReminderLocalDate: '2026-06-24',
+          user: { timezone: 'UTC' },
         },
         data: {
           reminderClaimLocalDate: null,
           reminderClaimedAt: null,
         },
       },
+    );
+  });
+
+  it.each([
+    {
+      label: 'Tokyo to Los Angeles',
+      claimedAt: '2026-06-23T23:15:00.000Z',
+      claimedTimezone: 'Asia/Tokyo',
+      claimedDueDate: '2026-06-24',
+      currentTimezone: 'America/Los_Angeles',
+      lastReminderLocalDate: '2026-06-23',
+      completionDueDate: '2026-06-23',
+    },
+    {
+      label: 'Los Angeles to Tokyo',
+      claimedAt: '2026-06-23T15:15:00.000Z',
+      claimedTimezone: 'America/Los_Angeles',
+      claimedDueDate: '2026-06-23',
+      currentTimezone: 'Asia/Tokyo',
+      lastReminderLocalDate: '2026-06-22',
+      completionDueDate: '2026-06-24',
+    },
+  ])(
+    'rebases a successful active claim after a $label timezone change',
+    async ({
+      claimedAt,
+      claimedTimezone,
+      claimedDueDate,
+      currentTimezone,
+      lastReminderLocalDate,
+      completionDueDate,
+    }) => {
+      const completionAt = new Date(claimedAt);
+      jest.setSystemTime(completionAt);
+      const { service, prisma, notifications, pref } = setup(true);
+      let storedTimezone = claimedTimezone;
+      prisma.notificationPreference.findMany.mockResolvedValueOnce([
+        {
+          ...pref,
+          reminderHour: 8,
+          lastReminderLocalDate,
+          journalRemindersEnabledAt: new Date('2026-06-20T00:00:00.000Z'),
+          user: { timezone: claimedTimezone },
+        },
+      ]);
+      notifications.notifyJournalReminder.mockImplementationOnce(() => {
+        storedTimezone = currentTimezone;
+        return Promise.resolve(true);
+      });
+      prisma.notificationPreference.findUnique.mockImplementationOnce(() =>
+        Promise.resolve({
+          reminderClaimLocalDate: completionDueDate,
+          reminderClaimedAt: completionAt,
+          lastReminderLocalDate,
+          user: { timezone: storedTimezone },
+        }),
+      );
+      prisma.notificationPreference.updateMany
+        .mockResolvedValueOnce({ count: 1 })
+        .mockResolvedValueOnce({ count: 0 })
+        .mockResolvedValueOnce({ count: 1 });
+
+      await service.sendDueReminders(completionAt);
+
+      expect(notifications.notifyJournalReminder).toHaveBeenCalledTimes(1);
+      expect(prisma.notificationPreference.updateMany).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          where: expect.objectContaining({
+            reminderClaimLocalDate: claimedDueDate,
+            reminderClaimedAt: completionAt,
+            user: { timezone: claimedTimezone },
+          }),
+        }),
+      );
+      expect(prisma.notificationPreference.updateMany).toHaveBeenNthCalledWith(
+        3,
+        {
+          where: {
+            userId: 'user-1',
+            reminderClaimLocalDate: completionDueDate,
+            reminderClaimedAt: completionAt,
+            lastReminderLocalDate,
+            user: { timezone: currentTimezone },
+          },
+          data:
+            lastReminderLocalDate >= completionDueDate
+              ? {
+                  reminderClaimLocalDate: null,
+                  reminderClaimedAt: null,
+                }
+              : {
+                  lastReminderLocalDate: completionDueDate,
+                  reminderClaimLocalDate: null,
+                  reminderClaimedAt: null,
+                },
+        },
+      );
+    },
+  );
+
+  it('retries completion when the timezone changes again during its rebase CAS', async () => {
+    const completionAt = new Date('2026-06-23T15:15:00.000Z');
+    jest.setSystemTime(completionAt);
+    const { service, prisma, notifications, pref } = setup(true);
+    let storedTimezone = 'America/Los_Angeles';
+    prisma.notificationPreference.findMany.mockResolvedValueOnce([
+      {
+        ...pref,
+        reminderHour: 8,
+        lastReminderLocalDate: '2026-06-22',
+        journalRemindersEnabledAt: new Date('2026-06-20T00:00:00.000Z'),
+        user: { timezone: storedTimezone },
+      },
+    ]);
+    notifications.notifyJournalReminder.mockImplementationOnce(() => {
+      storedTimezone = 'Asia/Tokyo';
+      return Promise.resolve(true);
+    });
+    prisma.notificationPreference.findUnique
+      .mockImplementationOnce(() =>
+        Promise.resolve({
+          reminderClaimLocalDate: '2026-06-24',
+          reminderClaimedAt: completionAt,
+          lastReminderLocalDate: '2026-06-22',
+          user: { timezone: storedTimezone },
+        }),
+      )
+      .mockImplementationOnce(() =>
+        Promise.resolve({
+          reminderClaimLocalDate: '2026-06-23',
+          reminderClaimedAt: completionAt,
+          lastReminderLocalDate: '2026-06-22',
+          user: { timezone: storedTimezone },
+        }),
+      );
+    prisma.notificationPreference.updateMany
+      .mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValueOnce({ count: 0 })
+      .mockImplementationOnce(() => {
+        storedTimezone = 'America/Los_Angeles';
+        return Promise.resolve({ count: 0 });
+      })
+      .mockResolvedValueOnce({ count: 1 });
+
+    await service.sendDueReminders(completionAt);
+
+    expect(prisma.notificationPreference.updateMany).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
+        where: expect.objectContaining({
+          reminderClaimLocalDate: '2026-06-24',
+          user: { timezone: 'Asia/Tokyo' },
+        }),
+        data: {
+          lastReminderLocalDate: '2026-06-24',
+          reminderClaimLocalDate: null,
+          reminderClaimedAt: null,
+        },
+      }),
+    );
+    expect(prisma.notificationPreference.updateMany).toHaveBeenNthCalledWith(
+      4,
+      expect.objectContaining({
+        where: expect.objectContaining({
+          reminderClaimLocalDate: '2026-06-23',
+          user: { timezone: 'America/Los_Angeles' },
+        }),
+        data: {
+          lastReminderLocalDate: '2026-06-23',
+          reminderClaimLocalDate: null,
+          reminderClaimedAt: null,
+        },
+      }),
+    );
+  });
+
+  it.each([
+    {
+      timezone: 'America/Los_Angeles',
+      deliveredDate: '2026-06-23',
+      sameDay: '2026-06-23T23:15:00.000Z',
+      nextDay: '2026-06-24T15:15:00.000Z',
+      nextDueDate: '2026-06-24',
+    },
+    {
+      timezone: 'Asia/Tokyo',
+      deliveredDate: '2026-06-24',
+      sameDay: '2026-06-23T23:15:00.000Z',
+      nextDay: '2026-06-24T23:15:00.000Z',
+      nextDueDate: '2026-06-25',
+    },
+  ])(
+    'does not duplicate or suppress the next $timezone reminder after rebasing',
+    async ({ timezone, deliveredDate, sameDay, nextDay, nextDueDate }) => {
+      const { service, prisma, notifications, pref } = setup(true);
+      const sameDaySweep = new Date(sameDay);
+      const nextDaySweep = new Date(nextDay);
+      const rebasedPreference = {
+        ...pref,
+        reminderHour: 8,
+        lastReminderLocalDate: deliveredDate,
+        user: { timezone },
+      };
+      prisma.notificationPreference.findMany
+        .mockResolvedValueOnce([rebasedPreference])
+        .mockResolvedValueOnce([rebasedPreference]);
+
+      jest.setSystemTime(sameDaySweep);
+      await service.sendDueReminders(sameDaySweep);
+      jest.setSystemTime(nextDaySweep);
+      await service.sendDueReminders(nextDaySweep);
+
+      expect(notifications.notifyJournalReminder).toHaveBeenCalledTimes(1);
+      expect(prisma.notificationPreference.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: {
+            reminderClaimLocalDate: nextDueDate,
+            reminderClaimedAt: nextDaySweep,
+          },
+        }),
+      );
+    },
+  );
+
+  it('clears a failed active claim after its timezone changes', async () => {
+    const claimTime = new Date('2026-06-23T23:15:00.000Z');
+    jest.setSystemTime(claimTime);
+    const { service, prisma, notifications, pref } = setup(false);
+    prisma.notificationPreference.findMany.mockResolvedValueOnce([
+      {
+        ...pref,
+        reminderHour: 8,
+        journalRemindersEnabledAt: new Date('2026-06-20T00:00:00.000Z'),
+        user: { timezone: 'Asia/Tokyo' },
+      },
+    ]);
+    prisma.notificationPreference.updateMany
+      .mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValueOnce({ count: 0 })
+      .mockResolvedValueOnce({ count: 1 });
+
+    await service.sendDueReminders(claimTime);
+
+    expect(notifications.notifyJournalReminder).toHaveBeenCalledTimes(1);
+    expect(prisma.notificationPreference.updateMany).toHaveBeenLastCalledWith({
+      where: {
+        userId: 'user-1',
+        reminderClaimedAt: claimTime,
+      },
+      data: {
+        reminderClaimLocalDate: null,
+        reminderClaimedAt: null,
+      },
+    });
+  });
+
+  it('clears an active claim when delivery throws after its timezone changes', async () => {
+    const claimTime = new Date('2026-06-23T23:15:00.000Z');
+    jest.setSystemTime(claimTime);
+    const { service, prisma, notifications, pref } = setup(true);
+    prisma.notificationPreference.findMany.mockResolvedValueOnce([
+      {
+        ...pref,
+        reminderHour: 8,
+        journalRemindersEnabledAt: new Date('2026-06-20T00:00:00.000Z'),
+        user: { timezone: 'Asia/Tokyo' },
+      },
+    ]);
+    notifications.notifyJournalReminder.mockRejectedValueOnce(
+      new Error('transport failed after timezone change'),
+    );
+
+    await service.sendDueReminders(claimTime);
+
+    expect(prisma.notificationPreference.updateMany).toHaveBeenLastCalledWith({
+      where: {
+        userId: 'user-1',
+        reminderClaimedAt: claimTime,
+        OR: [
+          { reminderHour: { not: 8 } },
+          { user: { timezone: { not: 'Asia/Tokyo' } } },
+        ],
+      },
+      data: {
+        reminderClaimLocalDate: null,
+        reminderClaimedAt: null,
+      },
+    });
+  });
+
+  it('waits for an active old-timezone owner, then reclaims its abandoned lease', async () => {
+    const claimTime = new Date('2026-06-23T23:15:00.000Z');
+    const activeSweep = new Date('2026-06-23T23:20:00.000Z');
+    const expiredSweep = new Date('2026-06-23T23:31:00.000Z');
+    const { service, prisma, notifications, pref } = setup(true);
+    const changedTimezonePref = {
+      ...pref,
+      reminderHour: 8,
+      lastReminderLocalDate: '2026-06-22',
+      reminderClaimLocalDate: '2026-06-24',
+      reminderClaimedAt: claimTime,
+      journalRemindersEnabledAt: new Date('2026-06-20T00:00:00.000Z'),
+      user: { timezone: 'America/Los_Angeles' },
+    };
+    prisma.notificationPreference.findMany.mockResolvedValue([
+      changedTimezonePref,
+    ]);
+
+    jest.setSystemTime(activeSweep);
+    await service.sendDueReminders(activeSweep);
+    jest.setSystemTime(expiredSweep);
+    await service.sendDueReminders(expiredSweep);
+
+    expect(notifications.notifyJournalReminder).toHaveBeenCalledTimes(1);
+    expect(prisma.notificationPreference.updateMany).toHaveBeenCalledWith({
+      where: {
+        userId: 'user-1',
+        reminderClaimLocalDate: '2026-06-24',
+        reminderClaimedAt: claimTime,
+        OR: [
+          { reminderClaimedAt: null },
+          {
+            reminderClaimedAt: {
+              lt: new Date('2026-06-23T23:16:00.000Z'),
+            },
+          },
+        ],
+      },
+      data: {
+        reminderClaimLocalDate: null,
+        reminderClaimedAt: null,
+      },
+    });
+  });
+
+  it('reclaims a rebased claim even when its date equals the delivered marker', async () => {
+    const claimTime = new Date('2026-06-23T23:05:00.000Z');
+    const activeSweep = new Date('2026-06-23T23:10:00.000Z');
+    const nextDaySweep = new Date('2026-06-24T15:15:00.000Z');
+    const { service, prisma, notifications, pref } = setup(true);
+    const rebasedPreference = {
+      ...pref,
+      reminderHour: 8,
+      lastReminderLocalDate: '2026-06-23',
+      reminderClaimLocalDate: '2026-06-23',
+      reminderClaimedAt: claimTime,
+      journalRemindersEnabledAt: new Date('2026-06-20T00:00:00.000Z'),
+      user: { timezone: 'America/Los_Angeles' },
+    };
+    prisma.notificationPreference.findMany.mockResolvedValue([
+      rebasedPreference,
+    ]);
+
+    jest.setSystemTime(activeSweep);
+    await service.sendDueReminders(activeSweep);
+    jest.setSystemTime(nextDaySweep);
+    await service.sendDueReminders(nextDaySweep);
+
+    expect(notifications.notifyJournalReminder).toHaveBeenCalledTimes(1);
+    expect(prisma.notificationPreference.updateMany).toHaveBeenCalledWith({
+      where: {
+        userId: 'user-1',
+        reminderClaimLocalDate: '2026-06-23',
+        reminderClaimedAt: claimTime,
+        OR: [
+          { reminderClaimedAt: null },
+          {
+            reminderClaimedAt: {
+              lt: new Date('2026-06-24T15:00:00.000Z'),
+            },
+          },
+        ],
+      },
+      data: {
+        reminderClaimLocalDate: null,
+        reminderClaimedAt: null,
+      },
+    });
+    expect(prisma.notificationPreference.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: {
+          reminderClaimLocalDate: '2026-06-24',
+          reminderClaimedAt: nextDaySweep,
+        },
+      }),
+    );
+  });
+
+  it('does not dispatch when a concurrent timezone update wins claim acquisition', async () => {
+    const claimTime = new Date('2026-06-23T23:15:00.000Z');
+    jest.setSystemTime(claimTime);
+    const { service, prisma, notifications, pref } = setup(true);
+    prisma.notificationPreference.findMany.mockResolvedValueOnce([
+      {
+        ...pref,
+        reminderHour: 8,
+        journalRemindersEnabledAt: new Date('2026-06-20T00:00:00.000Z'),
+        user: { timezone: 'Asia/Tokyo' },
+      },
+    ]);
+    prisma.notificationPreference.updateMany.mockResolvedValueOnce({
+      count: 0,
+    });
+
+    await service.sendDueReminders(claimTime);
+
+    expect(notifications.notifyJournalReminder).not.toHaveBeenCalled();
+    expect(prisma.notificationPreference.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          user: { timezone: 'Asia/Tokyo' },
+        }),
+      }),
     );
   });
 
@@ -851,6 +1274,7 @@ describe('JournalReminderService', () => {
           userId: 'user-2',
           reminderClaimLocalDate: '2026-06-23',
           reminderClaimedAt: laterClaimedAt,
+          user: { timezone: 'UTC' },
           OR: [
             { lastReminderLocalDate: null },
             { lastReminderLocalDate: { lt: '2026-06-23' } },

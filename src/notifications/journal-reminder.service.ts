@@ -39,7 +39,9 @@ export class JournalReminderService {
           pref.reminderHour,
         );
         const persistedDueDate =
-          pref.reminderClaimLocalDate !== pref.lastReminderLocalDate
+          pref.reminderClaimLocalDate &&
+          (pref.reminderClaimedAt !== null ||
+            pref.reminderClaimLocalDate !== pref.lastReminderLocalDate)
             ? pref.reminderClaimLocalDate
             : null;
         let dueDate = persistedDueDate ?? scheduledDueDate;
@@ -164,7 +166,6 @@ export class JournalReminderService {
         } catch (error) {
           await this.clearOwnedClaimAfterBasisChange(
             pref.userId,
-            dueDate,
             claimedAt,
             pref.reminderHour,
             timezone,
@@ -174,39 +175,13 @@ export class JournalReminderService {
         // Complete or release only the lease owned by this attempt, so a slow
         // worker cannot overwrite a replacement lease after its own expires.
         if (delivered) {
-          const completion =
-            await this.prisma.notificationPreference.updateMany({
-              where: {
-                userId: pref.userId,
-                reminderClaimLocalDate: dueDate,
-                reminderClaimedAt: claimedAt,
-                OR: [
-                  { lastReminderLocalDate: null },
-                  { lastReminderLocalDate: { lt: dueDate } },
-                ],
-              },
-              data: {
-                lastReminderLocalDate: dueDate,
-                reminderClaimLocalDate: null,
-                reminderClaimedAt: null,
-              },
-            });
-
-          // A newer delivery may have won while this worker was sending. Release
-          // only this attempt's lease without overwriting the later date.
-          if (completion.count === 0) {
-            await this.prisma.notificationPreference.updateMany({
-              where: {
-                userId: pref.userId,
-                reminderClaimLocalDate: dueDate,
-                reminderClaimedAt: claimedAt,
-              },
-              data: {
-                reminderClaimLocalDate: null,
-                reminderClaimedAt: null,
-              },
-            });
-          }
+          await this.completeOwnedClaim(
+            pref.userId,
+            dueDate,
+            claimedAt,
+            timezone,
+            new Date(),
+          );
         } else {
           const release = await this.prisma.notificationPreference.updateMany({
             where: {
@@ -226,7 +201,6 @@ export class JournalReminderService {
             await this.prisma.notificationPreference.updateMany({
               where: {
                 userId: pref.userId,
-                reminderClaimLocalDate: dueDate,
                 reminderClaimedAt: claimedAt,
               },
               data: {
@@ -252,7 +226,6 @@ export class JournalReminderService {
 
   private async clearOwnedClaimAfterBasisChange(
     userId: string,
-    dueDate: string,
     claimedAt: Date,
     reminderHour: number,
     timezone: string,
@@ -260,7 +233,6 @@ export class JournalReminderService {
     await this.prisma.notificationPreference.updateMany({
       where: {
         userId,
-        reminderClaimLocalDate: dueDate,
         reminderClaimedAt: claimedAt,
         OR: [
           { reminderHour: { not: reminderHour } },
@@ -272,6 +244,101 @@ export class JournalReminderService {
         reminderClaimedAt: null,
       },
     });
+  }
+
+  private async completeOwnedClaim(
+    userId: string,
+    claimedDueDate: string,
+    claimedAt: Date,
+    claimedTimezone: string,
+    completedAt: Date,
+  ): Promise<void> {
+    const completion = await this.prisma.notificationPreference.updateMany({
+      where: {
+        userId,
+        reminderClaimLocalDate: claimedDueDate,
+        reminderClaimedAt: claimedAt,
+        user: { timezone: claimedTimezone },
+        OR: [
+          { lastReminderLocalDate: null },
+          { lastReminderLocalDate: { lt: claimedDueDate } },
+        ],
+      },
+      data: {
+        lastReminderLocalDate: claimedDueDate,
+        reminderClaimLocalDate: null,
+        reminderClaimedAt: null,
+      },
+    });
+    if (completion.count === 1) return;
+
+    // The user's timezone can change while the push transport is in flight.
+    // Re-read that scheduling basis and count the delivered notification
+    // against the local date at completion. The timezone predicate is a CAS:
+    // if it changes again before the write, retry with the latest basis.
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const state = await this.prisma.notificationPreference.findUnique({
+        where: { userId },
+        select: {
+          reminderClaimLocalDate: true,
+          reminderClaimedAt: true,
+          lastReminderLocalDate: true,
+          user: { select: { timezone: true } },
+        },
+      });
+      if (
+        !state ||
+        !state.reminderClaimLocalDate ||
+        state.reminderClaimedAt?.getTime() !== claimedAt.getTime()
+      ) {
+        return;
+      }
+
+      const ownedClaimDate = state.reminderClaimLocalDate;
+      const currentTimezone = state.user?.timezone ?? 'UTC';
+      const completionDueDate =
+        currentTimezone === claimedTimezone
+          ? claimedDueDate
+          : localDateHour(completedAt, currentTimezone).date;
+
+      if (
+        state.lastReminderLocalDate &&
+        state.lastReminderLocalDate >= completionDueDate
+      ) {
+        const release = await this.prisma.notificationPreference.updateMany({
+          where: {
+            userId,
+            reminderClaimLocalDate: ownedClaimDate,
+            reminderClaimedAt: claimedAt,
+            lastReminderLocalDate: state.lastReminderLocalDate,
+            user: { timezone: currentTimezone },
+          },
+          data: {
+            reminderClaimLocalDate: null,
+            reminderClaimedAt: null,
+          },
+        });
+        if (release.count === 1) return;
+        continue;
+      }
+
+      const rebasedCompletion =
+        await this.prisma.notificationPreference.updateMany({
+          where: {
+            userId,
+            reminderClaimLocalDate: ownedClaimDate,
+            reminderClaimedAt: claimedAt,
+            lastReminderLocalDate: state.lastReminderLocalDate,
+            user: { timezone: currentTimezone },
+          },
+          data: {
+            lastReminderLocalDate: completionDueDate,
+            reminderClaimLocalDate: null,
+            reminderClaimedAt: null,
+          },
+        });
+      if (rebasedCompletion.count === 1) return;
+    }
   }
 }
 
