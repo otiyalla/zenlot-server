@@ -5,10 +5,10 @@ import { NotificationsService } from './notifications.service';
 
 /**
  * Sends the daily journaling / discipline nudge. Intended to run hourly; for
- * each opted-in user it fires exactly once per local day, at the user's
- * configured local `reminderHour`, using their IANA timezone. DST-safe (no
- * stored offsets) and idempotent across retries via `lastReminderLocalDate` —
- * the same pattern the drawdown circuit-breaker reset uses.
+ * each opted-in user it becomes due once per local day at the user's configured
+ * local `reminderHour`, using their IANA timezone. DST-safe (no stored offsets)
+ * and idempotent across retries via `lastReminderLocalDate` — the same pattern
+ * the drawdown circuit-breaker reset uses.
  */
 @Injectable()
 export class JournalReminderService {
@@ -28,49 +28,63 @@ export class JournalReminderService {
 
     for (const pref of prefs) {
       try {
-        const { date, hour, minute } = localDateHour(now, pref.user?.timezone);
+        const { date, hour } = localDateHour(now, pref.user?.timezone);
+        const persistedDueDate =
+          pref.reminderClaimLocalDate !== pref.lastReminderLocalDate
+            ? pref.reminderClaimLocalDate
+            : null;
+        const dueDate =
+          persistedDueDate ??
+          latestReminderDueDate(date, hour, pref.reminderHour);
 
-        // Once the configured hour has arrived, keep the reminder due for the
-        // rest of the local day. This lets later hourly sweeps retry temporary
-        // push failures and reminders initially suppressed by quiet hours.
+        // Do not backfill a reminder from before the preference existed. This
+        // distinguishes a newly-created preference before today's reminder
+        // hour from an established preference whose last sweep was missed.
         if (
-          hour < pref.reminderHour &&
-          !isQuietHoursCarryoverDue(
+          !persistedDueDate &&
+          preferenceWasCreatedAfterDueDate(
+            pref.createdAt,
+            pref.user?.timezone,
+            dueDate,
             pref.reminderHour,
-            pref.quietHoursStart,
-            pref.quietHoursEnd,
-            hour * 60 + minute,
           )
         ) {
           continue;
         }
-        if (pref.lastReminderLocalDate === date) continue;
+        if (pref.lastReminderLocalDate === dueDate) continue;
 
-        // Lease the local date before crossing the push-transport boundary.
-        // The lease serialises concurrent sweeps but, unlike the delivered
-        // marker, becomes recoverable if this worker exits before dispatch.
+        // Lease the due date before crossing the push-transport boundary. The
+        // date remains persisted after retryable failures, so a local-midnight
+        // rollover cannot turn an outstanding reminder into today's schedule.
         const leaseExpiresBefore = new Date(
           now.getTime() - JournalReminderService.CLAIM_LEASE_MS,
         );
         const claim = await this.prisma.notificationPreference.updateMany({
           where: {
             userId: pref.userId,
-            OR: [
-              { lastReminderLocalDate: null },
-              { lastReminderLocalDate: { not: date } },
-            ],
             AND: [
               {
                 OR: [
-                  { reminderClaimLocalDate: { not: date } },
-                  { reminderClaimedAt: null },
-                  { reminderClaimedAt: { lt: leaseExpiresBefore } },
+                  { lastReminderLocalDate: null },
+                  { lastReminderLocalDate: { not: dueDate } },
+                ],
+              },
+              {
+                OR: [
+                  { reminderClaimLocalDate: null },
+                  {
+                    reminderClaimLocalDate: dueDate,
+                    OR: [
+                      { reminderClaimedAt: null },
+                      { reminderClaimedAt: { lt: leaseExpiresBefore } },
+                    ],
+                  },
                 ],
               },
             ],
           },
           data: {
-            reminderClaimLocalDate: date,
+            reminderClaimLocalDate: dueDate,
             reminderClaimedAt: now,
           },
         });
@@ -84,17 +98,17 @@ export class JournalReminderService {
         await this.prisma.notificationPreference.updateMany({
           where: {
             userId: pref.userId,
-            reminderClaimLocalDate: date,
+            reminderClaimLocalDate: dueDate,
             reminderClaimedAt: now,
           },
           data: delivered
             ? {
-                lastReminderLocalDate: date,
+                lastReminderLocalDate: dueDate,
                 reminderClaimLocalDate: null,
                 reminderClaimedAt: null,
               }
             : {
-                reminderClaimLocalDate: null,
+                reminderClaimLocalDate: dueDate,
                 reminderClaimedAt: null,
               },
         });
@@ -148,38 +162,25 @@ export function localDateHour(
   return { date, hour, minute };
 }
 
-/**
- * A reminder configured in late quiet hours may have no eligible hourly sweep
- * before midnight. Keep it due the next morning, either after an overnight
- * window ends or after a non-wrapping window ends between 23:00 and midnight.
- */
-function isQuietHoursCarryoverDue(
+function latestReminderDueDate(
+  localDate: string,
+  localHour: number,
   reminderHour: number,
-  quietHoursStart: string | null,
-  quietHoursEnd: string | null,
-  localMinute: number,
-): boolean {
-  const start = parseHhMm(quietHoursStart);
-  const end = parseHhMm(quietHoursEnd);
-  if (start === null || end === null) return false;
+): string {
+  if (localHour >= reminderHour) return localDate;
 
-  const reminderMinute = reminderHour * 60;
-  const reminderFallsInQuietHours =
-    start <= end
-      ? reminderMinute >= start && reminderMinute < end
-      : reminderMinute >= start;
-  const hasNoLaterHourlySweep = start > end || end > 23 * 60;
-
-  return (
-    reminderFallsInQuietHours &&
-    hasNoLaterHourlySweep &&
-    (start <= end || localMinute >= end) &&
-    localMinute < reminderMinute
-  );
+  const previousDate = new Date(`${localDate}T00:00:00.000Z`);
+  previousDate.setUTCDate(previousDate.getUTCDate() - 1);
+  return previousDate.toISOString().slice(0, 10);
 }
 
-function parseHhMm(value: string | null): number | null {
-  if (!value || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value)) return null;
-  const [hour, minute] = value.split(':').map(Number);
-  return hour * 60 + minute;
+function preferenceWasCreatedAfterDueDate(
+  createdAt: Date,
+  timezone: string | null | undefined,
+  dueDate: string,
+  reminderHour: number,
+): boolean {
+  const created = localDateHour(createdAt, timezone);
+  if (created.date !== dueDate) return created.date > dueDate;
+  return created.hour * 60 + created.minute > reminderHour * 60;
 }

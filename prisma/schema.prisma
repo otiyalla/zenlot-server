@@ -243,8 +243,8 @@ model notificationPreference {
   // last fired. Lets the hourly job send exactly once per local day — DST-safe
   // and idempotent across retries, mirroring drawdownState.lastResetLocalDate.
   lastReminderLocalDate String?
-  // A short-lived claim serialises reminder workers without treating an
-  // attempted dispatch as a delivered reminder. Expired claims are retryable.
+  // The claim date also preserves an undelivered reminder's original due date;
+  // claimedAt is the short-lived worker lease. Expired claims are retryable.
   reminderClaimLocalDate String?
   reminderClaimedAt      DateTime?
   createdAt             DateTime @default(now())
