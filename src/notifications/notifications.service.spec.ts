@@ -61,7 +61,7 @@ function setup(opts: {
 describe('NotificationsService dispatch', () => {
   it('does not send when the preference check disallows it', async () => {
     const { service, send, getEnabledTokens } = setup({ allowed: false });
-    await service.notifyJournalReminder('u1');
+    await expect(service.notifyJournalReminder('u1')).resolves.toBe(false);
     expect(getEnabledTokens).not.toHaveBeenCalled();
     expect(send).not.toHaveBeenCalled();
   });
@@ -86,14 +86,37 @@ describe('NotificationsService dispatch', () => {
       allowed: true,
       sendResult: { sentTokens: [], invalidTokens: ['t1'] },
     });
-    await service.notifyJournalReminder('u1');
+    await expect(service.notifyJournalReminder('u1')).resolves.toBe(false);
     expect(disableTokens).toHaveBeenCalledWith(['t1'], 'DeviceNotRegistered');
   });
 
   it('never throws into the caller (best-effort)', async () => {
     const { service, send } = setup({ allowed: true });
     send.mockRejectedValueOnce(new Error('expo down'));
-    await expect(service.notifyJournalReminder('u1')).resolves.toBeUndefined();
+    await expect(service.notifyJournalReminder('u1')).resolves.toBe(false);
+  });
+
+  it('reports successful journal reminder delivery', async () => {
+    const { service } = setup({ allowed: true });
+    await expect(service.notifyJournalReminder('u1')).resolves.toBe(true);
+  });
+
+  it('preserves successful delivery when marking tokens used fails', async () => {
+    const { service, markUsed, disableTokens } = setup({ allowed: true });
+    markUsed.mockRejectedValueOnce(new Error('database unavailable'));
+
+    await expect(service.notifyJournalReminder('u1')).resolves.toBe(true);
+    expect(disableTokens).toHaveBeenCalledWith([], 'DeviceNotRegistered');
+  });
+
+  it('preserves successful delivery when disabling invalid tokens fails', async () => {
+    const { service, disableTokens } = setup({
+      allowed: true,
+      sendResult: { sentTokens: ['t1'], invalidTokens: ['t2'] },
+    });
+    disableTokens.mockRejectedValueOnce(new Error('database unavailable'));
+
+    await expect(service.notifyJournalReminder('u1')).resolves.toBe(true);
   });
 
   it('respects the preference toggle for the weekly behavioral push', async () => {

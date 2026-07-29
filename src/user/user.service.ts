@@ -19,6 +19,8 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { AnalyticsService } from '../analytics/analytics.service';
 import { SocketSessionRegistry } from '../auth/socket-session-registry.service';
+import { isJournalReminderClaimActive } from '../notifications/journal-reminder-lease';
+import { localDateHour } from '../notifications/journal-reminder.service';
 
 @Injectable()
 export class UserService {
@@ -267,6 +269,99 @@ export class UserService {
     return true;
   }
 
+  private async updateWithTimezoneReminderRebase(
+    id: string,
+    timezone: string,
+    data: Prisma.userUpdateInput,
+  ) {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      try {
+        return await this.prisma.$transaction(async (tx) => {
+          const existing = await tx.user.findUniqueOrThrow({
+            where: { id },
+            select: { timezone: true },
+          });
+          const timezoneChanged = existing.timezone !== timezone;
+
+          if (timezoneChanged) {
+            const basisChangedAt = new Date();
+            const preference = await tx.notificationPreference.findUnique({
+              where: { userId: id },
+              select: {
+                reminderHour: true,
+                lastReminderLocalDate: true,
+                reminderClaimLocalDate: true,
+                reminderClaimedAt: true,
+              },
+            });
+
+            if (preference) {
+              const oldLocal = localDateHour(basisChangedAt, existing.timezone);
+              const oldDueDate = latestReminderDueDate(
+                oldLocal.date,
+                oldLocal.hour,
+                preference.reminderHour,
+              );
+              const rebasedLocalDate = localDateHour(
+                basisChangedAt,
+                timezone,
+              ).date;
+              const activeClaim = isJournalReminderClaimActive(
+                preference.reminderClaimLocalDate,
+                preference.reminderClaimedAt,
+                basisChangedAt,
+              );
+              const preferenceUpdate =
+                await tx.notificationPreference.updateMany({
+                  where: {
+                    userId: id,
+                    reminderHour: preference.reminderHour,
+                    lastReminderLocalDate: preference.lastReminderLocalDate,
+                    reminderClaimLocalDate: preference.reminderClaimLocalDate,
+                    reminderClaimedAt: preference.reminderClaimedAt,
+                  },
+                  data: {
+                    ...(preference.lastReminderLocalDate === oldDueDate
+                      ? { lastReminderLocalDate: rebasedLocalDate }
+                      : {}),
+                    reminderClaimLocalDate: activeClaim
+                      ? rebasedLocalDate
+                      : null,
+                    reminderClaimedAt: activeClaim
+                      ? preference.reminderClaimedAt
+                      : null,
+                  },
+                });
+              if (preferenceUpdate.count === 0) {
+                throw new TimezoneReminderBasisConflict();
+              }
+            }
+          }
+
+          const updatedUser = await tx.user.update({
+            // Include the observed timezone so a concurrent basis change
+            // forces a retry instead of making a stale no-clear decision.
+            where: { id, timezone: existing.timezone },
+            data,
+          });
+
+          return updatedUser;
+        });
+      } catch (error) {
+        const errorCode =
+          typeof error === 'object' && error !== null
+            ? (error as { code?: unknown }).code
+            : undefined;
+        const isConditionalConflict =
+          errorCode === 'P2025' ||
+          error instanceof TimezoneReminderBasisConflict;
+        if (!isConditionalConflict || attempt === 4) throw error;
+      }
+    }
+
+    throw new Error(`User timezone changed too frequently for ${id}`);
+  }
+
   //TODO: Test email update
   async update(
     id: string,
@@ -301,7 +396,10 @@ export class UserService {
       ...allowedData,
       updatedAt: new Date(),
     };
-    const update = await this.prisma.user.update({ where: { id }, data });
+    const update =
+      dto.timezone !== undefined
+        ? await this.updateWithTimezoneReminderRebase(id, dto.timezone, data)
+        : await this.prisma.user.update({ where: { id }, data });
 
     // Log user update
     await this.auditService.log({
@@ -567,4 +665,17 @@ export class UserService {
   ): Promise<unknown> {
     return this.initiateAccountDeletion(id, ipAddress, userAgent);
   }
+}
+
+class TimezoneReminderBasisConflict extends Error {}
+
+function latestReminderDueDate(
+  localDate: string,
+  localHour: number,
+  reminderHour: number,
+): string {
+  if (localHour >= reminderHour) return localDate;
+  const previousDate = new Date(`${localDate}T00:00:00.000Z`);
+  previousDate.setUTCDate(previousDate.getUTCDate() - 1);
+  return previousDate.toISOString().slice(0, 10);
 }

@@ -17,10 +17,13 @@ const basePref = (
     drawdownAlerts: true,
     governanceAlerts: true,
     journalReminders: true,
+    journalRemindersEnabledAt: new Date(),
     quietHoursStart: null,
     quietHoursEnd: null,
     reminderHour: 20,
     lastReminderLocalDate: null,
+    reminderClaimLocalDate: null,
+    reminderClaimedAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,
@@ -130,5 +133,464 @@ describe('NotificationPreferenceService.isAllowed', () => {
         now,
       ),
     ).toBe(true);
+  });
+});
+
+describe('NotificationPreferenceService.update', () => {
+  const reEnabledAt = new Date('2026-06-23T19:00:00.000Z');
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  function setup(existing: notificationPreference) {
+    const prisma = {
+      notificationPreference: {
+        findUnique: jest.fn().mockResolvedValue(existing),
+        create: jest.fn(),
+        update: jest.fn().mockResolvedValue(existing),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+    };
+
+    return {
+      service: new NotificationPreferenceService(
+        prisma as unknown as PrismaService,
+      ),
+      prisma,
+    };
+  }
+
+  it('records the actual re-enable boundary and clears an older claim', async () => {
+    jest.useFakeTimers().setSystemTime(reEnabledAt);
+    const { service, prisma } = setup(
+      basePref({
+        journalReminders: false,
+        journalRemindersEnabledAt: new Date('2026-06-20T12:00:00.000Z'),
+        reminderClaimLocalDate: '2026-06-22',
+        reminderClaimedAt: new Date('2026-06-22T20:00:00.000Z'),
+      }),
+    );
+
+    await service.update('u1', { journalReminders: true });
+
+    expect(prisma.notificationPreference.updateMany).toHaveBeenCalledWith({
+      where: {
+        userId: 'u1',
+        pushEnabled: true,
+        journalReminders: false,
+      },
+      data: {
+        journalReminders: true,
+        journalRemindersEnabledAt: reEnabledAt,
+        reminderClaimLocalDate: null,
+        reminderClaimedAt: null,
+      },
+    });
+  });
+
+  it('clears a persisted claim when reminderHour changes', async () => {
+    const enabledAt = new Date('2026-06-20T12:00:00.000Z');
+    const { service, prisma } = setup(
+      basePref({
+        journalReminders: true,
+        journalRemindersEnabledAt: enabledAt,
+        reminderClaimLocalDate: '2026-06-22',
+        reminderClaimedAt: new Date('2026-06-22T20:00:00.000Z'),
+      }),
+    );
+
+    await service.update('u1', {
+      journalReminders: true,
+      reminderHour: 21,
+    });
+
+    expect(prisma.notificationPreference.updateMany).toHaveBeenCalledWith({
+      where: {
+        userId: 'u1',
+        pushEnabled: true,
+        journalReminders: true,
+        reminderHour: 20,
+        reminderClaimLocalDate: '2026-06-22',
+        reminderClaimedAt: new Date('2026-06-22T20:00:00.000Z'),
+      },
+      data: {
+        journalReminders: true,
+        reminderHour: 21,
+        reminderClaimLocalDate: null,
+        reminderClaimedAt: null,
+      },
+    });
+  });
+
+  it('preserves a live owned claim when reminderHour changes', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-06-23T20:05:00.000Z'));
+    const claimedAt = new Date('2026-06-23T20:00:00.000Z');
+    const { service, prisma } = setup(
+      basePref({
+        reminderClaimLocalDate: '2026-06-23',
+        reminderClaimedAt: claimedAt,
+      }),
+    );
+
+    await service.update('u1', { reminderHour: 21 });
+
+    expect(prisma.notificationPreference.updateMany).toHaveBeenCalledWith({
+      where: {
+        userId: 'u1',
+        pushEnabled: true,
+        journalReminders: true,
+        reminderHour: 20,
+        reminderClaimLocalDate: '2026-06-23',
+        reminderClaimedAt: claimedAt,
+      },
+      data: { reminderHour: 21 },
+    });
+  });
+
+  it.each([
+    ['released', null],
+    ['expired', new Date('2026-06-23T19:49:59.999Z')],
+  ])(
+    'clears a %s claim when reminderHour changes',
+    async (_label, claimedAt) => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-06-23T20:05:00.000Z'));
+      const { service, prisma } = setup(
+        basePref({
+          reminderClaimLocalDate: '2026-06-23',
+          reminderClaimedAt: claimedAt,
+        }),
+      );
+
+      await service.update('u1', { reminderHour: 21 });
+
+      expect(prisma.notificationPreference.updateMany).toHaveBeenCalledWith({
+        where: {
+          userId: 'u1',
+          pushEnabled: true,
+          journalReminders: true,
+          reminderHour: 20,
+          reminderClaimLocalDate: '2026-06-23',
+          reminderClaimedAt: claimedAt,
+        },
+        data: {
+          reminderHour: 21,
+          reminderClaimLocalDate: null,
+          reminderClaimedAt: null,
+        },
+      });
+    },
+  );
+
+  it('does not clear a persisted claim when the same reminderHour is supplied', async () => {
+    const { service, prisma } = setup(
+      basePref({
+        reminderClaimLocalDate: '2026-06-22',
+        reminderClaimedAt: new Date('2026-06-22T20:00:00.000Z'),
+      }),
+    );
+
+    await service.update('u1', { reminderHour: 20 });
+
+    expect(prisma.notificationPreference.updateMany).toHaveBeenCalledWith({
+      where: {
+        userId: 'u1',
+        pushEnabled: true,
+        journalReminders: true,
+        reminderHour: 20,
+      },
+      data: { reminderHour: 20 },
+    });
+  });
+
+  it('retries a same-value reminderHour update if the basis changed concurrently', async () => {
+    const initiallyAtRequestedHour = basePref({ reminderHour: 20 });
+    const concurrentlyChanged = basePref({
+      reminderHour: 19,
+      reminderClaimLocalDate: '2026-06-22',
+      reminderClaimedAt: new Date('2026-06-22T19:00:00.000Z'),
+    });
+    const { service, prisma } = setup(initiallyAtRequestedHour);
+    prisma.notificationPreference.findUnique
+      .mockReset()
+      .mockResolvedValueOnce(initiallyAtRequestedHour)
+      .mockResolvedValueOnce(concurrentlyChanged)
+      .mockResolvedValueOnce(basePref({ reminderHour: 20 }));
+    prisma.notificationPreference.updateMany
+      .mockResolvedValueOnce({ count: 0 })
+      .mockResolvedValueOnce({ count: 1 });
+
+    await service.update('u1', { reminderHour: 20 });
+
+    expect(prisma.notificationPreference.updateMany).toHaveBeenNthCalledWith(
+      1,
+      {
+        where: {
+          userId: 'u1',
+          pushEnabled: true,
+          journalReminders: true,
+          reminderHour: 20,
+        },
+        data: { reminderHour: 20 },
+      },
+    );
+    expect(prisma.notificationPreference.updateMany).toHaveBeenNthCalledWith(
+      2,
+      {
+        where: {
+          userId: 'u1',
+          pushEnabled: true,
+          journalReminders: true,
+          reminderHour: 19,
+          reminderClaimLocalDate: '2026-06-22',
+          reminderClaimedAt: new Date('2026-06-22T19:00:00.000Z'),
+        },
+        data: {
+          reminderHour: 20,
+          reminderClaimLocalDate: null,
+          reminderClaimedAt: null,
+        },
+      },
+    );
+  });
+
+  it('retries without erasing a lease acquired after the preference read', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-06-23T20:05:00.000Z'));
+    const initiallyUnclaimed = basePref();
+    const claimedAt = new Date('2026-06-23T20:04:00.000Z');
+    const concurrentlyClaimed = basePref({
+      reminderClaimLocalDate: '2026-06-23',
+      reminderClaimedAt: claimedAt,
+    });
+    const { service, prisma } = setup(initiallyUnclaimed);
+    prisma.notificationPreference.findUnique
+      .mockReset()
+      .mockResolvedValueOnce(initiallyUnclaimed)
+      .mockResolvedValueOnce(concurrentlyClaimed)
+      .mockResolvedValueOnce(basePref({ reminderHour: 21 }));
+    prisma.notificationPreference.updateMany
+      .mockResolvedValueOnce({ count: 0 })
+      .mockResolvedValueOnce({ count: 1 });
+
+    await service.update('u1', { reminderHour: 21 });
+
+    expect(prisma.notificationPreference.updateMany).toHaveBeenNthCalledWith(
+      1,
+      {
+        where: {
+          userId: 'u1',
+          pushEnabled: true,
+          journalReminders: true,
+          reminderHour: 20,
+          reminderClaimLocalDate: null,
+          reminderClaimedAt: null,
+        },
+        data: {
+          reminderHour: 21,
+          reminderClaimLocalDate: null,
+          reminderClaimedAt: null,
+        },
+      },
+    );
+    expect(prisma.notificationPreference.updateMany).toHaveBeenNthCalledWith(
+      2,
+      {
+        where: {
+          userId: 'u1',
+          pushEnabled: true,
+          journalReminders: true,
+          reminderHour: 20,
+          reminderClaimLocalDate: '2026-06-23',
+          reminderClaimedAt: claimedAt,
+        },
+        data: { reminderHour: 21 },
+      },
+    );
+  });
+
+  it('does not clear a persisted claim for an unrelated preference update', async () => {
+    const { service, prisma } = setup(
+      basePref({
+        reminderClaimLocalDate: '2026-06-22',
+        reminderClaimedAt: new Date('2026-06-22T20:00:00.000Z'),
+      }),
+    );
+
+    await service.update('u1', { quietHoursStart: '22:00' });
+
+    expect(prisma.notificationPreference.update).toHaveBeenCalledWith({
+      where: { userId: 'u1' },
+      data: { quietHoursStart: '22:00' },
+    });
+  });
+
+  it('does not move the opt-in boundary when reminders are disabled', async () => {
+    const { service, prisma } = setup(basePref());
+
+    await service.update('u1', { journalReminders: false });
+
+    expect(prisma.notificationPreference.update).toHaveBeenCalledWith({
+      where: { userId: 'u1' },
+      data: { journalReminders: false },
+    });
+  });
+
+  it('treats master push re-enable as a new effective reminder boundary', async () => {
+    jest.useFakeTimers().setSystemTime(reEnabledAt);
+    const { service, prisma } = setup(
+      basePref({
+        pushEnabled: false,
+        journalReminders: true,
+        journalRemindersEnabledAt: new Date('2026-06-20T12:00:00.000Z'),
+        reminderClaimLocalDate: '2026-06-22',
+        reminderClaimedAt: new Date('2026-06-22T20:00:00.000Z'),
+      }),
+    );
+
+    await service.update('u1', { pushEnabled: true });
+
+    expect(prisma.notificationPreference.updateMany).toHaveBeenCalledWith({
+      where: {
+        userId: 'u1',
+        pushEnabled: false,
+        journalReminders: true,
+      },
+      data: {
+        pushEnabled: true,
+        journalRemindersEnabledAt: reEnabledAt,
+        reminderClaimLocalDate: null,
+        reminderClaimedAt: null,
+      },
+    });
+  });
+
+  it('does not move the reminder boundary when master push is enabled while reminders remain disabled', async () => {
+    const { service, prisma } = setup(
+      basePref({
+        pushEnabled: false,
+        journalReminders: false,
+      }),
+    );
+
+    await service.update('u1', { pushEnabled: true });
+
+    expect(prisma.notificationPreference.updateMany).toHaveBeenCalledWith({
+      where: {
+        userId: 'u1',
+        pushEnabled: false,
+        journalReminders: false,
+      },
+      data: {
+        pushEnabled: true,
+      },
+    });
+  });
+
+  it('retries a master re-enable against a concurrent reminder disable without creating a boundary', async () => {
+    jest.useFakeTimers().setSystemTime(reEnabledAt);
+    const initiallyMasterDisabled = basePref({
+      pushEnabled: false,
+      journalReminders: true,
+    });
+    const concurrentlyRemindersDisabled = basePref({
+      pushEnabled: false,
+      journalReminders: false,
+    });
+    const { service, prisma } = setup(initiallyMasterDisabled);
+    prisma.notificationPreference.findUnique
+      .mockReset()
+      .mockResolvedValueOnce(initiallyMasterDisabled)
+      .mockResolvedValueOnce(concurrentlyRemindersDisabled)
+      .mockResolvedValueOnce(
+        basePref({
+          pushEnabled: true,
+          journalReminders: false,
+        }),
+      );
+    prisma.notificationPreference.updateMany
+      .mockResolvedValueOnce({ count: 0 })
+      .mockResolvedValueOnce({ count: 1 });
+
+    await service.update('u1', { pushEnabled: true });
+
+    expect(prisma.notificationPreference.updateMany).toHaveBeenNthCalledWith(
+      1,
+      {
+        where: {
+          userId: 'u1',
+          pushEnabled: false,
+          journalReminders: true,
+        },
+        data: {
+          pushEnabled: true,
+          journalRemindersEnabledAt: reEnabledAt,
+          reminderClaimLocalDate: null,
+          reminderClaimedAt: null,
+        },
+      },
+    );
+    expect(prisma.notificationPreference.updateMany).toHaveBeenNthCalledWith(
+      2,
+      {
+        where: {
+          userId: 'u1',
+          pushEnabled: false,
+          journalReminders: false,
+        },
+        data: {
+          pushEnabled: true,
+        },
+      },
+    );
+  });
+
+  it('retries against a concurrent disable and records the resulting re-enable', async () => {
+    jest.useFakeTimers().setSystemTime(reEnabledAt);
+    const initiallyEnabled = basePref({ journalReminders: true });
+    const concurrentlyDisabled = basePref({ journalReminders: false });
+    const { service, prisma } = setup(initiallyEnabled);
+    prisma.notificationPreference.findUnique
+      .mockReset()
+      .mockResolvedValueOnce(initiallyEnabled)
+      .mockResolvedValueOnce(concurrentlyDisabled)
+      .mockResolvedValueOnce(
+        basePref({
+          journalReminders: true,
+          journalRemindersEnabledAt: reEnabledAt,
+        }),
+      );
+    prisma.notificationPreference.updateMany
+      .mockResolvedValueOnce({ count: 0 })
+      .mockResolvedValueOnce({ count: 1 });
+
+    await service.update('u1', { journalReminders: true });
+
+    expect(prisma.notificationPreference.updateMany).toHaveBeenNthCalledWith(
+      1,
+      {
+        where: {
+          userId: 'u1',
+          pushEnabled: true,
+          journalReminders: true,
+        },
+        data: { journalReminders: true },
+      },
+    );
+    expect(prisma.notificationPreference.updateMany).toHaveBeenNthCalledWith(
+      2,
+      {
+        where: {
+          userId: 'u1',
+          pushEnabled: true,
+          journalReminders: false,
+        },
+        data: {
+          journalReminders: true,
+          journalRemindersEnabledAt: reEnabledAt,
+          reminderClaimLocalDate: null,
+          reminderClaimedAt: null,
+        },
+      },
+    );
   });
 });

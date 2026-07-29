@@ -2,13 +2,17 @@ import { Injectable, Logger } from '@nestjs/common';
 import * as Sentry from '@sentry/nestjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from './notifications.service';
+import {
+  isJournalReminderClaimActive,
+  journalReminderClaimLeaseCutoff,
+} from './journal-reminder-lease';
 
 /**
  * Sends the daily journaling / discipline nudge. Intended to run hourly; for
- * each opted-in user it fires exactly once per local day, at the user's
- * configured local `reminderHour`, using their IANA timezone. DST-safe (no
- * stored offsets) and idempotent across retries via `lastReminderLocalDate` —
- * the same pattern the drawdown circuit-breaker reset uses.
+ * each opted-in user it becomes due once per local day at the user's configured
+ * local `reminderHour`, using their IANA timezone. DST-safe (no stored offsets)
+ * and idempotent across retries via `lastReminderLocalDate` — the same pattern
+ * the drawdown circuit-breaker reset uses.
  */
 @Injectable()
 export class JournalReminderService {
@@ -27,19 +31,185 @@ export class JournalReminderService {
 
     for (const pref of prefs) {
       try {
-        const { date, hour } = localDateHour(now, pref.user?.timezone);
+        const timezone = pref.user?.timezone ?? 'UTC';
+        const { date, hour } = localDateHour(now, timezone);
+        const scheduledDueDate = latestReminderDueDate(
+          date,
+          hour,
+          pref.reminderHour,
+        );
+        const persistedDueDate =
+          pref.reminderClaimLocalDate &&
+          (pref.reminderClaimedAt !== null ||
+            pref.reminderClaimLocalDate !== pref.lastReminderLocalDate)
+            ? pref.reminderClaimLocalDate
+            : null;
+        let dueDate = persistedDueDate ?? scheduledDueDate;
 
-        // Only at the user's local reminder hour, and only once per local day.
-        if (hour !== pref.reminderHour) continue;
-        if (pref.lastReminderLocalDate === date) continue;
+        const persistedClaimInvalidForCurrentBasis =
+          persistedDueDate !== null &&
+          (persistedDueDate !== scheduledDueDate ||
+            preferenceWasEnabledAfterDueDate(
+              pref.journalRemindersEnabledAt,
+              pref.user?.timezone,
+              persistedDueDate,
+              pref.reminderHour,
+            ));
 
-        // Stamp the date first so a mid-loop crash can't double-send on retry.
-        await this.prisma.notificationPreference.update({
-          where: { userId: pref.userId },
-          data: { lastReminderLocalDate: date },
+        // A claim from a previous hour/timezone basis remains valid while its
+        // worker owns the lease. Once released or expired, remove it instead of
+        // letting the old local date (including a same-date, different-hour
+        // claim) pin every future schedule.
+        if (persistedDueDate && persistedClaimInvalidForCurrentBasis) {
+          const cleanupAt = new Date();
+          if (
+            isJournalReminderClaimActive(
+              persistedDueDate,
+              pref.reminderClaimedAt,
+              cleanupAt,
+            )
+          ) {
+            continue;
+          }
+
+          const cleanup = await this.prisma.notificationPreference.updateMany({
+            where: {
+              userId: pref.userId,
+              reminderClaimLocalDate: persistedDueDate,
+              reminderClaimedAt: pref.reminderClaimedAt,
+              OR: [
+                { reminderClaimedAt: null },
+                {
+                  reminderClaimedAt: {
+                    lt: journalReminderClaimLeaseCutoff(cleanupAt),
+                  },
+                },
+              ],
+            },
+            data: {
+              reminderClaimLocalDate: null,
+              reminderClaimedAt: null,
+            },
+          });
+          if (cleanup.count === 0) continue;
+          dueDate = scheduledDueDate;
+        }
+
+        // Do not backfill a reminder from before the latest opt-in. Existing
+        // rows are migrated with createdAt as this boundary, preserving the
+        // historical behavior until the category is explicitly re-enabled.
+        if (
+          preferenceWasEnabledAfterDueDate(
+            pref.journalRemindersEnabledAt,
+            pref.user?.timezone,
+            dueDate,
+            pref.reminderHour,
+          )
+        ) {
+          continue;
+        }
+        // ISO local dates sort chronologically. A later delivery also satisfies
+        // an older due date that can appear after reminderHour is moved later.
+        if (
+          pref.lastReminderLocalDate &&
+          pref.lastReminderLocalDate >= dueDate
+        ) {
+          continue;
+        }
+
+        // Lease the due date before crossing the push-transport boundary. The
+        // date remains persisted after retryable failures, so a local-midnight
+        // rollover cannot turn an outstanding reminder into today's schedule.
+        const claimedAt = new Date();
+        const leaseExpiresBefore = journalReminderClaimLeaseCutoff(claimedAt);
+        const claim = await this.prisma.notificationPreference.updateMany({
+          where: {
+            userId: pref.userId,
+            pushEnabled: true,
+            journalReminders: true,
+            journalRemindersEnabledAt: pref.journalRemindersEnabledAt,
+            reminderHour: pref.reminderHour,
+            user: { timezone },
+            AND: [
+              {
+                OR: [
+                  { lastReminderLocalDate: null },
+                  { lastReminderLocalDate: { lt: dueDate } },
+                ],
+              },
+              {
+                OR: [
+                  { reminderClaimLocalDate: null },
+                  {
+                    reminderClaimLocalDate: dueDate,
+                    OR: [
+                      { reminderClaimedAt: null },
+                      { reminderClaimedAt: { lt: leaseExpiresBefore } },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+          data: {
+            reminderClaimLocalDate: dueDate,
+            reminderClaimedAt: claimedAt,
+          },
         });
+        if (claim.count === 0) continue;
 
-        await this.notifications.notifyJournalReminder(pref.userId);
+        let delivered: boolean;
+        try {
+          delivered = await this.notifications.notifyJournalReminder(
+            pref.userId,
+          );
+        } catch (error) {
+          await this.clearOwnedClaimAfterBasisChange(
+            pref.userId,
+            claimedAt,
+            pref.reminderHour,
+            timezone,
+          );
+          throw error;
+        }
+        // Complete or release only the lease owned by this attempt, so a slow
+        // worker cannot overwrite a replacement lease after its own expires.
+        if (delivered) {
+          await this.completeOwnedClaim(
+            pref.userId,
+            dueDate,
+            claimedAt,
+            timezone,
+            new Date(),
+          );
+        } else {
+          const release = await this.prisma.notificationPreference.updateMany({
+            where: {
+              userId: pref.userId,
+              reminderClaimLocalDate: dueDate,
+              reminderClaimedAt: claimedAt,
+              reminderHour: pref.reminderHour,
+              user: { timezone },
+            },
+            data: {
+              reminderClaimLocalDate: dueDate,
+              reminderClaimedAt: null,
+            },
+          });
+
+          if (release.count === 0) {
+            await this.prisma.notificationPreference.updateMany({
+              where: {
+                userId: pref.userId,
+                reminderClaimedAt: claimedAt,
+              },
+              data: {
+                reminderClaimLocalDate: null,
+                reminderClaimedAt: null,
+              },
+            });
+          }
+        }
       } catch (error) {
         this.logger.warn(
           `Failed to send journal reminder for user ${pref.userId}`,
@@ -53,17 +223,140 @@ export class JournalReminderService {
       }
     }
   }
+
+  private async clearOwnedClaimAfterBasisChange(
+    userId: string,
+    claimedAt: Date,
+    reminderHour: number,
+    timezone: string,
+  ): Promise<void> {
+    await this.prisma.notificationPreference.updateMany({
+      where: {
+        userId,
+        reminderClaimedAt: claimedAt,
+        OR: [
+          { reminderHour: { not: reminderHour } },
+          { user: { timezone: { not: timezone } } },
+        ],
+      },
+      data: {
+        reminderClaimLocalDate: null,
+        reminderClaimedAt: null,
+      },
+    });
+  }
+
+  private async completeOwnedClaim(
+    userId: string,
+    claimedDueDate: string,
+    claimedAt: Date,
+    claimedTimezone: string,
+    completedAt: Date,
+  ): Promise<void> {
+    const completion = await this.prisma.notificationPreference.updateMany({
+      where: {
+        userId,
+        reminderClaimLocalDate: claimedDueDate,
+        reminderClaimedAt: claimedAt,
+        user: { timezone: claimedTimezone },
+        OR: [
+          { lastReminderLocalDate: null },
+          { lastReminderLocalDate: { lt: claimedDueDate } },
+        ],
+      },
+      data: {
+        lastReminderLocalDate: claimedDueDate,
+        reminderClaimLocalDate: null,
+        reminderClaimedAt: null,
+      },
+    });
+    if (completion.count === 1) return;
+
+    // The user's timezone can change while the push transport is in flight.
+    // Re-read that scheduling basis and count the delivered notification
+    // against the local date at completion. The timezone predicate is a CAS:
+    // if it changes again before the write, retry with the latest basis.
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const state = await this.prisma.notificationPreference.findUnique({
+        where: { userId },
+        select: {
+          reminderClaimLocalDate: true,
+          reminderClaimedAt: true,
+          lastReminderLocalDate: true,
+          user: { select: { timezone: true } },
+        },
+      });
+      if (
+        !state ||
+        !state.reminderClaimLocalDate ||
+        state.reminderClaimedAt?.getTime() !== claimedAt.getTime()
+      ) {
+        return;
+      }
+
+      const ownedClaimDate = state.reminderClaimLocalDate;
+      const currentTimezone = state.user?.timezone ?? 'UTC';
+      const completionDueDate =
+        currentTimezone === claimedTimezone
+          ? claimedDueDate
+          : localDateHour(completedAt, currentTimezone).date;
+
+      if (
+        state.lastReminderLocalDate &&
+        state.lastReminderLocalDate >= completionDueDate
+      ) {
+        const release = await this.prisma.notificationPreference.updateMany({
+          where: {
+            userId,
+            reminderClaimLocalDate: ownedClaimDate,
+            reminderClaimedAt: claimedAt,
+            lastReminderLocalDate: state.lastReminderLocalDate,
+            user: { timezone: currentTimezone },
+          },
+          data: {
+            reminderClaimLocalDate: null,
+            reminderClaimedAt: null,
+          },
+        });
+        if (release.count === 1) return;
+        continue;
+      }
+
+      const rebasedCompletion =
+        await this.prisma.notificationPreference.updateMany({
+          where: {
+            userId,
+            reminderClaimLocalDate: ownedClaimDate,
+            reminderClaimedAt: claimedAt,
+            lastReminderLocalDate: state.lastReminderLocalDate,
+            user: { timezone: currentTimezone },
+          },
+          data: {
+            lastReminderLocalDate: completionDueDate,
+            reminderClaimLocalDate: null,
+            reminderClaimedAt: null,
+          },
+        });
+      if (rebasedCompletion.count === 1) return;
+    }
+  }
 }
 
 /**
- * Resolves an instant into the user's local YYYY-MM-DD date and 0-23 hour using
- * their IANA timezone (UTC fallback for missing/invalid names, so one bad value
- * can't break the whole loop).
+ * Resolves an instant into the user's local date and time using their IANA
+ * timezone (UTC fallback for missing/invalid names, so one bad value can't
+ * break the whole loop).
  */
 export function localDateHour(
   now: Date,
   timezone: string | null | undefined,
-): { date: string; hour: number } {
+): {
+  date: string;
+  hour: number;
+  minute: number;
+  second: number;
+  millisecond: number;
+} {
   const tz = timezone || 'UTC';
   const fmt = (zone: string): Intl.DateTimeFormatPart[] =>
     new Intl.DateTimeFormat('en-CA', {
@@ -72,6 +365,9 @@ export function localDateHour(
       month: '2-digit',
       day: '2-digit',
       hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      fractionalSecondDigits: 3,
       hour12: false,
     }).formatToParts(now);
 
@@ -85,5 +381,36 @@ export function localDateHour(
     parts.find((p) => p.type === type)?.value ?? '';
   const date = `${get('year')}-${get('month')}-${get('day')}`;
   const hour = Number(get('hour')) % 24;
-  return { date, hour };
+  const minute = Number(get('minute'));
+  const second = Number(get('second'));
+  const millisecond = Number(get('fractionalSecond'));
+  return { date, hour, minute, second, millisecond };
+}
+
+function latestReminderDueDate(
+  localDate: string,
+  localHour: number,
+  reminderHour: number,
+): string {
+  if (localHour >= reminderHour) return localDate;
+
+  const previousDate = new Date(`${localDate}T00:00:00.000Z`);
+  previousDate.setUTCDate(previousDate.getUTCDate() - 1);
+  return previousDate.toISOString().slice(0, 10);
+}
+
+function preferenceWasEnabledAfterDueDate(
+  enabledAt: Date,
+  timezone: string | null | undefined,
+  dueDate: string,
+  reminderHour: number,
+): boolean {
+  const enabled = localDateHour(enabledAt, timezone);
+  if (enabled.date !== dueDate) return enabled.date > dueDate;
+  const enabledTime =
+    enabled.hour * 60 * 60 * 1000 +
+    enabled.minute * 60 * 1000 +
+    enabled.second * 1000 +
+    enabled.millisecond;
+  return enabledTime > reminderHour * 60 * 60 * 1000;
 }

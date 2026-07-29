@@ -98,8 +98,8 @@ export class NotificationsService {
     );
   }
 
-  async notifyJournalReminder(userId: string): Promise<void> {
-    await this.dispatch(userId, (locale) =>
+  async notifyJournalReminder(userId: string): Promise<boolean> {
+    return this.dispatch(userId, (locale) =>
       buildJournalReminderContent(locale, {
         category: NotificationCategory.JournalReminder,
         route: '/(protected)/(tabs)/journal',
@@ -135,13 +135,13 @@ export class NotificationsService {
   private async dispatch(
     userId: string,
     build: (locale: string) => NotificationContent,
-  ): Promise<void> {
+  ): Promise<boolean> {
     try {
       const user = await this.prisma.user.findUnique({
         where: { id: userId },
         select: { language: true, timezone: true },
       });
-      if (!user) return;
+      if (!user) return false;
 
       const pref = await this.preferences.getOrCreate(userId);
       const content = build(user.language ?? 'en');
@@ -154,11 +154,11 @@ export class NotificationsService {
           user.timezone,
         )
       ) {
-        return;
+        return false;
       }
 
       const tokens = await this.pushTokens.getEnabledTokens(userId);
-      if (tokens.length === 0) return;
+      if (tokens.length === 0) return false;
 
       const message: Omit<ExpoPushMessage, 'to'> = {
         title: content.title,
@@ -174,16 +174,33 @@ export class NotificationsService {
         message,
       );
 
-      await this.pushTokens.markUsed(result.sentTokens);
-      await this.pushTokens.disableTokens(
-        result.invalidTokens,
-        'DeviceNotRegistered',
-      );
+      const deliveryAccepted = result.sentTokens.length > 0;
+      const bookkeepingResults = await Promise.allSettled([
+        this.pushTokens.markUsed(result.sentTokens),
+        this.pushTokens.disableTokens(
+          result.invalidTokens,
+          'DeviceNotRegistered',
+        ),
+      ]);
+
+      for (const bookkeepingResult of bookkeepingResults) {
+        if (bookkeepingResult.status === 'rejected') {
+          this.logger.error(
+            `Failed to reconcile push tokens for user ${userId}`,
+          );
+          Sentry.captureException(bookkeepingResult.reason, {
+            extra: { userId, context: 'NotificationsService.dispatch' },
+          });
+        }
+      }
+
+      return deliveryAccepted;
     } catch (error) {
       this.logger.error(`Failed to dispatch notification to user ${userId}`);
       Sentry.captureException(error, {
         extra: { userId, context: 'NotificationsService.dispatch' },
       });
+      return false;
     }
   }
 }

@@ -7,6 +7,7 @@ import {
   NotificationUrgency,
 } from './notification.types';
 import { UpdateNotificationPreferenceDto } from './dto/update-notification-preference.dto';
+import { isJournalReminderClaimActive } from './journal-reminder-lease';
 
 @Injectable()
 export class NotificationPreferenceService {
@@ -29,11 +30,94 @@ export class NotificationPreferenceService {
     dto: UpdateNotificationPreferenceDto,
   ): Promise<notificationPreference> {
     // Ensure a row exists, then patch only the provided fields.
-    await this.getOrCreate(userId);
-    return this.prisma.notificationPreference.update({
-      where: { userId },
-      data: { ...dto },
-    });
+    let existing = await this.getOrCreate(userId);
+
+    if (
+      dto.pushEnabled !== true &&
+      dto.journalReminders !== true &&
+      dto.reminderHour === undefined
+    ) {
+      return this.prisma.notificationPreference.update({
+        where: { userId },
+        data: { ...dto },
+      });
+    }
+
+    // Compare-and-swap on both toggles so overlapping master/category updates
+    // cannot change whether reminders are effectively enabled without forcing a
+    // retry. On retry, the latest state is observed and the request that
+    // completes a false-to-true effective transition records its boundary.
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const remindersWereEnabled =
+        existing.pushEnabled && existing.journalReminders;
+      const remindersWillBeEnabled =
+        (dto.pushEnabled ?? existing.pushEnabled) &&
+        (dto.journalReminders ?? existing.journalReminders);
+      const journalRemindersReEnabled =
+        !remindersWereEnabled && remindersWillBeEnabled;
+      const reminderHourChanged =
+        dto.reminderHour !== undefined &&
+        dto.reminderHour !== existing.reminderHour;
+      const claimMustBeRevalidated = reminderHourChanged;
+      const preserveActiveBasisChangeClaim =
+        reminderHourChanged &&
+        isJournalReminderClaimActive(
+          existing.reminderClaimLocalDate,
+          existing.reminderClaimedAt,
+          new Date(),
+        );
+      const update = await this.prisma.notificationPreference.updateMany({
+        where: {
+          userId,
+          pushEnabled: existing.pushEnabled,
+          journalReminders: existing.journalReminders,
+          ...(dto.reminderHour !== undefined
+            ? { reminderHour: existing.reminderHour }
+            : {}),
+          ...(claimMustBeRevalidated
+            ? {
+                reminderClaimLocalDate: existing.reminderClaimLocalDate,
+                reminderClaimedAt: existing.reminderClaimedAt,
+              }
+            : {}),
+        },
+        data: {
+          ...dto,
+          ...((journalRemindersReEnabled || claimMustBeRevalidated) &&
+          !preserveActiveBasisChangeClaim
+            ? {
+                reminderClaimLocalDate: null,
+                reminderClaimedAt: null,
+              }
+            : {}),
+          ...(journalRemindersReEnabled
+            ? { journalRemindersEnabledAt: new Date() }
+            : {}),
+        },
+      });
+
+      if (update.count === 1) {
+        const updated = await this.prisma.notificationPreference.findUnique({
+          where: { userId },
+        });
+        if (!updated) {
+          throw new Error(`Notification preferences disappeared for ${userId}`);
+        }
+        return updated;
+      }
+
+      const refreshed = await this.prisma.notificationPreference.findUnique({
+        where: { userId },
+      });
+      if (!refreshed) {
+        throw new Error(`Notification preferences disappeared for ${userId}`);
+      }
+      existing = refreshed;
+    }
+
+    throw new Error(
+      `Notification preferences changed too frequently for ${userId}`,
+    );
   }
 
   /**
