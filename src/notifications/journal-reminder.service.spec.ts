@@ -423,6 +423,72 @@ describe('JournalReminderService', () => {
     );
   });
 
+  it.each([
+    [
+      '30 seconds after the UTC due time',
+      '2026-06-23T20:00:30.000Z',
+      'UTC',
+      '2026-06-23T21:00:00.000Z',
+    ],
+    [
+      'one millisecond after the UTC due time',
+      '2026-06-23T20:00:00.001Z',
+      'UTC',
+      '2026-06-23T21:00:00.000Z',
+    ],
+    [
+      '30 seconds after the local due time outside UTC',
+      '2026-06-24T00:00:30.000Z',
+      'America/Toronto',
+      '2026-06-24T01:00:00.000Z',
+    ],
+  ])(
+    'does not backfill when the latest opt-in was %s',
+    async (_label, enabledAt, timezone, sweepAt) => {
+      const { service, prisma, notifications, pref } = setup(true);
+      prisma.notificationPreference.findMany.mockResolvedValueOnce([
+        {
+          ...pref,
+          lastReminderLocalDate: '2026-06-22',
+          journalRemindersEnabledAt: new Date(enabledAt),
+          user: { timezone },
+        },
+      ]);
+      const sweepTime = new Date(sweepAt);
+      jest.setSystemTime(sweepTime);
+
+      await service.sendDueReminders(sweepTime);
+
+      expect(notifications.notifyJournalReminder).not.toHaveBeenCalled();
+      expect(prisma.notificationPreference.updateMany).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['at the exact due instant', '2026-06-23T20:00:00.000Z'],
+    ['one millisecond before the due instant', '2026-06-23T19:59:59.999Z'],
+  ])(
+    'dispatches the due reminder when the latest opt-in was %s',
+    async (_label, enabledAt) => {
+      const { service, prisma, notifications, pref } = setup(true);
+      prisma.notificationPreference.findMany.mockResolvedValueOnce([
+        {
+          ...pref,
+          lastReminderLocalDate: '2026-06-22',
+          journalRemindersEnabledAt: new Date(enabledAt),
+        },
+      ]);
+      const sweepTime = new Date('2026-06-23T21:00:00.000Z');
+      jest.setSystemTime(sweepTime);
+
+      await service.sendDueReminders(sweepTime);
+
+      expect(notifications.notifyJournalReminder).toHaveBeenCalledWith(
+        'user-1',
+      );
+    },
+  );
+
   it('gives a later user a fresh lease timestamp even when the sweep instant is stale', async () => {
     const { service, prisma, notifications, pref } = setup(true);
     prisma.notificationPreference.findMany.mockResolvedValueOnce([

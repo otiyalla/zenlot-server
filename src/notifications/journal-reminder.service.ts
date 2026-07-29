@@ -168,14 +168,20 @@ export class JournalReminderService {
 }
 
 /**
- * Resolves an instant into the user's local YYYY-MM-DD date and 0-23 hour using
- * their IANA timezone (UTC fallback for missing/invalid names, so one bad value
- * can't break the whole loop).
+ * Resolves an instant into the user's local date and time using their IANA
+ * timezone (UTC fallback for missing/invalid names, so one bad value can't
+ * break the whole loop).
  */
 export function localDateHour(
   now: Date,
   timezone: string | null | undefined,
-): { date: string; hour: number; minute: number } {
+): {
+  date: string;
+  hour: number;
+  minute: number;
+  second: number;
+  millisecond: number;
+} {
   const tz = timezone || 'UTC';
   const fmt = (zone: string): Intl.DateTimeFormatPart[] =>
     new Intl.DateTimeFormat('en-CA', {
@@ -185,6 +191,8 @@ export function localDateHour(
       day: '2-digit',
       hour: '2-digit',
       minute: '2-digit',
+      second: '2-digit',
+      fractionalSecondDigits: 3,
       hour12: false,
     }).formatToParts(now);
 
@@ -199,7 +207,9 @@ export function localDateHour(
   const date = `${get('year')}-${get('month')}-${get('day')}`;
   const hour = Number(get('hour')) % 24;
   const minute = Number(get('minute'));
-  return { date, hour, minute };
+  const second = Number(get('second'));
+  const millisecond = Number(get('fractionalSecond'));
+  return { date, hour, minute, second, millisecond };
 }
 
 function latestReminderDueDate(
@@ -222,5 +232,10 @@ function preferenceWasEnabledAfterDueDate(
 ): boolean {
   const enabled = localDateHour(enabledAt, timezone);
   if (enabled.date !== dueDate) return enabled.date > dueDate;
-  return enabled.hour * 60 + enabled.minute > reminderHour * 60;
+  const enabledTime =
+    enabled.hour * 60 * 60 * 1000 +
+    enabled.minute * 60 * 1000 +
+    enabled.second * 1000 +
+    enabled.millisecond;
+  return enabledTime > reminderHour * 60 * 60 * 1000;
 }
