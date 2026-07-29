@@ -134,52 +134,60 @@ export class TradeLogService {
         ? calculation.actualCapitalExposure * calculation.rewardToRisk
         : 0;
 
-    const created = await this.prisma.trade.create({
-      data: {
-        userId,
-        symbol: calculation.symbol,
-        entry: calculation.entry,
-        lot: calculation.lotSizeRounded,
-        pips: calculation.pipSize,
-        execution: calculation.execution,
-        accountCurrency,
-        exchangeRate: calculation.exchangeRate,
-        rr: calculation.rewardToRisk ?? 0,
-        risk: calculation.actualCapitalExposure,
-        reward: rewardValue,
-        stopLoss: {
-          value: calculation.stopPrice,
-          pips: calculation.stopDistancePips,
+    // The trade and its governance evidence are one logical write. Keeping
+    // both creates inside the same transaction prevents an orphaned trade when
+    // governance persistence fails, and prevents retries from duplicating the
+    // journal entry without its audit trail.
+    const { created, log } = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.trade.create({
+        data: {
+          userId,
+          symbol: calculation.symbol,
+          entry: calculation.entry,
+          lot: calculation.lotSizeRounded,
+          pips: calculation.pipSize,
+          execution: calculation.execution,
+          accountCurrency,
+          exchangeRate: calculation.exchangeRate,
+          rr: calculation.rewardToRisk ?? 0,
+          risk: calculation.actualCapitalExposure,
+          reward: rewardValue,
+          stopLoss: {
+            value: calculation.stopPrice,
+            pips: calculation.stopDistancePips,
+          },
+          takeProfit: {
+            value: calculation.targetPrice ?? 0,
+            pips: calculation.rewardPips ?? 0,
+          },
+          status: 'open',
+          capitalExposure: calculation.actualCapitalExposure,
+          capitalExposurePct: calculation.capitalExposurePct,
+          governanceStatus: governance.overallStatus,
+          overridden,
+          plainText: dto.plainText ?? null,
+          editorState: dto.editorState ?? null,
         },
-        takeProfit: {
-          value: calculation.targetPrice ?? 0,
-          pips: calculation.rewardPips ?? 0,
-        },
-        status: 'open',
-        capitalExposure: calculation.actualCapitalExposure,
-        capitalExposurePct: calculation.capitalExposurePct,
-        governanceStatus: governance.overallStatus,
-        overridden,
-        plainText: dto.plainText ?? null,
-        editorState: dto.editorState ?? null,
-      },
-    });
+      });
 
-    const log = await this.prisma.governanceLog.create({
-      data: {
-        userId,
-        tradeId: created.id,
-        overallStatus: governance.overallStatus,
-        checksJson: JSON.parse(
-          JSON.stringify(governance.checks),
-        ) as Prisma.InputJsonValue,
-        blockedReason: governance.blockedReason,
-        acknowledged: overridden,
-        // Record which blocking rules were overridden (all of them, since an
-        // override requires acknowledging every blocking rule).
-        acknowledgedRules: overridden ? blockedRuleKeys : [],
-        overrideReason: overridden ? (dto.overrideReason ?? null) : null,
-      },
+      const log = await tx.governanceLog.create({
+        data: {
+          userId,
+          tradeId: created.id,
+          overallStatus: governance.overallStatus,
+          checksJson: JSON.parse(
+            JSON.stringify(governance.checks),
+          ) as Prisma.InputJsonValue,
+          blockedReason: governance.blockedReason,
+          acknowledged: overridden,
+          // Record which blocking rules were overridden (all of them, since an
+          // override requires acknowledging every blocking rule).
+          acknowledgedRules: overridden ? blockedRuleKeys : [],
+          overrideReason: overridden ? (dto.overrideReason ?? null) : null,
+        },
+      });
+
+      return { created, log };
     });
 
     // Phase 2 soft-gate (decision #2 — warn, never block). If the client passed

@@ -97,11 +97,13 @@ function makeService(opts: {
 
   const tx = {
     trade: {
+      create: tradeCreate,
       update: txUpdate,
       updateMany: txUpdateMany,
       findUnique: txFindUnique,
       delete: txDelete,
     },
+    governanceLog: { create: govCreate },
     riskProfile: { update: profileUpdate, findUnique: profileFindUnique },
     // closeTrade snapshots breach flags before/after settlement for a drawdown push.
     drawdownState: {
@@ -114,6 +116,9 @@ function makeService(opts: {
   };
   const tradeUpdate =
     opts.tradeUpdate ?? jest.fn().mockResolvedValue({ id: 't1' });
+  const transaction = jest
+    .fn()
+    .mockImplementation((cb: (t: unknown) => unknown) => cb(tx));
   const prisma = {
     user: {
       findUniqueOrThrow:
@@ -127,9 +132,7 @@ function makeService(opts: {
       update: tradeUpdate,
     },
     governanceLog: { create: govCreate },
-    $transaction: jest
-      .fn()
-      .mockImplementation((cb: (t: unknown) => unknown) => cb(tx)),
+    $transaction: transaction,
   } as unknown as PrismaService;
 
   const calculateActiveTrade =
@@ -197,6 +200,7 @@ function makeService(opts: {
     service,
     tradeCreate,
     govCreate,
+    transaction,
     queueAdd,
     txUpdate,
     txUpdateMany,
@@ -244,6 +248,18 @@ describe('TradeLogService.logTrade', () => {
       expect.any(Object),
     );
     expect(result).toEqual({ id: 't1' });
+  });
+
+  it('rolls back the trade transaction when governance logging fails', async () => {
+    const governanceError = new Error('governance database unavailable');
+    const govCreate = jest.fn().mockRejectedValue(governanceError);
+    const { service, tradeCreate, transaction } = makeService({ govCreate });
+
+    await expect(service.logTrade('u1', 'USD', setup)).rejects.toBe(
+      governanceError,
+    );
+    expect(transaction).toHaveBeenCalledTimes(1);
+    expect(tradeCreate).toHaveBeenCalledTimes(1);
   });
 
   it('persists the trade journal (plainText/editorState) when provided', async () => {
