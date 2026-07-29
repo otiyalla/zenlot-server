@@ -19,6 +19,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { AnalyticsService } from '../analytics/analytics.service';
 import { SocketSessionRegistry } from '../auth/socket-session-registry.service';
+import { journalReminderClaimLeaseCutoff } from '../notifications/journal-reminder-lease';
 
 @Injectable()
 export class UserService {
@@ -289,9 +290,22 @@ export class UserService {
 
           if (timezoneChanged) {
             // A persisted reminder claim is expressed in the user's local
-            // calendar. updateMany leaves a missing preference row missing.
+            // calendar. Preserve a live owner so its completion can record the
+            // delivery; clear only released, incomplete, or expired claims.
+            // updateMany leaves a missing preference row missing.
             await tx.notificationPreference.updateMany({
-              where: { userId: id },
+              where: {
+                userId: id,
+                OR: [
+                  { reminderClaimLocalDate: null },
+                  { reminderClaimedAt: null },
+                  {
+                    reminderClaimedAt: {
+                      lt: journalReminderClaimLeaseCutoff(new Date()),
+                    },
+                  },
+                ],
+              },
               data: {
                 reminderClaimLocalDate: null,
                 reminderClaimedAt: null,

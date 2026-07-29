@@ -2,6 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import * as Sentry from '@sentry/nestjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from './notifications.service';
+import {
+  isJournalReminderClaimActive,
+  journalReminderClaimLeaseCutoff,
+} from './journal-reminder-lease';
 
 /**
  * Sends the daily journaling / discipline nudge. Intended to run hourly; for
@@ -12,7 +16,6 @@ import { NotificationsService } from './notifications.service';
  */
 @Injectable()
 export class JournalReminderService {
-  private static readonly CLAIM_LEASE_MS = 15 * 60 * 1000;
   private readonly logger = new Logger(JournalReminderService.name);
 
   constructor(
@@ -30,13 +33,65 @@ export class JournalReminderService {
       try {
         const timezone = pref.user?.timezone ?? 'UTC';
         const { date, hour } = localDateHour(now, timezone);
+        const scheduledDueDate = latestReminderDueDate(
+          date,
+          hour,
+          pref.reminderHour,
+        );
         const persistedDueDate =
           pref.reminderClaimLocalDate !== pref.lastReminderLocalDate
             ? pref.reminderClaimLocalDate
             : null;
-        const dueDate =
-          persistedDueDate ??
-          latestReminderDueDate(date, hour, pref.reminderHour);
+        let dueDate = persistedDueDate ?? scheduledDueDate;
+
+        const persistedClaimInvalidForCurrentBasis =
+          persistedDueDate !== null &&
+          (persistedDueDate !== scheduledDueDate ||
+            preferenceWasEnabledAfterDueDate(
+              pref.journalRemindersEnabledAt,
+              pref.user?.timezone,
+              persistedDueDate,
+              pref.reminderHour,
+            ));
+
+        // A claim from a previous hour/timezone basis remains valid while its
+        // worker owns the lease. Once released or expired, remove it instead of
+        // letting the old local date (including a same-date, different-hour
+        // claim) pin every future schedule.
+        if (persistedDueDate && persistedClaimInvalidForCurrentBasis) {
+          const cleanupAt = new Date();
+          if (
+            isJournalReminderClaimActive(
+              persistedDueDate,
+              pref.reminderClaimedAt,
+              cleanupAt,
+            )
+          ) {
+            continue;
+          }
+
+          const cleanup = await this.prisma.notificationPreference.updateMany({
+            where: {
+              userId: pref.userId,
+              reminderClaimLocalDate: persistedDueDate,
+              reminderClaimedAt: pref.reminderClaimedAt,
+              OR: [
+                { reminderClaimedAt: null },
+                {
+                  reminderClaimedAt: {
+                    lt: journalReminderClaimLeaseCutoff(cleanupAt),
+                  },
+                },
+              ],
+            },
+            data: {
+              reminderClaimLocalDate: null,
+              reminderClaimedAt: null,
+            },
+          });
+          if (cleanup.count === 0) continue;
+          dueDate = scheduledDueDate;
+        }
 
         // Do not backfill a reminder from before the latest opt-in. Existing
         // rows are migrated with createdAt as this boundary, preserving the
@@ -64,9 +119,7 @@ export class JournalReminderService {
         // date remains persisted after retryable failures, so a local-midnight
         // rollover cannot turn an outstanding reminder into today's schedule.
         const claimedAt = new Date();
-        const leaseExpiresBefore = new Date(
-          claimedAt.getTime() - JournalReminderService.CLAIM_LEASE_MS,
-        );
+        const leaseExpiresBefore = journalReminderClaimLeaseCutoff(claimedAt);
         const claim = await this.prisma.notificationPreference.updateMany({
           where: {
             userId: pref.userId,
@@ -103,9 +156,21 @@ export class JournalReminderService {
         });
         if (claim.count === 0) continue;
 
-        const delivered = await this.notifications.notifyJournalReminder(
-          pref.userId,
-        );
+        let delivered: boolean;
+        try {
+          delivered = await this.notifications.notifyJournalReminder(
+            pref.userId,
+          );
+        } catch (error) {
+          await this.clearOwnedClaimAfterBasisChange(
+            pref.userId,
+            dueDate,
+            claimedAt,
+            pref.reminderHour,
+            timezone,
+          );
+          throw error;
+        }
         // Complete or release only the lease owned by this attempt, so a slow
         // worker cannot overwrite a replacement lease after its own expires.
         if (delivered) {
@@ -143,17 +208,33 @@ export class JournalReminderService {
             });
           }
         } else {
-          await this.prisma.notificationPreference.updateMany({
+          const release = await this.prisma.notificationPreference.updateMany({
             where: {
               userId: pref.userId,
               reminderClaimLocalDate: dueDate,
               reminderClaimedAt: claimedAt,
+              reminderHour: pref.reminderHour,
+              user: { timezone },
             },
             data: {
               reminderClaimLocalDate: dueDate,
               reminderClaimedAt: null,
             },
           });
+
+          if (release.count === 0) {
+            await this.prisma.notificationPreference.updateMany({
+              where: {
+                userId: pref.userId,
+                reminderClaimLocalDate: dueDate,
+                reminderClaimedAt: claimedAt,
+              },
+              data: {
+                reminderClaimLocalDate: null,
+                reminderClaimedAt: null,
+              },
+            });
+          }
         }
       } catch (error) {
         this.logger.warn(
@@ -167,6 +248,30 @@ export class JournalReminderService {
         });
       }
     }
+  }
+
+  private async clearOwnedClaimAfterBasisChange(
+    userId: string,
+    dueDate: string,
+    claimedAt: Date,
+    reminderHour: number,
+    timezone: string,
+  ): Promise<void> {
+    await this.prisma.notificationPreference.updateMany({
+      where: {
+        userId,
+        reminderClaimLocalDate: dueDate,
+        reminderClaimedAt: claimedAt,
+        OR: [
+          { reminderHour: { not: reminderHour } },
+          { user: { timezone: { not: timezone } } },
+        ],
+      },
+      data: {
+        reminderClaimLocalDate: null,
+        reminderClaimedAt: null,
+      },
+    });
   }
 }
 

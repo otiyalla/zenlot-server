@@ -211,6 +211,8 @@ describe('NotificationPreferenceService.update', () => {
         pushEnabled: true,
         journalReminders: true,
         reminderHour: 20,
+        reminderClaimLocalDate: '2026-06-22',
+        reminderClaimedAt: new Date('2026-06-22T20:00:00.000Z'),
       },
       data: {
         journalReminders: true,
@@ -220,6 +222,65 @@ describe('NotificationPreferenceService.update', () => {
       },
     });
   });
+
+  it('preserves a live owned claim when reminderHour changes', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-06-23T20:05:00.000Z'));
+    const claimedAt = new Date('2026-06-23T20:00:00.000Z');
+    const { service, prisma } = setup(
+      basePref({
+        reminderClaimLocalDate: '2026-06-23',
+        reminderClaimedAt: claimedAt,
+      }),
+    );
+
+    await service.update('u1', { reminderHour: 21 });
+
+    expect(prisma.notificationPreference.updateMany).toHaveBeenCalledWith({
+      where: {
+        userId: 'u1',
+        pushEnabled: true,
+        journalReminders: true,
+        reminderHour: 20,
+        reminderClaimLocalDate: '2026-06-23',
+        reminderClaimedAt: claimedAt,
+      },
+      data: { reminderHour: 21 },
+    });
+  });
+
+  it.each([
+    ['released', null],
+    ['expired', new Date('2026-06-23T19:49:59.999Z')],
+  ])(
+    'clears a %s claim when reminderHour changes',
+    async (_label, claimedAt) => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-06-23T20:05:00.000Z'));
+      const { service, prisma } = setup(
+        basePref({
+          reminderClaimLocalDate: '2026-06-23',
+          reminderClaimedAt: claimedAt,
+        }),
+      );
+
+      await service.update('u1', { reminderHour: 21 });
+
+      expect(prisma.notificationPreference.updateMany).toHaveBeenCalledWith({
+        where: {
+          userId: 'u1',
+          pushEnabled: true,
+          journalReminders: true,
+          reminderHour: 20,
+          reminderClaimLocalDate: '2026-06-23',
+          reminderClaimedAt: claimedAt,
+        },
+        data: {
+          reminderHour: 21,
+          reminderClaimLocalDate: null,
+          reminderClaimedAt: null,
+        },
+      });
+    },
+  );
 
   it('does not clear a persisted claim when the same reminderHour is supplied', async () => {
     const { service, prisma } = setup(
@@ -281,12 +342,68 @@ describe('NotificationPreferenceService.update', () => {
           pushEnabled: true,
           journalReminders: true,
           reminderHour: 19,
+          reminderClaimLocalDate: '2026-06-22',
+          reminderClaimedAt: new Date('2026-06-22T19:00:00.000Z'),
         },
         data: {
           reminderHour: 20,
           reminderClaimLocalDate: null,
           reminderClaimedAt: null,
         },
+      },
+    );
+  });
+
+  it('retries without erasing a lease acquired after the preference read', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-06-23T20:05:00.000Z'));
+    const initiallyUnclaimed = basePref();
+    const claimedAt = new Date('2026-06-23T20:04:00.000Z');
+    const concurrentlyClaimed = basePref({
+      reminderClaimLocalDate: '2026-06-23',
+      reminderClaimedAt: claimedAt,
+    });
+    const { service, prisma } = setup(initiallyUnclaimed);
+    prisma.notificationPreference.findUnique
+      .mockReset()
+      .mockResolvedValueOnce(initiallyUnclaimed)
+      .mockResolvedValueOnce(concurrentlyClaimed)
+      .mockResolvedValueOnce(basePref({ reminderHour: 21 }));
+    prisma.notificationPreference.updateMany
+      .mockResolvedValueOnce({ count: 0 })
+      .mockResolvedValueOnce({ count: 1 });
+
+    await service.update('u1', { reminderHour: 21 });
+
+    expect(prisma.notificationPreference.updateMany).toHaveBeenNthCalledWith(
+      1,
+      {
+        where: {
+          userId: 'u1',
+          pushEnabled: true,
+          journalReminders: true,
+          reminderHour: 20,
+          reminderClaimLocalDate: null,
+          reminderClaimedAt: null,
+        },
+        data: {
+          reminderHour: 21,
+          reminderClaimLocalDate: null,
+          reminderClaimedAt: null,
+        },
+      },
+    );
+    expect(prisma.notificationPreference.updateMany).toHaveBeenNthCalledWith(
+      2,
+      {
+        where: {
+          userId: 'u1',
+          pushEnabled: true,
+          journalReminders: true,
+          reminderHour: 20,
+          reminderClaimLocalDate: '2026-06-23',
+          reminderClaimedAt: claimedAt,
+        },
+        data: { reminderHour: 21 },
       },
     );
   });

@@ -7,6 +7,7 @@ import {
   NotificationUrgency,
 } from './notification.types';
 import { UpdateNotificationPreferenceDto } from './dto/update-notification-preference.dto';
+import { isJournalReminderClaimActive } from './journal-reminder-lease';
 
 @Injectable()
 export class NotificationPreferenceService {
@@ -57,6 +58,14 @@ export class NotificationPreferenceService {
       const reminderHourChanged =
         dto.reminderHour !== undefined &&
         dto.reminderHour !== existing.reminderHour;
+      const claimMustBeRevalidated = reminderHourChanged;
+      const preserveActiveBasisChangeClaim =
+        reminderHourChanged &&
+        isJournalReminderClaimActive(
+          existing.reminderClaimLocalDate,
+          existing.reminderClaimedAt,
+          new Date(),
+        );
       const update = await this.prisma.notificationPreference.updateMany({
         where: {
           userId,
@@ -65,10 +74,17 @@ export class NotificationPreferenceService {
           ...(dto.reminderHour !== undefined
             ? { reminderHour: existing.reminderHour }
             : {}),
+          ...(claimMustBeRevalidated
+            ? {
+                reminderClaimLocalDate: existing.reminderClaimLocalDate,
+                reminderClaimedAt: existing.reminderClaimedAt,
+              }
+            : {}),
         },
         data: {
           ...dto,
-          ...(journalRemindersReEnabled || reminderHourChanged
+          ...((journalRemindersReEnabled || claimMustBeRevalidated) &&
+          !preserveActiveBasisChangeClaim
             ? {
                 reminderClaimLocalDate: null,
                 reminderClaimedAt: null,

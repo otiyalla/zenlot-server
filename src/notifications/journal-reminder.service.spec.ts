@@ -1,6 +1,7 @@
 import { JournalReminderService } from './journal-reminder.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from './notifications.service';
+import { NotificationPreferenceService } from './notification-preference.service';
 
 describe('JournalReminderService', () => {
   const now = new Date('2026-06-23T20:15:00.000Z');
@@ -113,6 +114,93 @@ describe('JournalReminderService', () => {
     });
   });
 
+  it('records completion when reminderHour changes during active dispatch and does not duplicate', async () => {
+    let state: any = {
+      userId: 'user-1',
+      pushEnabled: true,
+      tradeClosed: true,
+      coachingReady: true,
+      drawdownAlerts: true,
+      governanceAlerts: true,
+      journalReminders: true,
+      reminderHour: 20,
+      lastReminderLocalDate: null,
+      reminderClaimLocalDate: null,
+      reminderClaimedAt: null,
+      quietHoursStart: null,
+      quietHoursEnd: null,
+      createdAt: new Date('2026-06-20T00:00:00.000Z'),
+      updatedAt: new Date('2026-06-20T00:00:00.000Z'),
+      journalRemindersEnabledAt: new Date('2026-06-20T00:00:00.000Z'),
+    };
+    const sameInstant = (left: unknown, right: unknown) =>
+      left instanceof Date &&
+      right instanceof Date &&
+      left.getTime() === right.getTime();
+    const prisma = {
+      notificationPreference: {
+        findMany: jest
+          .fn()
+          .mockImplementation(async () => [
+            { ...state, user: { timezone: 'UTC' } },
+          ]),
+        findUnique: jest.fn().mockImplementation(async () => ({ ...state })),
+        create: jest.fn(),
+        update: jest.fn(),
+        updateMany: jest.fn().mockImplementation(async ({ where, data }) => {
+          if (data.reminderHour !== undefined) {
+            const claimMatches =
+              where.reminderClaimLocalDate === state.reminderClaimLocalDate &&
+              (where.reminderClaimedAt === null
+                ? state.reminderClaimedAt === null
+                : sameInstant(
+                    where.reminderClaimedAt,
+                    state.reminderClaimedAt,
+                  ));
+            if (where.reminderHour !== state.reminderHour || !claimMatches) {
+              return { count: 0 };
+            }
+          }
+          if (
+            where.reminderClaimedAt instanceof Date &&
+            state.reminderClaimedAt instanceof Date &&
+            !sameInstant(where.reminderClaimedAt, state.reminderClaimedAt)
+          ) {
+            return { count: 0 };
+          }
+          state = { ...state, ...data };
+          return { count: 1 };
+        }),
+      },
+    };
+    const preferences = new NotificationPreferenceService(
+      prisma as unknown as PrismaService,
+    );
+    const notifications = {
+      notifyJournalReminder: jest.fn().mockImplementation(async () => {
+        await preferences.update('user-1', { reminderHour: 21 });
+        return true;
+      }),
+    };
+    const service = new JournalReminderService(
+      prisma as unknown as PrismaService,
+      notifications as unknown as NotificationsService,
+    );
+
+    await service.sendDueReminders(now);
+    await service.sendDueReminders(new Date('2026-06-23T21:15:00.000Z'));
+
+    expect(state).toEqual(
+      expect.objectContaining({
+        reminderHour: 21,
+        lastReminderLocalDate: '2026-06-23',
+        reminderClaimLocalDate: null,
+        reminderClaimedAt: null,
+      }),
+    );
+    expect(notifications.notifyJournalReminder).toHaveBeenCalledTimes(1);
+  });
+
   it.each([
     ['a failed push', false],
     ['a suppressed or tokenless push', false],
@@ -126,6 +214,8 @@ describe('JournalReminderService', () => {
         userId: 'user-1',
         reminderClaimLocalDate: '2026-06-23',
         reminderClaimedAt: now,
+        reminderHour: 20,
+        user: { timezone: 'UTC' },
       },
       data: {
         reminderClaimLocalDate: '2026-06-23',
@@ -162,7 +252,7 @@ describe('JournalReminderService', () => {
     expect(prisma.notificationPreference.updateMany).not.toHaveBeenCalled();
   });
 
-  it('does not let a cleared 20:00 claim pin future reminders after moving to 18:00', async () => {
+  it('clears an inactive old-basis claim and dispatches the current schedule in the same sweep', async () => {
     const { service, prisma, notifications, pref } = setup(true);
     const changedHourPref = {
       ...pref,
@@ -172,24 +262,195 @@ describe('JournalReminderService', () => {
       reminderClaimedAt: null,
     };
     const nextDay = new Date('2026-06-24T18:15:00.000Z');
-    prisma.notificationPreference.findMany
-      .mockResolvedValueOnce([changedHourPref])
-      .mockResolvedValueOnce([
-        {
-          ...changedHourPref,
-          reminderClaimLocalDate: null,
-        },
-      ]);
+    prisma.notificationPreference.findMany.mockResolvedValueOnce([
+      changedHourPref,
+    ]);
 
-    // This reproduces the old pin: the 20:00 claim is selected first and the
-    // 18:00 opt-in guard rejects that old date.
-    await service.sendDueReminders(nextDay);
-    expect(notifications.notifyJournalReminder).not.toHaveBeenCalled();
-
-    // Once the basis update clears the old claim, the current 18:00 schedule
-    // advances to the next local date and dispatches normally.
     await service.sendDueReminders(nextDay);
     expect(notifications.notifyJournalReminder).toHaveBeenCalledWith('user-1');
+    expect(prisma.notificationPreference.updateMany).toHaveBeenNthCalledWith(
+      1,
+      {
+        where: {
+          userId: 'user-1',
+          reminderClaimLocalDate: '2026-06-23',
+          reminderClaimedAt: null,
+          OR: [
+            { reminderClaimedAt: null },
+            {
+              reminderClaimedAt: {
+                lt: new Date('2026-06-23T20:00:00.000Z'),
+              },
+            },
+          ],
+        },
+        data: {
+          reminderClaimLocalDate: null,
+          reminderClaimedAt: null,
+        },
+      },
+    );
+  });
+
+  it('clears a released same-date claim whose old hour is before the current opt-in boundary', async () => {
+    const { service, prisma, notifications, pref } = setup(true);
+    const changedHourPref = {
+      ...pref,
+      reminderHour: 18,
+      journalRemindersEnabledAt: new Date('2026-06-23T19:00:00.000Z'),
+      reminderClaimLocalDate: '2026-06-23',
+      reminderClaimedAt: null,
+    };
+    prisma.notificationPreference.findMany.mockResolvedValueOnce([
+      changedHourPref,
+    ]);
+
+    await service.sendDueReminders(now);
+
+    expect(prisma.notificationPreference.updateMany).toHaveBeenCalledTimes(1);
+    expect(prisma.notificationPreference.updateMany).toHaveBeenCalledWith({
+      where: {
+        userId: 'user-1',
+        reminderClaimLocalDate: '2026-06-23',
+        reminderClaimedAt: null,
+        OR: [
+          { reminderClaimedAt: null },
+          {
+            reminderClaimedAt: {
+              lt: new Date('2026-06-23T20:00:00.000Z'),
+            },
+          },
+        ],
+      },
+      data: {
+        reminderClaimLocalDate: null,
+        reminderClaimedAt: null,
+      },
+    });
+    expect(notifications.notifyJournalReminder).not.toHaveBeenCalled();
+  });
+
+  it('clears a preserved claim when false delivery follows a basis change', async () => {
+    const { service, prisma, notifications, pref } = setup(false);
+    const changedHourPref = {
+      ...pref,
+      reminderHour: 18,
+      reminderClaimLocalDate: null,
+      reminderClaimedAt: null,
+    };
+    prisma.notificationPreference.findMany
+      .mockResolvedValueOnce([pref])
+      .mockResolvedValueOnce([changedHourPref]);
+    prisma.notificationPreference.updateMany
+      .mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValueOnce({ count: 0 })
+      .mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValueOnce({ count: 1 });
+    notifications.notifyJournalReminder
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+
+    await service.sendDueReminders(now);
+    await service.sendDueReminders(now);
+
+    expect(prisma.notificationPreference.updateMany).toHaveBeenNthCalledWith(
+      3,
+      {
+        where: {
+          userId: 'user-1',
+          reminderClaimLocalDate: '2026-06-23',
+          reminderClaimedAt: now,
+        },
+        data: {
+          reminderClaimLocalDate: null,
+          reminderClaimedAt: null,
+        },
+      },
+    );
+    expect(notifications.notifyJournalReminder).toHaveBeenCalledTimes(2);
+  });
+
+  it('clears a preserved claim when delivery throws after a basis change', async () => {
+    const { service, prisma, notifications, pref } = setup(true);
+    prisma.notificationPreference.findMany
+      .mockResolvedValueOnce([pref])
+      .mockResolvedValueOnce([
+        {
+          ...pref,
+          reminderHour: 18,
+          reminderClaimLocalDate: null,
+          reminderClaimedAt: null,
+        },
+      ]);
+    prisma.notificationPreference.updateMany
+      .mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValueOnce({ count: 1 });
+    notifications.notifyJournalReminder
+      .mockRejectedValueOnce(new Error('transport failed after hour change'))
+      .mockResolvedValueOnce(true);
+
+    await service.sendDueReminders(now);
+    await service.sendDueReminders(now);
+
+    expect(prisma.notificationPreference.updateMany).toHaveBeenNthCalledWith(
+      2,
+      {
+        where: {
+          userId: 'user-1',
+          reminderClaimLocalDate: '2026-06-23',
+          reminderClaimedAt: now,
+          OR: [
+            { reminderHour: { not: 20 } },
+            { user: { timezone: { not: 'UTC' } } },
+          ],
+        },
+        data: {
+          reminderClaimLocalDate: null,
+          reminderClaimedAt: null,
+        },
+      },
+    );
+    expect(notifications.notifyJournalReminder).toHaveBeenCalledTimes(2);
+  });
+
+  it('clears an expired same-date old-basis lease left by a terminated worker', async () => {
+    const { service, prisma, notifications, pref } = setup(true);
+    const expiredClaimedAt = new Date('2026-06-23T19:59:59.999Z');
+    prisma.notificationPreference.findMany.mockResolvedValueOnce([
+      {
+        ...pref,
+        reminderHour: 18,
+        journalRemindersEnabledAt: new Date('2026-06-23T19:00:00.000Z'),
+        reminderClaimLocalDate: '2026-06-23',
+        reminderClaimedAt: expiredClaimedAt,
+      },
+    ]);
+
+    await service.sendDueReminders(now);
+
+    expect(prisma.notificationPreference.updateMany).toHaveBeenCalledWith({
+      where: {
+        userId: 'user-1',
+        reminderClaimLocalDate: '2026-06-23',
+        reminderClaimedAt: expiredClaimedAt,
+        OR: [
+          { reminderClaimedAt: null },
+          {
+            reminderClaimedAt: {
+              lt: new Date('2026-06-23T20:00:00.000Z'),
+            },
+          },
+        ],
+      },
+      data: {
+        reminderClaimLocalDate: null,
+        reminderClaimedAt: null,
+      },
+    });
+    expect(notifications.notifyJournalReminder).not.toHaveBeenCalled();
   });
 
   it('preserves a failed 23:00 reminder and retries its due date after midnight', async () => {

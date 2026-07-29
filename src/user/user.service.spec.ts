@@ -19,6 +19,10 @@ describe('UserService', () => {
   let socketSessions: any;
   let userGateway: any;
 
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   beforeEach(async () => {
     prisma = {
       user: {
@@ -131,7 +135,14 @@ describe('UserService', () => {
     } as UpdateUserDto);
 
     expect(prisma.notificationPreference.updateMany).toHaveBeenCalledWith({
-      where: { userId: 'user-1' },
+      where: {
+        userId: 'user-1',
+        OR: [
+          { reminderClaimLocalDate: null },
+          { reminderClaimedAt: null },
+          { reminderClaimedAt: { lt: expect.any(Date) } },
+        ],
+      },
       data: {
         reminderClaimLocalDate: null,
         reminderClaimedAt: null,
@@ -163,7 +174,14 @@ describe('UserService', () => {
       },
     });
     expect(prisma.notificationPreference.updateMany).toHaveBeenCalledWith({
-      where: { userId: 'user-1' },
+      where: {
+        userId: 'user-1',
+        OR: [
+          { reminderClaimLocalDate: null },
+          { reminderClaimedAt: null },
+          { reminderClaimedAt: { lt: expect.any(Date) } },
+        ],
+      },
       data: {
         reminderClaimLocalDate: null,
         reminderClaimedAt: null,
@@ -215,6 +233,41 @@ describe('UserService', () => {
     expect(prisma.notificationPreference.updateMany).not.toHaveBeenCalled();
   });
 
+  it('preserves an active reminder claim when the timezone changes', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-06-23T20:05:00.000Z'));
+    prisma.user.findUniqueOrThrow.mockResolvedValue({ timezone: 'UTC' });
+    prisma.user.update.mockResolvedValue({
+      id: 'user-1',
+      timezone: 'America/Toronto',
+    });
+    prisma.notificationPreference.updateMany.mockResolvedValueOnce({
+      count: 0,
+    });
+
+    await service.update('user-1', {
+      timezone: 'America/Toronto',
+    } as UpdateUserDto);
+
+    expect(prisma.notificationPreference.updateMany).toHaveBeenCalledWith({
+      where: {
+        userId: 'user-1',
+        OR: [
+          { reminderClaimLocalDate: null },
+          { reminderClaimedAt: null },
+          {
+            reminderClaimedAt: {
+              lt: new Date('2026-06-23T19:50:00.000Z'),
+            },
+          },
+        ],
+      },
+      data: {
+        reminderClaimLocalDate: null,
+        reminderClaimedAt: null,
+      },
+    });
+  });
+
   it('retries and re-evaluates claim clearing after a concurrent timezone change', async () => {
     prisma.user.findUniqueOrThrow
       .mockResolvedValueOnce({ timezone: 'UTC' })
@@ -246,7 +299,14 @@ describe('UserService', () => {
       },
     });
     expect(prisma.notificationPreference.updateMany).toHaveBeenCalledWith({
-      where: { userId: 'user-1' },
+      where: {
+        userId: 'user-1',
+        OR: [
+          { reminderClaimLocalDate: null },
+          { reminderClaimedAt: null },
+          { reminderClaimedAt: { lt: expect.any(Date) } },
+        ],
+      },
       data: {
         reminderClaimLocalDate: null,
         reminderClaimedAt: null,
