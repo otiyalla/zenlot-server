@@ -31,7 +31,11 @@ export class NotificationPreferenceService {
     // Ensure a row exists, then patch only the provided fields.
     let existing = await this.getOrCreate(userId);
 
-    if (dto.pushEnabled !== true && dto.journalReminders !== true) {
+    if (
+      dto.pushEnabled !== true &&
+      dto.journalReminders !== true &&
+      dto.reminderHour === undefined
+    ) {
       return this.prisma.notificationPreference.update({
         where: { userId },
         data: { ...dto },
@@ -50,20 +54,28 @@ export class NotificationPreferenceService {
         (dto.journalReminders ?? existing.journalReminders);
       const journalRemindersReEnabled =
         !remindersWereEnabled && remindersWillBeEnabled;
+      const reminderHourChanged =
+        dto.reminderHour !== undefined &&
+        dto.reminderHour !== existing.reminderHour;
       const update = await this.prisma.notificationPreference.updateMany({
         where: {
           userId,
           pushEnabled: existing.pushEnabled,
           journalReminders: existing.journalReminders,
+          ...(dto.reminderHour !== undefined
+            ? { reminderHour: existing.reminderHour }
+            : {}),
         },
         data: {
           ...dto,
-          ...(journalRemindersReEnabled
+          ...(journalRemindersReEnabled || reminderHourChanged
             ? {
-                journalRemindersEnabledAt: new Date(),
                 reminderClaimLocalDate: null,
                 reminderClaimedAt: null,
               }
+            : {}),
+          ...(journalRemindersReEnabled
+            ? { journalRemindersEnabledAt: new Date() }
             : {}),
         },
       });

@@ -267,6 +267,53 @@ export class UserService {
     return true;
   }
 
+  private async updateWithTimezoneClaimReset(
+    id: string,
+    timezone: string,
+    data: Prisma.userUpdateInput,
+  ) {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      try {
+        return await this.prisma.$transaction(async (tx) => {
+          const existing = await tx.user.findUniqueOrThrow({
+            where: { id },
+            select: { timezone: true },
+          });
+          const timezoneChanged = existing.timezone !== timezone;
+          const updatedUser = await tx.user.update({
+            // Include the observed timezone so a concurrent basis change
+            // forces a retry instead of making a stale no-clear decision.
+            where: { id, timezone: existing.timezone },
+            data,
+          });
+
+          if (timezoneChanged) {
+            // A persisted reminder claim is expressed in the user's local
+            // calendar. updateMany leaves a missing preference row missing.
+            await tx.notificationPreference.updateMany({
+              where: { userId: id },
+              data: {
+                reminderClaimLocalDate: null,
+                reminderClaimedAt: null,
+              },
+            });
+          }
+
+          return updatedUser;
+        });
+      } catch (error) {
+        const errorCode =
+          typeof error === 'object' && error !== null
+            ? (error as { code?: unknown }).code
+            : undefined;
+        const isConditionalConflict = errorCode === 'P2025';
+        if (!isConditionalConflict || attempt === 4) throw error;
+      }
+    }
+
+    throw new Error(`User timezone changed too frequently for ${id}`);
+  }
+
   //TODO: Test email update
   async update(
     id: string,
@@ -301,7 +348,10 @@ export class UserService {
       ...allowedData,
       updatedAt: new Date(),
     };
-    const update = await this.prisma.user.update({ where: { id }, data });
+    const update =
+      dto.timezone !== undefined
+        ? await this.updateWithTimezoneClaimReset(id, dto.timezone, data)
+        : await this.prisma.user.update({ where: { id }, data });
 
     // Log user update
     await this.auditService.log({

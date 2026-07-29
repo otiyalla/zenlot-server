@@ -58,6 +58,8 @@ describe('JournalReminderService', () => {
         pushEnabled: true,
         journalReminders: true,
         journalRemindersEnabledAt: new Date('2026-06-23T00:00:00.000Z'),
+        reminderHour: 20,
+        user: { timezone: 'UTC' },
         AND: [
           {
             OR: [
@@ -158,6 +160,36 @@ describe('JournalReminderService', () => {
 
     expect(notifications.notifyJournalReminder).not.toHaveBeenCalled();
     expect(prisma.notificationPreference.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('does not let a cleared 20:00 claim pin future reminders after moving to 18:00', async () => {
+    const { service, prisma, notifications, pref } = setup(true);
+    const changedHourPref = {
+      ...pref,
+      reminderHour: 18,
+      journalRemindersEnabledAt: new Date('2026-06-23T19:00:00.000Z'),
+      reminderClaimLocalDate: '2026-06-23',
+      reminderClaimedAt: null,
+    };
+    const nextDay = new Date('2026-06-24T18:15:00.000Z');
+    prisma.notificationPreference.findMany
+      .mockResolvedValueOnce([changedHourPref])
+      .mockResolvedValueOnce([
+        {
+          ...changedHourPref,
+          reminderClaimLocalDate: null,
+        },
+      ]);
+
+    // This reproduces the old pin: the 20:00 claim is selected first and the
+    // 18:00 opt-in guard rejects that old date.
+    await service.sendDueReminders(nextDay);
+    expect(notifications.notifyJournalReminder).not.toHaveBeenCalled();
+
+    // Once the basis update clears the old claim, the current 18:00 schedule
+    // advances to the next local date and dispatches normally.
+    await service.sendDueReminders(nextDay);
+    expect(notifications.notifyJournalReminder).toHaveBeenCalledWith('user-1');
   });
 
   it('preserves a failed 23:00 reminder and retries its due date after midnight', async () => {
@@ -313,6 +345,8 @@ describe('JournalReminderService', () => {
         pushEnabled: true,
         journalReminders: true,
         journalRemindersEnabledAt: new Date('2026-06-20T00:00:00.000Z'),
+        reminderHour: 20,
+        user: { timezone: 'UTC' },
         AND: [
           {
             OR: [
@@ -516,6 +550,8 @@ describe('JournalReminderService', () => {
           pushEnabled: true,
           journalReminders: true,
           journalRemindersEnabledAt: new Date('2026-06-23T00:00:00.000Z'),
+          reminderHour: 20,
+          user: { timezone: 'UTC' },
           AND: [
             {
               OR: [

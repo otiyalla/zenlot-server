@@ -28,7 +28,8 @@ export class JournalReminderService {
 
     for (const pref of prefs) {
       try {
-        const { date, hour } = localDateHour(now, pref.user?.timezone);
+        const timezone = pref.user?.timezone ?? 'UTC';
+        const { date, hour } = localDateHour(now, timezone);
         const persistedDueDate =
           pref.reminderClaimLocalDate !== pref.lastReminderLocalDate
             ? pref.reminderClaimLocalDate
@@ -72,6 +73,8 @@ export class JournalReminderService {
             pushEnabled: true,
             journalReminders: true,
             journalRemindersEnabledAt: pref.journalRemindersEnabledAt,
+            reminderHour: pref.reminderHour,
+            user: { timezone },
             AND: [
               {
                 OR: [
