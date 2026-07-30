@@ -11,6 +11,7 @@ describe('TradeService', () => {
   let create: jest.Mock;
   let update: jest.Mock;
   let findFirst: jest.Mock;
+  let findMany: jest.Mock;
   let calculate: jest.Mock;
   let validateActiveTradeGeometry: jest.Mock;
   let settleManualClose: jest.Mock;
@@ -26,6 +27,7 @@ describe('TradeService', () => {
     create = jest.fn().mockResolvedValue({ id: 't1' });
     update = jest.fn().mockResolvedValue({ id: 't1' });
     findFirst = jest.fn();
+    findMany = jest.fn().mockResolvedValue([]);
     calculate = jest.fn();
     validateActiveTradeGeometry = jest.fn();
     settleManualClose = jest.fn().mockResolvedValue({ id: 't1' });
@@ -34,7 +36,7 @@ describe('TradeService', () => {
         TradeService,
         {
           provide: PrismaService,
-          useValue: { trade: { create, update, findFirst } },
+          useValue: { trade: { create, update, findFirst, findMany } },
         },
         {
           provide: RiskCalculationService,
@@ -52,6 +54,41 @@ describe('TradeService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  it('includes the full date-only end day in date-range queries', async () => {
+    await service.findByDateRange({
+      userId: 'u1',
+      start: '2026-07-27',
+      end: '2026-07-27',
+    });
+
+    expect(findMany).toHaveBeenCalledWith({
+      where: {
+        userId: 'u1',
+        createdAt: {
+          gte: new Date('2026-07-27'),
+          lte: new Date('2026-07-27T23:59:59.999Z'),
+        },
+      },
+    });
+  });
+
+  it('preserves explicit end instants in trade searches', async () => {
+    await service.search({
+      userId: 'u1',
+      end: '2026-07-27T14:30:00.000Z',
+    } as never);
+
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          createdAt: expect.objectContaining({
+            lte: new Date('2026-07-27T14:30:00.000Z'),
+          }),
+        }),
+      }),
+    );
   });
 
   const createDto = {

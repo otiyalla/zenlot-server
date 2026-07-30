@@ -130,6 +130,35 @@ describe('JournalService', () => {
     },
   );
 
+  it('includes the full date-only end day for journal and trade searches', async () => {
+    await service.search({
+      userId: createDto.userId,
+      end: '2026-07-27',
+    });
+
+    expect(prisma.journal.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          userId: createDto.userId,
+          createdAt: {
+            lte: new Date('2026-07-27T23:59:59.999Z'),
+          },
+        },
+      }),
+    );
+    expect(prisma.trade.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          plainText: { not: null },
+          userId: createDto.userId,
+          createdAt: {
+            lte: new Date('2026-07-27T23:59:59.999Z'),
+          },
+        },
+      }),
+    );
+  });
+
   it('uses the safe author selection when updating a journal', async () => {
     await service.update('journal-1', { title: 'Updated review' });
 

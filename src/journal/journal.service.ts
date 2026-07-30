@@ -5,6 +5,7 @@ import { UpdateJournalDto } from './dto/update-journal.dto';
 import { SearchJournalDto } from './dto/search-journal.dto';
 import { IJournal } from './interfaces/journal.interface';
 import { Prisma } from '../../prisma/generated/prisma/client';
+import { parseInclusiveDateRangeEnd } from '../utils/date-range.util';
 //import { TradeService } from 'src/trade/trade.service';
 
 const SAFE_JOURNAL_AUTHOR_SELECT = {
@@ -166,8 +167,9 @@ export class JournalService {
         tradeWhere.createdAt.gte = new Date(searchDto.start);
       }
       if (searchDto.end) {
-        where.createdAt.lte = new Date(searchDto.end);
-        tradeWhere.createdAt.lte = new Date(searchDto.end);
+        const endDate = parseInclusiveDateRangeEnd(searchDto.end);
+        where.createdAt.lte = endDate;
+        tradeWhere.createdAt.lte = endDate;
       }
     }
 
