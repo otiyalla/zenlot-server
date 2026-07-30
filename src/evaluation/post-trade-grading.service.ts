@@ -2,18 +2,21 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import * as Sentry from '@sentry/nestjs';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  Prisma,
   executionGrade,
   trade,
   tradeVerdict,
 } from '../../prisma/generated/prisma/client';
 import {
   computeVerdict,
+  deriveRecommendation,
   ExecutionGrade,
   PlanAdherenceScore,
   PlanViolation,
   PreTradeChecklist,
   PreTradeEvaluationResult,
   scoreExecution,
+  scoreSetupQuality,
   SetupDimension,
   SetupQualityScore,
   StopAdjustment,
@@ -78,15 +81,16 @@ export class PostTradeGradingService {
       await this.persistExecutionGrade(userId, tradeId, execGrade);
 
       // ─── Verdict (spec Section 7) — needs the pre-eval's setup quality ─────
-      const preEval = await this.loadPreEval(userId, tradeId);
-      if (!preEval) {
-        // Degrade gracefully: no pre-eval means no setup quality, so no process
-        // score. Execution grade is persisted above; the verdict is skipped.
-        this.logger.warn(
-          `Graded execution for trade ${tradeId} but skipped verdict: no pre-trade evaluation`,
-        );
-        return;
-      }
+      // A trade logged without a checklist (soft-gate skipped / "log anyway")
+      // has no pre-trade evaluation. Rather than skip the verdict — which would
+      // keep the trade out of behavioral insights forever — score the skip as a
+      // NEUTRAL worst-case pre-eval (the same neutral checklist already used to
+      // grade execution above). The trade then still gets a verdict and counts
+      // toward the evaluated-trades gate; the skipped checklist stays an
+      // impulsive-entry signal downstream (spec Decision #2).
+      const preEval =
+        (await this.loadPreEval(userId, tradeId)) ??
+        (await this.persistNeutralPreEval(userId, tradeId, domainChecklist));
 
       const verdict = computeVerdict(preEval, execGrade, tradeRecord);
       const verdictRow = await this.persistVerdict(userId, tradeId, verdict);
@@ -191,6 +195,53 @@ export class PostTradeGradingService {
         aiCoaching: null,
       },
     });
+  }
+
+  /**
+   * Builds, persists, and returns a NEUTRAL pre-trade evaluation for a trade
+   * logged without a checklist (soft-gate skipped / "log anyway"). Scoring the
+   * skip as a neutral worst-case setup — the same neutral checklist already used
+   * to grade execution — lets the trade still receive a verdict and therefore
+   * count toward behavioral insights, instead of being excluded forever. Plan
+   * adherence is left null (there is no self-reported checklist to grade
+   * against), which folds its process-score weight into execution. Persisting
+   * the row keeps the read paths (assembleEvaluatedTrades / getPreEvalForTrade)
+   * unchanged: every verdict keeps a backing pre-eval.
+   */
+  private async persistNeutralPreEval(
+    userId: string,
+    tradeId: string,
+    checklist: PreTradeChecklist,
+  ): Promise<PreTradeEvaluationResult> {
+    const setupQuality = scoreSetupQuality(checklist);
+    const recommendation = deriveRecommendation(setupQuality, null);
+
+    const row = await this.prisma.preTradeEvaluation.create({
+      data: {
+        userId,
+        tradeId,
+        // No checklistId: the trader skipped the soft-gate, so there is no
+        // submitted checklist/evaluation pair to link to.
+        setupQualityTotal: setupQuality.total,
+        setupQualityGrade: setupQuality.grade,
+        setupBreakdown:
+          setupQuality.breakdown as unknown as Prisma.InputJsonValue,
+        planAdherenceTotal: null,
+        planAdherenceGrade: null,
+        planViolations: Prisma.JsonNull,
+        recommendation,
+        aiCoaching: null,
+      },
+    });
+
+    return {
+      tradeId,
+      evaluatedAt: row.evaluatedAt.toISOString(),
+      setupQuality,
+      planAdherence: null,
+      recommendation,
+      aiCoaching: null,
+    };
   }
 
   // ─── Domain mapping ──────────────────────────────────────────────────────
