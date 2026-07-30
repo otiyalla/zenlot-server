@@ -57,8 +57,25 @@ export class TradeController {
     @Body() createTradeDto: CreateTradeDto,
     @Request() req: AuthenticatedRequest,
   ) {
-    createTradeDto.userId = req.user.id;
-    return this.tradeService.create(createTradeDto);
+    // Keep the legacy route available, but send it through the same server-side
+    // sizing and governance path as POST /risk/trades.  The legacy DTO contains
+    // persisted/calculated fields (lot, pips, risk, reward, exchange rate and
+    // status) that must never be trusted from the client.
+    return this.tradeLogService.logTrade(
+      req.user.id,
+      req.user.accountCurrency,
+      {
+        symbol: createTradeDto.symbol,
+        execution: createTradeDto.execution as 'buy' | 'sell',
+        entry: createTradeDto.entry,
+        stopPrice: createTradeDto.stopLoss.value,
+        targetPrice: createTradeDto.takeProfit?.value,
+        lot: createTradeDto.lot,
+        plainText: createTradeDto.plainText,
+        editorState: createTradeDto.editorState,
+      },
+      req.user.language,
+    );
   }
 
   @Get()
