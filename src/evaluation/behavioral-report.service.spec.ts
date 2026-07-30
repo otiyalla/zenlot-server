@@ -25,6 +25,7 @@ function tradeRow(
     setupQuality?: number;
     skipped?: boolean;
     stopLogic?: string;
+    entryTriggerType?: string;
     rMultiple?: number;
     hasEval?: boolean;
     hasGrade?: boolean;
@@ -41,6 +42,7 @@ function tradeRow(
     setupQuality = 80,
     skipped = false,
     stopLogic = 'logical',
+    entryTriggerType = 'market',
     rMultiple = 1.5,
     hasEval = true,
     hasGrade = true,
@@ -124,7 +126,7 @@ function tradeRow(
         id: `cl-${i}`,
         tradeId: `t${i}`,
         userId: USER_ID,
-        checklist: {},
+        checklist: { entryTrigger: { type: entryTriggerType } },
         skipped,
         submittedAt: opened,
       },
@@ -221,7 +223,27 @@ describe('BehavioralReportService', () => {
       expect(evaluated[0].outcome).toBe('win');
       expect(evaluated[0].execGrade.overallExecutionScore).toBe(85);
       expect(evaluated[0].verdict.processScore).toBe(80);
+      expect(evaluated[0].execGrade.entryQuality.planned).toBe('');
     });
+
+    it.each([
+      ['trailing_1BH', false],
+      ['trailing_1BL', false],
+      ['trailing_1BH', true],
+    ])(
+      'maps checklist trigger %s%s into the execution grade',
+      async (entryTriggerType, skipped) => {
+        const { service } = makeService({
+          trades: [tradeRow(1, { entryTriggerType, skipped })],
+        });
+
+        const [evaluated] = await service.assembleEvaluatedTrades(USER_ID);
+
+        expect(evaluated.execGrade.entryQuality.planned).toBe(
+          skipped ? '' : entryTriggerType,
+        );
+      },
+    );
 
     it('defaults checklistSkipped to false when no checklist present', async () => {
       const t = tradeRow(1);

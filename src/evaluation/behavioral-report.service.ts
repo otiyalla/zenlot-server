@@ -21,6 +21,7 @@ import {
   MIN_EVALUATED_TRADES,
   Outcome,
   PlanAdherenceScore,
+  PreTradeChecklist,
   PlanViolation,
   PreTradeEvaluationResult,
   SetupDimension,
@@ -209,7 +210,7 @@ export class BehavioralReportService {
     checklistRow: preTradeChecklist | undefined,
   ): EvaluatedTrade {
     const preEval = this.toPreEval(t.id, evalRow);
-    const execGrade = this.toExecutionGrade(t, gradeRow);
+    const execGrade = this.toExecutionGrade(t, gradeRow, checklistRow);
     const verdict = this.toVerdict(verdictRow);
     const outcome = verdictRow.outcome as Outcome;
 
@@ -263,7 +264,15 @@ export class BehavioralReportService {
     };
   }
 
-  private toExecutionGrade(t: trade, row: executionGrade): ExecutionGrade {
+  private toExecutionGrade(
+    t: trade,
+    row: executionGrade,
+    checklistRow: preTradeChecklist | undefined,
+  ): ExecutionGrade {
+    const checklist =
+      checklistRow && !checklistRow.skipped
+        ? (checklistRow.checklist as unknown as Partial<PreTradeChecklist>)
+        : undefined;
     return {
       tradeId: row.tradeId,
       gradedAt: row.gradedAt.toISOString(),
@@ -271,9 +280,9 @@ export class BehavioralReportService {
         score: row.entryQualityScore,
         actual: t.entry,
         // `planned` carries the declared entry trigger type; the chasing_entries
-        // detector reads it. The grade row does not persist it, so we infer it
-        // from the latest checklist below via the assembler when available.
-        planned: '',
+        // detector reads it. The execution grade row does not persist it, so it
+        // comes from the linked, non-skipped checklist.
+        planned: checklist?.entryTrigger?.type ?? '',
         note: '',
       },
       stopQuality: {
