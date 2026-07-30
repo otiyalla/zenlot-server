@@ -145,6 +145,7 @@ export class TradeLogService {
           symbol: calculation.symbol,
           entry: calculation.entry,
           lot: calculation.lotSizeRounded,
+          suggestedLot: calculation.lotSize,
           pips: calculation.pipSize,
           execution: calculation.execution,
           accountCurrency,

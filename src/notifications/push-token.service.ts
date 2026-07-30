@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Expo } from 'expo-server-sdk';
 import * as Sentry from '@sentry/nestjs';
 import { PrismaService } from '../prisma/prisma.service';
@@ -24,8 +24,9 @@ export class PushTokenService {
     dto: RegisterPushTokenDto,
   ): Promise<pushToken> {
     if (!Expo.isExpoPushToken(dto.token)) {
-      // Mirror Nest's validation style — throw a 400 the controller surfaces.
-      throw new InvalidExpoTokenError(dto.token);
+      throw new BadRequestException(
+        `"${dto.token}" is not a valid Expo push token`,
+      );
     }
 
     const base = {

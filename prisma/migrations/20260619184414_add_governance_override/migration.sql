@@ -1,6 +1,6 @@
 -- AlterTable
 ALTER TABLE "governanceLog" ADD COLUMN     "acknowledged" BOOLEAN NOT NULL DEFAULT false,
-ADD COLUMN     "acknowledgedRules" TEXT[];
+ADD COLUMN     "acknowledgedRules" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
 
 -- AlterTable
 ALTER TABLE "riskProfile" ADD COLUMN     "overrideMode" TEXT NOT NULL DEFAULT 'simple';

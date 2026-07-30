@@ -159,7 +159,7 @@ try {
   console.log('Migration completed successfully');
 } catch (error) {
   console.error('Migration failed:', error);
-  process.exit(1);
+  process.exitCode = 1;
 } finally {
   // Restore original .env file or remove the one we created
   if (envFileExists && originalEnvContent !== null) {

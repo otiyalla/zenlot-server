@@ -147,7 +147,18 @@ export function evaluateGovernance(
     ),
   );
 
-  // 5: monthly drawdown circuit breaker
+  // 5: weekly drawdown circuit breaker
+  checks.push(
+    checkCircuitBreaker(
+      'weeklyDrawdown',
+      drawdown.drawdownPct.weekly,
+      profile.maxWeeklyDrawdownPct,
+      drawdown.circuitBreakers.weeklyBreached,
+      governanceMessage('weeklyDrawdown', language),
+    ),
+  );
+
+  // 6: monthly drawdown circuit breaker
   checks.push(
     checkCircuitBreaker(
       'monthlyDrawdown',
@@ -158,10 +169,10 @@ export function evaluateGovernance(
     ),
   );
 
-  // 6: correlated-pair exposure
+  // 7: correlated-pair exposure
   checks.push(checkCorrelatedExposure(calc, portfolio, profile, language));
 
-  // 7: reward-to-risk minimum — warn below 2:1, never block
+  // 8: reward-to-risk minimum — warn below 2:1, never block
   if (calc.rewardToRisk !== null) {
     checks.push({
       rule: 'minRewardToRisk',

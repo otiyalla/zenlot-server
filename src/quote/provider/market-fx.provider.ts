@@ -69,6 +69,7 @@ export class MarketFxClient implements FxQuote, FxMarketQuote {
     this.marketFxClient = axios.create({
       baseURL: MARKET_FX_BASE_URL,
       method: 'get',
+      timeout: 8000,
     });
   }
 

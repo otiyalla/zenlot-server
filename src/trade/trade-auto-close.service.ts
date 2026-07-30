@@ -120,7 +120,17 @@ export class TradeAutoCloseService implements OnModuleInit {
       for (const trade of trades) {
         const trigger = this.getTrigger(trade, price);
         if (trigger) {
-          await this.closeTriggeredTrade(trade, trigger);
+          try {
+            await this.closeTriggeredTrade(trade, trigger);
+          } catch (tradeError) {
+            this.logger.error(
+              `Failed to auto-close trade ${trade.id}`,
+              tradeError,
+            );
+            Sentry.captureException(tradeError, {
+              extra: { tradeId: trade.id, context: 'TradeAutoCloseService.closeTriggeredTrade' },
+            });
+          }
         }
       }
     }
@@ -170,7 +180,7 @@ export class TradeAutoCloseService implements OnModuleInit {
 
   private getTrigger(trade: MonitoredTrade, price: number): Trigger | null {
     if (trade.execution === 'buy') {
-      if (price >= trade.takeProfitValue) {
+      if (trade.takeProfitValue > 0 && price >= trade.takeProfitValue) {
         return {
           price: trade.takeProfitValue,
           reason: 'take_profit',
@@ -187,7 +197,7 @@ export class TradeAutoCloseService implements OnModuleInit {
       return null;
     }
 
-    if (price <= trade.takeProfitValue) {
+    if (trade.takeProfitValue > 0 && price <= trade.takeProfitValue) {
       return {
         price: trade.takeProfitValue,
         reason: 'take_profit',
