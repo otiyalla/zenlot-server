@@ -3,6 +3,7 @@ import { CreateTradeDto } from './dto/create-trade.dto';
 import { UpdateTradeDto } from './dto/update-trade.dto';
 import { DateRangeDto } from './dto/date-range.dto';
 import { SymbolDateRangeDto } from './dto/symbol-date-range.dto';
+import { parseInclusiveDateRangeEnd } from '../utils/date-range.util';
 import { MultiTradeDto } from './dto/multiple-properties.dto';
 import { SearchTradeDto } from './dto/search-trade.dto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -112,7 +113,7 @@ export class TradeService {
 
   async findByDateRange(dto: DateRangeDto) {
     const startDate = new Date(dto.start);
-    const endDate = new Date(dto.end);
+    const endDate = parseInclusiveDateRangeEnd(dto.end);
     const userId = dto.userId;
     return this.prisma.trade.findMany({
       where: {
@@ -127,7 +128,7 @@ export class TradeService {
 
   async findByDateRangeBySymbol(dto: SymbolDateRangeDto) {
     const startDate = new Date(dto.start);
-    const endDate = dto.end ? new Date(dto.end) : new Date();
+    const endDate = dto.end ? parseInclusiveDateRangeEnd(dto.end) : new Date();
     const symbol = dto.symbol;
     const userId = dto.userId;
     return this.prisma.trade.findMany({
@@ -179,7 +180,7 @@ export class TradeService {
         where.createdAt.gte = new Date(start);
       }
       if (end) {
-        where.createdAt.lte = new Date(end);
+        where.createdAt.lte = parseInclusiveDateRangeEnd(end);
       }
     }
     return this.prisma.trade.findMany({ where });
@@ -213,7 +214,7 @@ export class TradeService {
         where.createdAt.gte = new Date(start);
       }
       if (end) {
-        where.createdAt.lte = new Date(end);
+        where.createdAt.lte = parseInclusiveDateRangeEnd(end);
       }
     }
 
