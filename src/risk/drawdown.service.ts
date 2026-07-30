@@ -81,7 +81,13 @@ export class DrawdownService {
     userId: string,
     delta: number,
   ): Promise<void> {
-    const row = await this.getOrCreateRow(userId, db);
+    // Ensure the row exists before locking it.
+    await this.getOrCreateRow(userId, db);
+    // Serialize concurrent balance writes: lock this user's drawdown row so
+    // two trade-close transactions can't both read the same balance, compute
+    // independent newBalance values, and overwrite each other's delta.
+    await db.$queryRaw`SELECT id FROM "drawdownState" WHERE "userId" = ${userId} FOR UPDATE`;
+    const row = await db.drawdownState.findUniqueOrThrow({ where: { userId } });
     const profile = await db.riskProfile.findUnique({ where: { userId } });
 
     const accountBalance = toNumber(row.accountBalance);

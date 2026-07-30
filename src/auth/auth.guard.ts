@@ -77,7 +77,8 @@ export class AuthGuard implements CanActivate {
   }): { token: string; refreshToken: string } | undefined {
     const token = (request.headers['accesstoken'] ??
       request.headers['accesstoken']) as string | undefined;
-    const refreshToken = request.headers['refreshtoken'] as string | undefined;
+    const refreshToken = (request.headers['refresh_access_token'] ??
+      request.headers['refreshtoken']) as string | undefined;
     if (!token && !refreshToken) {
       return undefined;
     }

@@ -23,9 +23,11 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     if (!connectionString) {
       throw new Error('DATABASE_URL is not set');
     }
-    const adapter = new PrismaPg({ connectionString });
-    if (env === 'local') {
-      options.adapter = adapter;
+    const isAccelerateUrl =
+      connectionString.startsWith('prisma://') ||
+      connectionString.startsWith('prisma+postgres://');
+    if (env === 'local' || !isAccelerateUrl) {
+      options.adapter = new PrismaPg({ connectionString });
     } else {
       options.accelerateUrl = connectionString;
     }
