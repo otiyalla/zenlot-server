@@ -80,13 +80,14 @@ export class FeedbackService {
       },
     });
 
-    const distinctId = authenticatedUserId ?? feedback.id;
+    const effectiveUserId = authenticatedUserId ?? dto.userId;
+    const distinctId = effectiveUserId ?? feedback.id;
 
     this.analytics.trackFeedbackSubmitted(
       distinctId,
       feedback.id,
       dto.type,
-      authenticatedUserId,
+      effectiveUserId,
     );
 
     // Send email notification to admin
@@ -101,7 +102,7 @@ export class FeedbackService {
         distinctId,
         feedback.id,
         dto.type,
-        authenticatedUserId,
+        effectiveUserId,
       );
     }
 

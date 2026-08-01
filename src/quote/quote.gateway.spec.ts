@@ -47,7 +47,7 @@ describe('QuoteGateway', () => {
         extractAccessToken({
           handshake: {
             headers: {
-              accessToken: ' header-token ',
+              accesstoken: ' header-token ',
             },
           } as unknown as Socket['handshake'],
         }),

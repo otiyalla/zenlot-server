@@ -608,10 +608,8 @@ export class UserService {
       return;
     }
 
-    // Log the final deletion. The user row is gone so userId must be null to
-    // avoid violating the auditLog_userId_fkey foreign key; resourceId carries
-    // the identity instead.
     await this.auditService.log({
+      userId: id,
       action: 'ACCOUNT_DELETED',
       resource: 'user',
       resourceId: id,
