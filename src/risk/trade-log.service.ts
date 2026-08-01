@@ -168,6 +168,7 @@ export class TradeLogService {
           overridden,
           plainText: dto.plainText ?? null,
           editorState: dto.editorState ?? null,
+          tags: dto.tags ?? [],
         },
       });
 

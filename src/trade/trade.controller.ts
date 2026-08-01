@@ -76,6 +76,7 @@ export class TradeController {
         acknowledged: createTradeDto.acknowledged,
         acknowledgedRules: createTradeDto.acknowledgedRules,
         overrideReason: createTradeDto.overrideReason,
+        tags: createTradeDto.tags,
       },
       req.user.language,
     );
