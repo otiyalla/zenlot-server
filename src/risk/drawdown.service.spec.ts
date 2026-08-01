@@ -68,6 +68,7 @@ describe('DrawdownService.applyBalanceDelta', () => {
   it('updates balance, recomputes drawdown, and trips a breached circuit breaker', async () => {
     const update = jest.fn().mockResolvedValue({});
     const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([]),
       drawdownState: {
         findUnique: jest.fn().mockResolvedValue({
           userId: 'u1',
@@ -137,6 +138,7 @@ describe('DrawdownService.settleRealizedPnL', () => {
     const drawdownUpdate = jest.fn().mockResolvedValue({});
     const profileUpdate = jest.fn().mockResolvedValue({});
     const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([]),
       riskProfile: {
         findUnique: jest.fn().mockResolvedValue({
           maxDailyDrawdownPct: 5,
