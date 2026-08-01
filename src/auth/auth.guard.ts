@@ -23,15 +23,30 @@ export class AuthGuard implements CanActivate {
       context.getClass(),
     ]);
 
-    if (isPublic) {
-      return true;
-    }
-
     const request = context.switchToHttp().getRequest<{
       headers: import('http').IncomingHttpHeaders;
       user?: unknown;
     }>();
     const tokens = this.extractTokenFromHeader(request);
+
+    if (isPublic) {
+      // Optional authentication: if a token is present try to verify it and
+      // attach req.user, but never block the request if absent or invalid.
+      if (tokens?.token) {
+        try {
+          const result = (await this.authService.verify(
+            tokens.token,
+            tokens.refreshToken,
+          )) as Record<string, unknown> | null;
+          if (result) {
+            request.user = result;
+          }
+        } catch {
+          // Token invalid or expired — proceed as unauthenticated.
+        }
+      }
+      return true;
+    }
 
     if (!tokens || (!tokens.token && !tokens.refreshToken)) {
       throw new UnauthorizedException('No tokens provided');
