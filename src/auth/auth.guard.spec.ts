@@ -8,7 +8,6 @@ function makeContext(opts: {
   url: string;
   headers?: Record<string, string>;
 }): ExecutionContext {
-  const reflector = new Reflector();
   const request = {
     url: opts.url,
     headers: opts.headers ?? {},
