@@ -73,6 +73,9 @@ export class TradeController {
         lot: createTradeDto.lot,
         plainText: createTradeDto.plainText,
         editorState: createTradeDto.editorState,
+        acknowledged: createTradeDto.acknowledged,
+        acknowledgedRules: createTradeDto.acknowledgedRules,
+        overrideReason: createTradeDto.overrideReason,
       },
       req.user.language,
     );
