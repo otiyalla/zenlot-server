@@ -47,4 +47,10 @@ export class LogTradeDto extends CalculateRiskDto {
       'SKIPPED the checklist (a behavioral signal). Never blocks trade logging.',
   })
   checklistId?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @ApiPropertyOptional({ description: 'Tags associated with this trade.' })
+  tags?: string[];
 }

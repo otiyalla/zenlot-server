@@ -145,6 +145,7 @@ export class TradeLogService {
           symbol: calculation.symbol,
           entry: calculation.entry,
           lot: calculation.lotSizeRounded,
+          suggestedLot: calculation.recommendedLotSizeRounded || null,
           pips: calculation.pipSize,
           execution: calculation.execution,
           accountCurrency,
@@ -167,6 +168,7 @@ export class TradeLogService {
           overridden,
           plainText: dto.plainText ?? null,
           editorState: dto.editorState ?? null,
+          tags: dto.tags ?? [],
         },
       });
 

@@ -68,11 +68,15 @@ export class TradeController {
         symbol: createTradeDto.symbol,
         execution: createTradeDto.execution as 'buy' | 'sell',
         entry: createTradeDto.entry,
-        stopPrice: createTradeDto.stopLoss.value,
+        stopPrice: createTradeDto.stopLoss?.value,
         targetPrice: createTradeDto.takeProfit?.value,
         lot: createTradeDto.lot,
         plainText: createTradeDto.plainText,
         editorState: createTradeDto.editorState,
+        acknowledged: createTradeDto.acknowledged,
+        acknowledgedRules: createTradeDto.acknowledgedRules,
+        overrideReason: createTradeDto.overrideReason,
+        tags: createTradeDto.tags,
       },
       req.user.language,
     );
@@ -86,8 +90,7 @@ export class TradeController {
     @Query() query: TradeOwnerDto,
     @Request() req: AuthenticatedRequest,
   ) {
-    query.userId = req.user.id;
-    return this.tradeService.findAll(query);
+    return this.tradeService.findAll({ ...query, userId: req.user.id });
   }
 
   //http://localhost:3000/trade/range?start=2025-07-01&end=2025-07-12

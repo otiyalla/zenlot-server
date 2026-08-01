@@ -191,11 +191,12 @@ export class EvaluationService {
       return false;
     }
 
-    // Keep the checklist and its evaluation in sync if either write fails or
-    // competing trade-link requests arrive concurrently.
-    await this.prisma.$transaction([
-      this.prisma.preTradeChecklist.update({
-        where: { id: checklist.id },
+    // Claim the checklist and its evaluation atomically. The checklist update
+    // is conditional on tradeId still being null so that a concurrent request
+    // reusing the same checklistId cannot overwrite a race-winner's link.
+    const [claimed] = await this.prisma.$transaction([
+      this.prisma.preTradeChecklist.updateMany({
+        where: { id: checklist.id, tradeId: null },
         data: { tradeId },
       }),
       // Back-fill only the evaluation created for this checklist. Legacy rows
@@ -206,6 +207,12 @@ export class EvaluationService {
         data: { tradeId },
       }),
     ]);
+    if (claimed.count === 0) {
+      this.logger.warn(
+        `Checklist ${checklistId} was claimed by a concurrent request; skipping link for trade ${tradeId}`,
+      );
+      return false;
+    }
 
     return true;
   }

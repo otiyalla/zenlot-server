@@ -148,7 +148,7 @@ export class QuoteGateway implements OnModuleInit, OnModuleDestroy {
       return authToken.trim();
     }
 
-    const headerToken = socket.handshake?.headers?.['accessToken'];
+    const headerToken = socket.handshake?.headers?.['accesstoken'];
     if (typeof headerToken === 'string' && headerToken.trim()) {
       return headerToken.trim();
     }

@@ -53,6 +53,7 @@ interface Mocks {
   tradeFindFirst?: jest.Mock;
   checklistFindFirst?: jest.Mock;
   preEvalFindFirst?: jest.Mock;
+  preEvalCreate?: jest.Mock;
   execCreate?: jest.Mock;
   verdictCreate?: jest.Mock;
   execFindFirst?: jest.Mock;
@@ -68,6 +69,12 @@ function makeService(m: Mocks = {}) {
     jest.fn().mockResolvedValue({ checklist: checklistJson, skipped: false });
   const preEvalFindFirst =
     m.preEvalFindFirst ?? jest.fn().mockResolvedValue(preEvalRow);
+  const preEvalCreate =
+    m.preEvalCreate ??
+    jest.fn().mockResolvedValue({
+      id: 'neutral-eval-1',
+      evaluatedAt: new Date('2026-06-26T00:30:00.000Z'),
+    });
   const execCreate =
     m.execCreate ?? jest.fn().mockResolvedValue({ id: 'exec-1' });
   const verdictCreate =
@@ -78,7 +85,7 @@ function makeService(m: Mocks = {}) {
   const prisma = {
     trade: { findFirst: tradeFindFirst },
     preTradeChecklist: { findFirst: checklistFindFirst },
-    preTradeEvaluation: { findFirst: preEvalFindFirst },
+    preTradeEvaluation: { findFirst: preEvalFindFirst, create: preEvalCreate },
     executionGrade: { create: execCreate, findFirst: execFindFirst },
     tradeVerdict: { create: verdictCreate, findFirst: verdictFindFirst },
   } as unknown as PrismaService;
@@ -95,6 +102,7 @@ function makeService(m: Mocks = {}) {
     tradeFindFirst,
     checklistFindFirst,
     preEvalFindFirst,
+    preEvalCreate,
     execCreate,
     verdictCreate,
     execFindFirst,
@@ -153,17 +161,53 @@ describe('PostTradeGradingService.gradeClosedTrade', () => {
     expect(verdictCreate).toHaveBeenCalledTimes(1);
   });
 
-  it('persists the execution grade but SKIPS the verdict when no pre-eval exists', async () => {
-    const { service, execCreate, verdictCreate, enqueuePostTradeCoaching } =
-      makeService({
-        preEvalFindFirst: jest.fn().mockResolvedValue(null),
-      });
+  it('persists a NEUTRAL pre-eval + verdict when no pre-eval exists (log-anyway trade)', async () => {
+    // No linked checklist AND no pre-trade evaluation: the trader logged the
+    // trade without the soft-gate. It must still be graded end-to-end so it
+    // counts toward behavioral insights.
+    const {
+      service,
+      execCreate,
+      preEvalCreate,
+      verdictCreate,
+      enqueuePostTradeCoaching,
+    } = makeService({
+      checklistFindFirst: jest.fn().mockResolvedValue(null),
+      preEvalFindFirst: jest.fn().mockResolvedValue(null),
+    });
 
     await service.gradeClosedTrade(USER_ID, TRADE_ID);
+    await flush();
 
     expect(execCreate).toHaveBeenCalledTimes(1);
-    expect(verdictCreate).not.toHaveBeenCalled();
-    expect(enqueuePostTradeCoaching).not.toHaveBeenCalled();
+
+    // A neutral worst-case pre-eval is persisted so the trade has a backing
+    // evaluation: setup quality 0 (grade F), no plan adherence.
+    expect(preEvalCreate).toHaveBeenCalledTimes(1);
+    const preEvalData = preEvalCreate.mock.calls[0][0].data as Record<
+      string,
+      unknown
+    >;
+    expect(preEvalData.tradeId).toBe(TRADE_ID);
+    expect(preEvalData.setupQualityTotal).toBe(0);
+    expect(preEvalData.setupQualityGrade).toBe('F');
+    expect(preEvalData.planAdherenceTotal).toBeNull();
+
+    // The verdict is now computed against the neutral pre-eval. A skipped
+    // checklist scores at most 60 on process (setup 0), so it can never be
+    // "good process" — the win here is therefore flagged as lucky.
+    expect(verdictCreate).toHaveBeenCalledTimes(1);
+    const verdictData = verdictCreate.mock.calls[0][0].data as Record<
+      string,
+      unknown
+    >;
+    expect(verdictData.verdict).toBe('bad_trade');
+    expect(verdictData.outcome).toBe('win');
+    expect(verdictData.matrix).toBe('bad_process_win');
+    expect(verdictData.lucky).toBe(true);
+
+    // Coaching is enqueued off the persisted verdict, exactly as the linked path.
+    expect(enqueuePostTradeCoaching).toHaveBeenCalledTimes(1);
   });
 
   it('enqueues post-trade coaching after the verdict is persisted', async () => {

@@ -608,7 +608,6 @@ export class UserService {
       return;
     }
 
-    // Log the final deletion
     await this.auditService.log({
       userId: id,
       action: 'ACCOUNT_DELETED',

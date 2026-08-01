@@ -58,6 +58,7 @@ function makeService(opts: {
   evalCreate?: jest.Mock;
   checklistFindFirst?: jest.Mock;
   checklistUpdate?: jest.Mock;
+  checklistUpdateMany?: jest.Mock;
   evalFindFirst?: jest.Mock;
   evalUpdateMany?: jest.Mock;
 }) {
@@ -80,6 +81,8 @@ function makeService(opts: {
   const checklistFindFirst = opts.checklistFindFirst ?? jest.fn();
   const checklistUpdate =
     opts.checklistUpdate ?? jest.fn().mockResolvedValue({});
+  const checklistUpdateMany =
+    opts.checklistUpdateMany ?? jest.fn().mockResolvedValue({ count: 1 });
   const evalFindFirst = opts.evalFindFirst ?? jest.fn();
   const evalUpdateMany = opts.evalUpdateMany ?? jest.fn().mockResolvedValue({});
 
@@ -93,6 +96,7 @@ function makeService(opts: {
       create: checklistCreate,
       findFirst: checklistFindFirst,
       update: checklistUpdate,
+      updateMany: checklistUpdateMany,
     },
     preTradeEvaluation: {
       create: evalCreate,
@@ -121,6 +125,7 @@ function makeService(opts: {
     evalCreate,
     checklistFindFirst,
     checklistUpdate,
+    checklistUpdateMany,
     evalFindFirst,
     evalUpdateMany,
     enqueuePreTradeCoaching,
@@ -297,7 +302,7 @@ describe('EvaluationService.getEvalById', () => {
 
 describe('EvaluationService soft-gate', () => {
   it('links only the evaluation belonging to the selected checklist', async () => {
-    const { service, checklistUpdate, evalUpdateMany } = makeService({
+    const { service, checklistUpdateMany, evalUpdateMany } = makeService({
       checklistFindFirst: jest.fn().mockResolvedValue({
         id: 'chk-1',
         userId: USER_ID,
@@ -308,8 +313,8 @@ describe('EvaluationService soft-gate', () => {
     const linked = await service.linkChecklistToTrade(USER_ID, 't1', 'chk-1');
 
     expect(linked).toBe(true);
-    expect(checklistUpdate).toHaveBeenCalledWith({
-      where: { id: 'chk-1' },
+    expect(checklistUpdateMany).toHaveBeenCalledWith({
+      where: { id: 'chk-1', tradeId: null },
       data: { tradeId: 't1' },
     });
     expect(evalUpdateMany).toHaveBeenCalledWith({
@@ -365,12 +370,12 @@ describe('EvaluationService soft-gate', () => {
   });
 
   it('returns false (does not link) for an unknown / unowned checklist', async () => {
-    const { service, checklistUpdate } = makeService({
+    const { service, checklistUpdateMany } = makeService({
       checklistFindFirst: jest.fn().mockResolvedValue(null),
     });
     const linked = await service.linkChecklistToTrade(USER_ID, 't1', 'chk-x');
     expect(linked).toBe(false);
-    expect(checklistUpdate).not.toHaveBeenCalled();
+    expect(checklistUpdateMany).not.toHaveBeenCalled();
   });
 
   it('records a skipped checklist row for the trade', async () => {

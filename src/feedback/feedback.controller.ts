@@ -36,7 +36,8 @@ export class FeedbackController {
     @Request() req: AuthenticatedRequest,
   ): Promise<unknown> {
     const ipAddress = req.ip;
-    return this.feedbackService.submitFeedback(dto, ipAddress);
+    const authenticatedUserId = req.user?.id;
+    return this.feedbackService.submitFeedback(dto, ipAddress, authenticatedUserId);
   }
 
   @Get()

@@ -52,13 +52,14 @@ export class FeedbackService {
   async submitFeedback(
     dto: CreateFeedbackDto,
     ipAddress?: string,
+    authenticatedUserId?: string,
   ): Promise<any> {
     await this.checkFeedbackRateLimit(ipAddress ?? '');
 
     // Create feedback record in database
     const feedback = await this.prisma.feedback.create({
       data: {
-        userId: dto.userId,
+        userId: authenticatedUserId ?? null,
         email: dto.email,
         subject: dto.subject,
         message: dto.message,
@@ -68,7 +69,7 @@ export class FeedbackService {
 
     // Log the feedback submission
     await this.auditService.log({
-      userId: dto.userId,
+      userId: authenticatedUserId ?? undefined,
       action: 'FEEDBACK_SUBMITTED',
       resource: 'feedback',
       resourceId: feedback.id,
@@ -79,13 +80,14 @@ export class FeedbackService {
       },
     });
 
-    const distinctId = dto.userId || feedback.id;
+    const effectiveUserId = authenticatedUserId ?? dto.userId;
+    const distinctId = effectiveUserId ?? feedback.id;
 
     this.analytics.trackFeedbackSubmitted(
       distinctId,
       feedback.id,
       dto.type,
-      dto.userId,
+      effectiveUserId,
     );
 
     // Send email notification to admin
@@ -100,7 +102,7 @@ export class FeedbackService {
         distinctId,
         feedback.id,
         dto.type,
-        dto.userId,
+        effectiveUserId,
       );
     }
 

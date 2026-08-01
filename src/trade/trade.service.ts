@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { CreateTradeDto } from './dto/create-trade.dto';
 import { UpdateTradeDto } from './dto/update-trade.dto';
 import { DateRangeDto } from './dto/date-range.dto';
@@ -300,6 +300,15 @@ export class TradeService {
     // 'closed' status is intentionally not in SETTLED_STATUSES, so a neutral
     // close still flows through the plain update below (no settlement, by design).
     const finalStatus = updateTradeDto.status ?? existing.status;
+
+    // Reject attempts to reopen a trade that has already settled PnL. Allowing
+    // this would let the same trade be closed again and settle PnL twice.
+    if (SETTLED_STATUSES.has(existing.status) && finalStatus === 'open') {
+      throw new BadRequestException(
+        'Cannot reopen a settled trade. The trade has already had its PnL applied to the account.',
+      );
+    }
+
     if (existing.status === 'open' && SETTLED_STATUSES.has(finalStatus)) {
       return this.tradeLog.settleManualClose(
         userId,
