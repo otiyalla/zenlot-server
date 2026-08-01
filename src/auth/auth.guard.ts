@@ -37,9 +37,25 @@ export class AuthGuard implements CanActivate {
           const result = (await this.authService.verify(
             tokens.token,
             tokens.refreshToken,
-          )) as Record<string, unknown> | null;
+          )) as
+            | (Record<string, unknown> & {
+                accessToken?: string;
+                refreshToken?: string;
+              })
+            | null;
           if (result) {
             request.user = result;
+            if (
+              result.accessToken &&
+              result.refreshToken &&
+              result.accessToken !== tokens.token
+            ) {
+              const response = context.switchToHttp().getResponse<{
+                setHeader: (name: string, value: string) => void;
+              }>();
+              response.setHeader('new-access-token', result.accessToken);
+              response.setHeader('new-refresh-token', result.refreshToken);
+            }
           }
         } catch {
           // Token invalid or expired — proceed as unauthenticated.
