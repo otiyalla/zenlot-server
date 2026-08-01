@@ -68,7 +68,7 @@ export class TradeController {
         symbol: createTradeDto.symbol,
         execution: createTradeDto.execution as 'buy' | 'sell',
         entry: createTradeDto.entry,
-        stopPrice: createTradeDto.stopLoss.value,
+        stopPrice: createTradeDto.stopLoss?.value,
         targetPrice: createTradeDto.takeProfit?.value,
         lot: createTradeDto.lot,
         plainText: createTradeDto.plainText,
