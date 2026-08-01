@@ -90,8 +90,7 @@ export class TradeController {
     @Query() query: TradeOwnerDto,
     @Request() req: AuthenticatedRequest,
   ) {
-    query.userId = req.user.id;
-    return this.tradeService.findAll(query);
+    return this.tradeService.findAll({ ...query, userId: req.user.id });
   }
 
   //http://localhost:3000/trade/range?start=2025-07-01&end=2025-07-12

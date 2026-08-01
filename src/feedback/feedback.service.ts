@@ -69,7 +69,7 @@ export class FeedbackService {
 
     // Log the feedback submission
     await this.auditService.log({
-      userId: authenticatedUserId ?? null,
+      userId: authenticatedUserId ?? undefined,
       action: 'FEEDBACK_SUBMITTED',
       resource: 'feedback',
       resourceId: feedback.id,

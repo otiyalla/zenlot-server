@@ -612,7 +612,6 @@ export class UserService {
     // avoid violating the auditLog_userId_fkey foreign key; resourceId carries
     // the identity instead.
     await this.auditService.log({
-      userId: null,
       action: 'ACCOUNT_DELETED',
       resource: 'user',
       resourceId: id,
