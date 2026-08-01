@@ -25,7 +25,7 @@ export class PushTokenService {
   ): Promise<pushToken> {
     if (!Expo.isExpoPushToken(dto.token)) {
       throw new BadRequestException(
-        `"${dto.token}" is not a valid Expo push token`,
+        `"${dto.token as string}" is not a valid Expo push token`,
       );
     }
 
