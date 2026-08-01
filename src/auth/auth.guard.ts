@@ -30,6 +30,14 @@ export class AuthGuard implements CanActivate {
     const tokens = this.extractTokenFromHeader(request);
 
     if (isPublic) {
+      // Auth endpoints handle their own token operations (refresh, verify).
+      // Running optional-auth here would rotate and revoke the refresh token
+      // before the controller can use the same token from the request body.
+      const url = (request as unknown as { url?: string }).url ?? '';
+      if (url.startsWith('/auth/')) {
+        return true;
+      }
+
       // Optional authentication: if a token is present try to verify it and
       // attach req.user, but never block the request if absent or invalid.
       if (tokens?.token) {
