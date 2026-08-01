@@ -376,6 +376,22 @@ describe('TradeLogService.logTrade', () => {
     expect(tradeCreate).not.toHaveBeenCalled();
   });
 
+  it('stores suggestedLot as null when recommendedLotSizeRounded is 0 (below lot step)', async () => {
+    const calculate = jest.fn().mockResolvedValue({
+      calculation: { ...view, recommendedLotSizeRounded: 0 },
+      governance: {
+        overallStatus: 'approved',
+        checks: [],
+        blockedReason: null,
+        aiCoaching: null,
+      },
+    });
+    const { service, tradeCreate } = makeService({ calculate });
+    await service.logTrade('u1', 'USD', setup);
+    const data = dataOf(tradeCreate);
+    expect(data.suggestedLot).toBeNull();
+  });
+
   // ─── Phase 2 soft-gate (decision #2 — warn, never block) ──────────────────
 
   it('links the pre-trade checklist to the new trade when a checklistId is supplied', async () => {
