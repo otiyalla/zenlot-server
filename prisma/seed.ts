@@ -1,10 +1,12 @@
-import { PrismaClient, Prisma } from './generated/prisma/client';
-import { Subset } from './generated/prisma/internal/prismaNamespace';
-//import { PrismaClient } from '../generated/prisma';
+import { PrismaClient } from './generated/prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 
+const connectionString = process.env.DATABASE_URL ?? '';
+const adapter = new PrismaPg({ connectionString });
 const prisma = new PrismaClient({
+  adapter,
   log: ['query', 'info', 'warn', 'error'],
-} as Subset<Prisma.PrismaClientOptions, Prisma.PrismaClientOptions>);
+});
   
 (async () => {
   // You must provide a unique 'id' for the where clause as required by your generated Prisma types.

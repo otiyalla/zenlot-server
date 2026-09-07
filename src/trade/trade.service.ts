@@ -301,11 +301,12 @@ export class TradeService {
     // close still flows through the plain update below (no settlement, by design).
     const finalStatus = updateTradeDto.status ?? existing.status;
 
-    // Reject attempts to reopen a trade that has already settled PnL. Allowing
-    // this would let the same trade be closed again and settle PnL twice.
-    if (SETTLED_STATUSES.has(existing.status) && finalStatus === 'open') {
+    // Reject any status transition away from a settled trade. Allowing a
+    // two-step path (settled → pending/closed → open) would let the same
+    // trade settle PnL twice or reopen after settlement.
+    if (SETTLED_STATUSES.has(existing.status) && finalStatus !== existing.status) {
       throw new BadRequestException(
-        'Cannot reopen a settled trade. The trade has already had its PnL applied to the account.',
+        'Cannot change the status of a settled trade. The trade has already had its PnL applied to the account.',
       );
     }
 
