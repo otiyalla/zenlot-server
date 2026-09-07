@@ -57,6 +57,7 @@ const baseCalc: RiskCalculation = {
   pipSize: 0.0001,
   maxCapitalExposure: 100,
   lotSize: 0.2,
+  recommendedLotSizeRounded: 0.2,
   lotSizeRounded: 0.2,
   actualCapitalExposure: 100,
   capitalExposurePct: 1,

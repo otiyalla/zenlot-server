@@ -68,8 +68,20 @@ describe('DrawdownService.applyBalanceDelta', () => {
   it('updates balance, recomputes drawdown, and trips a breached circuit breaker', async () => {
     const update = jest.fn().mockResolvedValue({});
     const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([]),
       drawdownState: {
         findUnique: jest.fn().mockResolvedValue({
+          userId: 'u1',
+          accountBalance: 10000,
+          peakBalance: 10000,
+          dailyOpenBalance: 10000,
+          weeklyOpenBalance: 10000,
+          monthlyOpenBalance: 10000,
+          dailyBreached: false,
+          weeklyBreached: false,
+          monthlyBreached: false,
+        }),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({
           userId: 'u1',
           accountBalance: 10000,
           peakBalance: 10000,
@@ -137,6 +149,7 @@ describe('DrawdownService.settleRealizedPnL', () => {
     const drawdownUpdate = jest.fn().mockResolvedValue({});
     const profileUpdate = jest.fn().mockResolvedValue({});
     const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([]),
       riskProfile: {
         findUnique: jest.fn().mockResolvedValue({
           maxDailyDrawdownPct: 5,
@@ -147,6 +160,17 @@ describe('DrawdownService.settleRealizedPnL', () => {
       },
       drawdownState: {
         findUnique: jest.fn().mockResolvedValue({
+          userId: 'u1',
+          accountBalance: 10000,
+          peakBalance: 10000,
+          dailyOpenBalance: 10000,
+          weeklyOpenBalance: 10000,
+          monthlyOpenBalance: 10000,
+          dailyBreached: false,
+          weeklyBreached: false,
+          monthlyBreached: false,
+        }),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({
           userId: 'u1',
           accountBalance: 10000,
           peakBalance: 10000,

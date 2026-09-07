@@ -404,6 +404,7 @@ export function computeRiskCalculation(
     pipValue: sizing.pipValue,
     maxCapitalExposure: sizing.maxCapitalExposure,
     lotSize: sizing.lotSize,
+    recommendedLotSizeRounded: sizing.lotSizeRounded,
     lotSizeRounded,
     actualCapitalExposure,
     capitalExposurePct,

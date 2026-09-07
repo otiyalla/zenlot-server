@@ -86,7 +86,7 @@ export class DrawdownService {
     // Serialize concurrent balance writes: lock this user's drawdown row so
     // two trade-close transactions can't both read the same balance, compute
     // independent newBalance values, and overwrite each other's delta.
-    await db.$queryRaw`SELECT id FROM "drawdownState" WHERE "userId" = ${userId} FOR UPDATE`;
+    await db.$queryRaw`SELECT "userId" FROM "drawdownState" WHERE "userId" = ${userId} FOR UPDATE`;
     const row = await db.drawdownState.findUniqueOrThrow({ where: { userId } });
     const profile = await db.riskProfile.findUnique({ where: { userId } });
 

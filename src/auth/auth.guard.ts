@@ -23,15 +23,54 @@ export class AuthGuard implements CanActivate {
       context.getClass(),
     ]);
 
-    if (isPublic) {
-      return true;
-    }
-
     const request = context.switchToHttp().getRequest<{
       headers: import('http').IncomingHttpHeaders;
       user?: unknown;
     }>();
     const tokens = this.extractTokenFromHeader(request);
+
+    if (isPublic) {
+      // Auth endpoints handle their own token operations (refresh, verify).
+      // Running optional-auth here would rotate and revoke the refresh token
+      // before the controller can use the same token from the request body.
+      const url = (request as unknown as { url?: string }).url ?? '';
+      if (url.startsWith('/auth/')) {
+        return true;
+      }
+
+      // Optional authentication: if a token is present try to verify it and
+      // attach req.user, but never block the request if absent or invalid.
+      if (tokens?.token) {
+        try {
+          const result = (await this.authService.verify(
+            tokens.token,
+            tokens.refreshToken,
+          )) as
+            | (Record<string, unknown> & {
+                accessToken?: string;
+                refreshToken?: string;
+              })
+            | null;
+          if (result) {
+            request.user = result;
+            if (
+              result.accessToken &&
+              result.refreshToken &&
+              result.accessToken !== tokens.token
+            ) {
+              const response = context.switchToHttp().getResponse<{
+                setHeader: (name: string, value: string) => void;
+              }>();
+              response.setHeader('new-access-token', result.accessToken);
+              response.setHeader('new-refresh-token', result.refreshToken);
+            }
+          }
+        } catch {
+          // Token invalid or expired — proceed as unauthenticated.
+        }
+      }
+      return true;
+    }
 
     if (!tokens || (!tokens.token && !tokens.refreshToken)) {
       throw new UnauthorizedException('No tokens provided');

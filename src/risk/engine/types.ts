@@ -53,7 +53,8 @@ export interface RiskCalculation {
   // Position sizing
   maxCapitalExposure: number;
   lotSize: number; // raw, before rounding
-  lotSizeRounded: number; // rounded DOWN to the instrument lot step
+  recommendedLotSizeRounded: number; // engine's own rounded recommendation — never overridden by user lot
+  lotSizeRounded: number; // rounded DOWN to the instrument lot step; equals recommendedLotSizeRounded unless the user supplied a manual lot
   actualCapitalExposure: number;
   capitalExposurePct: number;
 

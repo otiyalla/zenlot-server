@@ -1,14 +1,14 @@
 import {
   IsArray,
-  IsString,
+  IsBoolean,
   IsNumber,
   IsOptional,
-  ValidateNested,
-  IsUUID,
-  IsIn,
   IsPositive,
+  IsString,
+  IsIn,
+  IsUUID,
   Matches,
-  IsBoolean,
+  ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
@@ -130,4 +130,28 @@ export class CreateTradeDto {
   @IsOptional()
   @ApiProperty({ description: 'Whether the trade is auto closed' })
   isAutoClosed: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  @ApiProperty({
+    description:
+      'Confirms logging despite blocking governance rules (simple override mode).',
+  })
+  acknowledged?: boolean;
+
+  @IsArray()
+  @IsOptional()
+  @IsString({ each: true })
+  @ApiProperty({
+    description:
+      'Rule keys explicitly acknowledged (detailed override mode), e.g. ["maxPortfolioExposure"].',
+  })
+  acknowledgedRules?: string[];
+
+  @IsString()
+  @IsOptional()
+  @ApiProperty({
+    description: 'Optional note explaining why the governance rule(s) are being overridden.',
+  })
+  overrideReason?: string;
 }

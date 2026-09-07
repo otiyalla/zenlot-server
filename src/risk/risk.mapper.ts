@@ -37,6 +37,7 @@ export interface RiskCalculationView {
   pipSize: number;
   maxCapitalExposure: number;
   lotSize: number;
+  recommendedLotSizeRounded: number;
   lotSizeRounded: number;
   actualCapitalExposure: number;
   capitalExposurePct: number;
@@ -61,6 +62,7 @@ export function toRiskCalculationView(
     pipSize: calc.pipSize,
     maxCapitalExposure: calc.maxCapitalExposure,
     lotSize: calc.lotSize,
+    recommendedLotSizeRounded: calc.recommendedLotSizeRounded,
     lotSizeRounded: calc.lotSizeRounded,
     actualCapitalExposure: calc.actualCapitalExposure,
     capitalExposurePct: calc.capitalExposurePct,

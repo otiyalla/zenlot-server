@@ -102,9 +102,10 @@ describe('TradeController authorization', () => {
     const query = { userId: 'attacker-id' };
     await controller.findAll(query as never, req);
 
-    expect(query.userId).toBe('owner-1');
     // eslint-disable-next-line @typescript-eslint/unbound-method
-    expect(tradeService.findAll).toHaveBeenCalledWith(query);
+    expect(tradeService.findAll).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'owner-1' }),
+    );
   });
 
   it('delegates delete to the risk module with the request user id', async () => {
