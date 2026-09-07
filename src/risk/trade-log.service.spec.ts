@@ -14,6 +14,7 @@ import { RiskCalculationView } from './risk.mapper';
 import { NotificationsService } from '../notifications/notifications.service';
 import { EvaluationService } from '../evaluation/evaluation.service';
 import { PostTradeGradingService } from '../evaluation/post-trade-grading.service';
+import { QuoteGateway } from '../quote/quote.gateway';
 
 const view: RiskCalculationView = {
   symbol: 'EURUSD',
@@ -67,6 +68,7 @@ function makeService(opts: {
   markChecklistSkipped?: jest.Mock;
   gradeClosedTrade?: jest.Mock;
   tradeUpdate?: jest.Mock;
+  emitTradeClosed?: jest.Mock;
 }) {
   const calculate =
     opts.calculate ??
@@ -186,6 +188,12 @@ function makeService(opts: {
     notifyDrawdownBreach: jest.fn().mockResolvedValue(undefined),
   } as unknown as NotificationsService;
 
+  const emitTradeClosed =
+    opts.emitTradeClosed ?? jest.fn().mockReturnValue(undefined);
+  const quoteGateway = {
+    emitTradeClosed,
+  } as unknown as QuoteGateway;
+
   const service = new TradeLogService(
     prisma,
     riskCalc,
@@ -195,6 +203,7 @@ function makeService(opts: {
     notifications,
     evaluationService,
     postTradeGrading,
+    quoteGateway,
     coachingQueue,
   );
   return {
@@ -216,6 +225,7 @@ function makeService(opts: {
     tradeUpdate,
     calculateActiveTrade,
     validateActiveTradeGeometry,
+    emitTradeClosed,
   };
 }
 
@@ -602,6 +612,56 @@ describe('TradeLogService.settleManualClose', () => {
       service.settleManualClose('u1', openTrade, data, 1.105),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(settleRealizedPnL).toHaveBeenCalledTimes(1);
+  });
+
+  it('emits one trade-closed event for the closing user with the persisted trade after a successful close', async () => {
+    const txUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const { service, emitTradeClosed } = makeService({ txUpdateMany });
+
+    const result = await service.settleManualClose(
+      'u1',
+      openTrade,
+      { status: 'closed_in_profit' } as any,
+      1.105,
+    );
+
+    expect(emitTradeClosed).toHaveBeenCalledTimes(1);
+    // Routed to the closing user, carrying the same trade the call returns.
+    expect(emitTradeClosed).toHaveBeenCalledWith('u1', result);
+    expect(result).toEqual(
+      expect.objectContaining({ id: 't1', status: 'closed_in_profit' }),
+    );
+  });
+
+  it('does not emit a trade-closed event when the atomic claim loses a competing close', async () => {
+    const txUpdateMany = jest.fn().mockResolvedValue({ count: 0 });
+    const { service, emitTradeClosed } = makeService({ txUpdateMany });
+
+    await expect(
+      service.settleManualClose(
+        'u1',
+        openTrade,
+        { status: 'closed_in_profit' } as any,
+        1.105,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(emitTradeClosed).not.toHaveBeenCalled();
+  });
+
+  it('emits the trade-closed event exactly once across two attempted manual closes', async () => {
+    const txUpdateMany = jest
+      .fn()
+      .mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValueOnce({ count: 0 });
+    const { service, emitTradeClosed } = makeService({ txUpdateMany });
+    const data = { status: 'closed_in_profit' } as any;
+
+    await service.settleManualClose('u1', openTrade, data, 1.105);
+    await expect(
+      service.settleManualClose('u1', openTrade, data, 1.105),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(emitTradeClosed).toHaveBeenCalledTimes(1);
   });
 
   it('settles using geometry edited in the same close request', async () => {

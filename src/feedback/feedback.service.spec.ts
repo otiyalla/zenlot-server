@@ -50,7 +50,7 @@ describe('FeedbackService', () => {
   it('reports successful administrative email delivery', async () => {
     const { service, emailService, analytics } = makeService(true);
 
-    const result = await service.submitFeedback(dto, '127.0.0.1');
+    const result = await service.submitFeedback(dto, '127.0.0.1', 'user-1');
 
     expect(result).toEqual({
       id: 'feedback-1',
@@ -74,7 +74,7 @@ describe('FeedbackService', () => {
   it('reports failed administrative email delivery without claiming success', async () => {
     const { service, analytics } = makeService(false);
 
-    const result = await service.submitFeedback(dto, '127.0.0.1');
+    const result = await service.submitFeedback(dto, '127.0.0.1', 'user-1');
 
     expect(result.emailSent).toBe(false);
     expect(analytics.trackFeedbackEmailSent).not.toHaveBeenCalled();

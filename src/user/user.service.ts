@@ -609,7 +609,6 @@ export class UserService {
     }
 
     await this.auditService.log({
-      userId: id,
       action: 'ACCOUNT_DELETED',
       resource: 'user',
       resourceId: id,

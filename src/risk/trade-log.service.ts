@@ -27,6 +27,7 @@ import { DrawdownPeriod } from '../notifications/notification.copy';
 import { EvaluationService } from '../evaluation/evaluation.service';
 import { PostTradeGradingService } from '../evaluation/post-trade-grading.service';
 import { StopAdjustment } from '../evaluation/engine';
+import { QuoteGateway } from '../quote/quote.gateway';
 
 /**
  * Trade statuses whose close settled realized PnL onto the account balance +
@@ -55,6 +56,7 @@ export class TradeLogService {
     private readonly notifications: NotificationsService,
     private readonly evaluationService: EvaluationService,
     private readonly postTradeGrading: PostTradeGradingService,
+    private readonly quoteGateway: QuoteGateway,
     @InjectQueue(COACHING_QUEUE) private readonly coachingQueue: Queue,
   ) {}
 
@@ -630,6 +632,10 @@ export class TradeLogService {
     for (const period of newlyBreachedPeriods(before, after)) {
       void this.notifications.notifyDrawdownBreach(userId, period);
     }
+
+    // Emit trade-closed event so the client (TradeProvider) updates tradeHistory
+    // and triggers frontend recalculation of TradingAnalysis.
+    this.quoteGateway.emitTradeClosed(userId, updated);
 
     // Phase 2 post-trade grading (spec Sections 6 & 7). Best-effort, post-commit.
     void this.postTradeGrading

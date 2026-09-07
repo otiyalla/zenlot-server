@@ -462,7 +462,7 @@ describe('UserService', () => {
       }),
     );
     expect(audit.log).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'ACCOUNT_DELETED', userId: 'user-1' }),
+      expect.objectContaining({ action: 'ACCOUNT_DELETED' }),
     );
     expect(analytics.trackAccountDeleted).toHaveBeenCalledWith('user-1');
   });
