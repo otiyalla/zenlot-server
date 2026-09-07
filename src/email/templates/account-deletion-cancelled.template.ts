@@ -50,6 +50,17 @@ export const buildAccountDeletionCancelledTemplate = ({
         "Si vous n'avez <strong>pas</strong> demande ce changement, veuillez contacter notre equipe support a",
       footerTeam: 'Equipe support Zenlot',
     },
+    es: {
+      subject: 'Eliminación de cuenta cancelada - Zenlot',
+      headline: '✅ Eliminación de cuenta cancelada',
+      greeting: 'Hola',
+      cancelledMessage:
+        'La eliminación de tu cuenta de Zenlot ha sido <strong>cancelada</strong>. Tu cuenta y tus datos están a salvo.',
+      cancellationLabel: 'Hora de cancelación',
+      securityMessage:
+        'Si <strong>no</strong> solicitaste este cambio, contacta a nuestro equipo de soporte en',
+      footerTeam: 'Equipo de soporte de Zenlot',
+    },
   };
 
   const copy = copyByLanguage[supportedLanguage];

@@ -82,6 +82,30 @@ export const buildAccountDeletionNoticeTemplate = ({
       gracePeriodLabel: (days: number) =>
         `${days} jour${days === 1 ? '' : 's'}`,
     },
+    es: {
+      subject: 'Acción requerida: aviso de eliminación de cuenta',
+      headline: '🗑️ Eliminación de cuenta programada',
+      greeting: 'Hola',
+      scheduledMessage:
+        'Tu cuenta de Zenlot está programada para su eliminación. Este es el paso final y tendrá lugar en:',
+      gracePeriodIntro:
+        'Durante este <strong>período de gracia</strong>, todavía tienes opciones:',
+      restoreBullet:
+        'Inicia sesión en tu cuenta para <strong>restaurarla</strong>',
+      exportBullet: 'Exporta tus datos de trading',
+      supportBullet: 'Contacta a nuestro equipo de soporte para obtener ayuda',
+      permanentDeletionMessage: (daysLabel: string) =>
+        `Después de <strong>${daysLabel}</strong>, tu cuenta y todos los datos asociados se <strong>eliminarán de forma permanente</strong> y no podrán recuperarse.`,
+      calendarMessage:
+        'También hemos adjuntado un evento de calendario para la fecha de eliminación programada, para ayudarte a llevar el control.',
+      securityNotice:
+        'Si <strong>no</strong> solicitaste esta eliminación, puedes cancelarla iniciando sesión en tu cuenta de inmediato.',
+      footerTeam: 'Equipo de soporte de Zenlot',
+      icsSummary: 'Eliminación de cuenta de Zenlot',
+      icsDescription: (deletionDateDisplay: string) =>
+        `Tu cuenta de Zenlot está programada para eliminarse el ${deletionDateDisplay}. Inicia sesión antes de esa fecha para cancelar.`,
+      gracePeriodLabel: (days: number) => `${days} día${days === 1 ? '' : 's'}`,
+    },
   };
 
   const copy = copyByLanguage[supportedLanguage];

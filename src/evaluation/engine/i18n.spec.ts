@@ -10,29 +10,39 @@ describe('resolveLanguage', () => {
     expect(resolveLanguage('fr')).toBe('fr');
     expect(resolveLanguage('FR')).toBe('fr');
     expect(resolveLanguage('en')).toBe('en');
-    expect(resolveLanguage('es')).toBe('en');
+    expect(resolveLanguage('es')).toBe('es');
+    expect(resolveLanguage('ES')).toBe('es');
+    expect(resolveLanguage('de')).toBe('en');
     expect(resolveLanguage(null)).toBe('en');
     expect(resolveLanguage(undefined)).toBe('en');
   });
 });
 
 describe('violationMessage', () => {
-  it('resolves EN and FR for each static rule', () => {
+  it('resolves EN, FR, and ES for each static rule', () => {
     expect(violationMessage('patternRequired', 'en')).toContain('pattern');
     expect(violationMessage('patternRequired', 'fr')).toContain('schéma');
+    expect(violationMessage('patternRequired', 'es')).toContain('patrón');
     expect(violationMessage('momentumAlignment', 'en')).toContain('momentum');
     expect(violationMessage('momentumAlignment', 'fr')).toContain('momentum');
+    expect(violationMessage('momentumAlignment', 'es')).toContain('momentum');
     expect(violationMessage('priceZoneRequired', 'fr')).toContain(
       'niveau de prix',
     );
+    expect(violationMessage('priceZoneRequired', 'es')).toContain(
+      'nivel de precio',
+    );
     expect(violationMessage('timeConfluenceRequired', 'fr')).toContain(
       'confluence',
+    );
+    expect(violationMessage('timeConfluenceRequired', 'es')).toContain(
+      'confluencia',
     );
   });
 });
 
 describe('stopPlacementViolationMessage', () => {
-  it('interpolates planned + declared in EN and FR', () => {
+  it('interpolates planned + declared in EN, FR, and ES', () => {
     const en = stopPlacementViolationMessage(
       'swing_extreme',
       'arbitrary',
@@ -43,6 +53,9 @@ describe('stopPlacementViolationMessage', () => {
     const fr = stopPlacementViolationMessage('fixed_pips', 'arbitrary', 'fr');
     expect(fr).toContain('spécifie');
     expect(fr).toContain('fixed_pips');
+    const es = stopPlacementViolationMessage('fixed_pips', 'arbitrary', 'es');
+    expect(es).toContain('especifica');
+    expect(es).toContain('fixed_pips');
   });
 });
 
@@ -80,5 +93,14 @@ describe('patternMetric', () => {
     );
     // Unknown type → returns the type key itself.
     expect(patternMetric('nonexistent', {}, 'en')).toBe('nonexistent');
+  });
+
+  it('builds ES strings for each pattern type', () => {
+    expect(patternMetric('early_exit', { pct: 50 }, 'es')).toContain(
+      'objetivo',
+    );
+    expect(patternMetric('lucky_streak', { streak: 4 }, 'es')).toContain(
+      'consecutivas',
+    );
   });
 });

@@ -74,6 +74,31 @@ export const buildWelcomeTemplate = ({
       footer:
         'Le processus avant le résultat — bâtissons la discipline qui se cumule.',
     },
+    es: {
+      subject: `Bienvenido a Zenlot, ${fname} — construyamos tu disciplina de trading`,
+      heroAnimationUrl:
+        'https://pub-61217234bef24505baffb476955a8686.r2.dev/zenlot_welcome_hero.gif',
+      heroAlt: 'Opera con disciplina, no con emoción',
+      heading: `👋 ¡Bienvenido a Zenlot, ${fname}!`,
+      intro:
+        'Zenlot no es un servicio de señales ni otro diario de trading más. Es tu sistema operativo de disciplina y gestión de riesgo: evalúa qué tan bien sigues tu propio proceso, no tu P&L. Una operación que sigue tus reglas y pierde es mejor que una que las rompe y gana.',
+      milestoneIntro: 'Esto es lo que Zenlot hace por ti desde el primer día:',
+      bulletOne:
+        '<strong>Motor de riesgo</strong> — dimensionamiento de posiciones, límites de exposición y límites automáticos de drawdown que te avisan antes de arriesgar de más. Solo de carácter informativo — siempre mantienes el control.',
+      bulletTwo:
+        '<strong>Evaluación previa a la operación</strong> — califica la calidad de tu configuración y contrástala con tu propio plan de trading antes de entrar.',
+      bulletThree:
+        '<strong>Veredictos de proceso frente a resultado</strong> — descubre cuándo una ganancia fue en realidad suerte, para que nunca refuerces un hábito que te costará más adelante.',
+      bulletFour:
+        '<strong>Inteligencia conductual</strong> — una vez que hayas registrado algunas operaciones, Zenlot revela los patrones que te frenan, con coaching en lenguaje sencillo.',
+      ctaIntro:
+        'Comienza estableciendo tus límites de riesgo y definiendo tu plan de trading:',
+      ctaLabel: 'Abrir Zenlot',
+      supportMessage:
+        '¿Preguntas o comentarios? Responde este correo o escríbenos a',
+      footer:
+        'El proceso antes que el resultado: construyamos la disciplina que se acumula.',
+    },
   };
 
   const copy = copyByLanguage[supportedLanguage];
