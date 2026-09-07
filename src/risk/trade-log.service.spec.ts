@@ -14,6 +14,7 @@ import { RiskCalculationView } from './risk.mapper';
 import { NotificationsService } from '../notifications/notifications.service';
 import { EvaluationService } from '../evaluation/evaluation.service';
 import { PostTradeGradingService } from '../evaluation/post-trade-grading.service';
+import { QuoteGateway } from '../quote/quote.gateway';
 
 const view: RiskCalculationView = {
   symbol: 'EURUSD',
@@ -66,6 +67,7 @@ function makeService(opts: {
   markChecklistSkipped?: jest.Mock;
   gradeClosedTrade?: jest.Mock;
   tradeUpdate?: jest.Mock;
+  emitTradeClosed?: jest.Mock;
 }) {
   const calculate =
     opts.calculate ??
@@ -185,6 +187,12 @@ function makeService(opts: {
     notifyDrawdownBreach: jest.fn().mockResolvedValue(undefined),
   } as unknown as NotificationsService;
 
+  const emitTradeClosed =
+    opts.emitTradeClosed ?? jest.fn().mockReturnValue(undefined);
+  const quoteGateway = {
+    emitTradeClosed,
+  } as unknown as QuoteGateway;
+
   const service = new TradeLogService(
     prisma,
     riskCalc,
@@ -194,6 +202,7 @@ function makeService(opts: {
     notifications,
     evaluationService,
     postTradeGrading,
+    quoteGateway,
     coachingQueue,
   );
   return {
@@ -215,6 +224,7 @@ function makeService(opts: {
     tradeUpdate,
     calculateActiveTrade,
     validateActiveTradeGeometry,
+    emitTradeClosed,
   };
 }
 

@@ -87,7 +87,9 @@ export class TradeController {
     @Request() req: AuthenticatedRequest,
   ) {
     query.userId = req.user.id;
-    return this.tradeService.findAll(query);
+    // The assignment above guarantees ownership is present; keep the same
+    // query object for the existing service contract and tests.
+    return this.tradeService.findAll(query as { userId: string });
   }
 
   //http://localhost:3000/trade/range?start=2025-07-01&end=2025-07-12
