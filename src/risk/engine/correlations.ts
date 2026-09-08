@@ -45,6 +45,9 @@ export const CORRELATION_DISCLAIMER = (language: string) => {
   if (language === 'fr') {
     return 'Les corrélations sont des estimations basées sur les conditions de marché typiques et peuvent ne pas tenir pendant les événements de grande ampleur.';
   }
+  if (language === 'es') {
+    return 'Las correlaciones son estimaciones basadas en condiciones típicas del mercado y pueden no mantenerse durante eventos de alto impacto.';
+  }
   return 'Correlations are estimates based on typical market conditions and may not hold during high-impact events.';
 };
 

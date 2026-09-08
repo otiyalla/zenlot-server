@@ -26,5 +26,6 @@ describe('getCorrelatedPairs', () => {
     expect(CORRELATION_DISCLAIMER('fr')).toContain(
       'événements de grande ampleur',
     );
+    expect(CORRELATION_DISCLAIMER('es')).toContain('alto impacto');
   });
 });
