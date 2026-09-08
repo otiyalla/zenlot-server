@@ -23,6 +23,12 @@ describe('buildBehavioralReportContent', () => {
     expect(c.body).toContain('surtrading');
   });
 
+  it('builds pattern-specific Spanish copy', () => {
+    const c = buildBehavioralReportContent('overtrading', 'es', { ...data });
+    expect(c.title).toContain('resumen semanal');
+    expect(c.body).toContain('sobreoperar');
+  });
+
   it('falls back to the generic copy when no top-priority pattern', () => {
     const c = buildBehavioralReportContent(null, 'en', { ...data });
     expect(c.body).toContain('A new behavioral pattern was detected');

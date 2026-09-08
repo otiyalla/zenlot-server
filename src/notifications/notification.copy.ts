@@ -5,7 +5,7 @@ import {
 } from './notification.types';
 
 /**
- * Notification copy (en + fr).
+ * Notification copy (en + fr + es).
  *
  * Tone guide — this is a trading-psychology product, not a casino. The trader's
  * money and discipline are on the line, so:
@@ -17,12 +17,16 @@ import {
  *  - Emoji are used sparingly and inclusively (no gendered/skin-toned emoji);
  *    a single calm marker at most, and never on loss/breach copy.
  *
- * Every string is provided in both supported locales. `localize` falls back to
+ * Every string is provided in all supported locales. `localize` falls back to
  * 'en' for unknown locales (mirrors the app's i18n enableFallback behaviour).
  */
 
-const resolveLocale = (locale?: string): NotificationLocale =>
-  locale?.toLowerCase().startsWith('fr') ? 'fr' : 'en';
+const resolveLocale = (locale?: string): NotificationLocale => {
+  const normalized = locale?.toLowerCase();
+  if (normalized?.startsWith('fr')) return 'fr';
+  if (normalized?.startsWith('es')) return 'es';
+  return 'en';
+};
 
 // Notification body shown in the tray; kept short so it reads well collapsed.
 const COACHING_BODY_MAX = 220;
@@ -59,7 +63,8 @@ export const formatSignedAmount = (
   locale: NotificationLocale,
 ): string => {
   const code = (currency || 'USD').toUpperCase();
-  const intlLocale = locale === 'fr' ? 'fr-FR' : 'en-US';
+  const intlLocale =
+    locale === 'fr' ? 'fr-FR' : locale === 'es' ? 'es-ES' : 'en-US';
   try {
     const formatted = new Intl.NumberFormat(intlLocale, {
       style: 'currency',
@@ -106,6 +111,12 @@ export function buildTradeClosedContent(
       profitBody: `Clôturé en profit ${amount}. Enregistré dans votre journal — notez ce qui a marché.`,
       lossBody: `Clôturé au stop ${amount}. Votre plan a limité la perte — c'est le système qui fonctionne.`,
     },
+    es: {
+      profitTitle: `${symbol} alcanzó tu objetivo`,
+      lossTitle: `${symbol} alcanzó tu stop`,
+      profitBody: `Cerrada en ganancia ${amount}. Registrado en tu diario — anota qué funcionó.`,
+      lossBody: `Cerrada en tu stop ${amount}. Tu plan limitó la pérdida — eso es el sistema funcionando.`,
+    },
   }[locale];
 
   return {
@@ -148,6 +159,12 @@ export function buildCoachingReadyContent(
         ? `Quelques réflexions sur votre trade ${sym} vous attendent. Jetez-y un œil dès que possible.`
         : 'Quelques réflexions sur votre dernier trade vous attendent. Jetez-y un œil dès que possible.',
     },
+    es: {
+      title: 'Tu coaching está listo',
+      fallback: sym
+        ? `Algunas reflexiones sobre tu operación de ${sym} te esperan. Échales un vistazo cuando tengas un momento.`
+        : 'Algunas reflexiones sobre tu última operación te esperan. Échales un vistazo cuando tengas un momento.',
+    },
   }[locale];
 
   return {
@@ -173,6 +190,7 @@ export function buildDrawdownAlertContent(
   const periodWord = {
     en: { daily: 'daily', weekly: 'weekly', monthly: 'monthly' },
     fr: { daily: 'journalière', weekly: 'hebdomadaire', monthly: 'mensuelle' },
+    es: { daily: 'diario', weekly: 'semanal', monthly: 'mensual' },
   }[locale][period];
 
   const copy = {
@@ -183,6 +201,10 @@ export function buildDrawdownAlertContent(
     fr: {
       title: `Votre limite de risque ${periodWord} est atteinte`,
       body: `Votre coupe-circuit a fait son travail et a signalé le drawdown ${periodWord}. Pensez à faire une pause et à revoir votre plan avant le prochain trade.`,
+    },
+    es: {
+      title: `Se alcanzó tu límite de riesgo ${periodWord}`,
+      body: `Tu límite automático hizo su trabajo y marcó el drawdown ${periodWord}. Considera hacer una pausa y revisar tu plan antes de la próxima operación.`,
     },
   }[locale];
 
@@ -216,6 +238,12 @@ export function buildGovernanceAlertContent(
         ? `Votre trade ${sym} est allé à l'encontre d'une règle que vous avez définie. C'est enregistré pour que vous puissiez y réfléchir plus tard — sans jugement.`
         : `Votre dernier trade est allé à l'encontre d'une règle que vous avez définie. C'est enregistré pour que vous puissiez y réfléchir plus tard — sans jugement.`,
     },
+    es: {
+      title: 'Una operación rompió una de tus reglas',
+      body: sym
+        ? `Tu operación de ${sym} fue en contra de una regla que estableciste. Quedó registrada para que puedas reflexionar sobre ella más tarde — sin juicios.`
+        : `Tu última operación fue en contra de una regla que estableciste. Quedó registrada para que puedas reflexionar sobre ella más tarde — sin juicios.`,
+    },
   }[locale];
 
   return {
@@ -241,6 +269,10 @@ export function buildJournalReminderContent(
     fr: {
       title: 'Un instant pour votre journal',
       body: 'Deux minutes de réflexion, ça compte. Comment s’est passé votre trading aujourd’hui ?',
+    },
+    es: {
+      title: 'Un momento para tu diario',
+      body: 'Dos minutos de reflexión se acumulan. ¿Cómo se sintió tu trading hoy?',
     },
   }[locale];
 
@@ -298,6 +330,17 @@ const PATTERN_LABEL: Record<
     chasing_entries: 'la poursuite des entrées',
     weak_setup_bias: 'un penchant pour les setups faibles',
   },
+  es: {
+    early_exit: 'salir de las operaciones ganadoras demasiado pronto',
+    stop_widening: 'ampliar tus stops',
+    revenge_trading: 'operar por revancha después de las pérdidas',
+    overtrading: 'sobreoperar',
+    rule_breaking_streak: 'una racha de operaciones que rompen tus reglas',
+    inconsistent_sizing: 'un dimensionamiento de posición inconsistente',
+    lucky_streak: 'ganancias a pesar de romper tus reglas',
+    chasing_entries: 'perseguir entradas',
+    weak_setup_bias: 'una tendencia hacia configuraciones débiles',
+  },
 };
 
 /**
@@ -332,6 +375,14 @@ export function buildBehavioralReportContent(
         : '',
       generic:
         'Un nouveau schéma comportemental a été détecté. Quelques minutes de réflexion peuvent changer la semaine prochaine.',
+    },
+    es: {
+      title: 'Tu resumen semanal de trading está listo',
+      labelled: label
+        ? `Notamos un patrón relacionado con ${label}. Unos minutos de reflexión ahora pueden cambiar la próxima semana.`
+        : '',
+      generic:
+        'Se detectó un nuevo patrón conductual. Unos minutos de reflexión ahora pueden cambiar la próxima semana.',
     },
   }[locale];
 

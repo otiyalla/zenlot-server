@@ -22,7 +22,7 @@ export enum NotificationCategory {
 export type NotificationUrgency = 'urgent' | 'gentle';
 
 /** Locales the copy builder supports; falls back to 'en' for anything else. */
-export type NotificationLocale = 'en' | 'fr';
+export type NotificationLocale = 'en' | 'fr' | 'es';
 
 /**
  * A resolved, user-facing notification ready to hand to the Expo push pipeline.
