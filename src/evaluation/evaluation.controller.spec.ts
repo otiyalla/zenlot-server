@@ -4,6 +4,7 @@ import { TradingPlanService } from './trading-plan.service';
 import { EvaluationService } from './evaluation.service';
 import { PostTradeGradingService } from './post-trade-grading.service';
 import { BehavioralReportService } from './behavioral-report.service';
+import { SetupPatternService } from './setup-pattern.service';
 import { AuthenticatedRequest } from '../user/interfaces/authenticated-request.interface';
 import { SubmitChecklistDto } from './dto/submit-checklist.dto';
 import { UpsertTradingPlanDto } from './dto/upsert-trading-plan.dto';
@@ -23,6 +24,7 @@ describe('EvaluationController', () => {
   let getVerdictForTrade: jest.Mock;
   let getOrGenerate: jest.Mock;
   let statsSummary: jest.Mock;
+  let listSetupPatterns: jest.Mock;
 
   beforeEach(async () => {
     getCurrentPlan = jest.fn().mockResolvedValue(null);
@@ -34,6 +36,11 @@ describe('EvaluationController', () => {
     getVerdictForTrade = jest.fn().mockResolvedValue({ verdict: 'good_trade' });
     getOrGenerate = jest.fn().mockResolvedValue({ id: 'report-1' });
     statsSummary = jest.fn().mockResolvedValue({ winRate: 0.5 });
+    listSetupPatterns = jest
+      .fn()
+      .mockResolvedValue([
+        { name: 'Head and Shoulders', usageCount: 3, lastUsedAt: 'ts' },
+      ]);
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [EvaluationController],
@@ -51,6 +58,10 @@ describe('EvaluationController', () => {
           provide: BehavioralReportService,
           useValue: { getOrGenerate, statsSummary },
         },
+        {
+          provide: SetupPatternService,
+          useValue: { list: listSetupPatterns },
+        },
       ],
     }).compile();
 
@@ -60,6 +71,16 @@ describe('EvaluationController', () => {
   it('GET /plan delegates to the plan service with the user id', async () => {
     await controller.getPlan(req);
     expect(getCurrentPlan).toHaveBeenCalledWith('u1');
+  });
+
+  it('GET /setup-patterns returns the library scoped to the caller', async () => {
+    const result = await controller.getSetupPatterns(req);
+
+    // Scoped by the token's user id, never by a client-supplied one.
+    expect(listSetupPatterns).toHaveBeenCalledWith('u1');
+    expect(result).toEqual([
+      { name: 'Head and Shoulders', usageCount: 3, lastUsedAt: 'ts' },
+    ]);
   });
 
   it('PUT /plan delegates to savePlan', async () => {

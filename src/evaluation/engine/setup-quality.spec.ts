@@ -64,6 +64,54 @@ describe('scoreSetupQuality', () => {
       );
       expect(r.breakdown[1].points).toBe(0);
     });
+
+    // SCRUM-59 added 14 chart patterns and a free-text `customName`. Scoring
+    // reads only `identified` + `confidence`, and it must stay that way: if a
+    // pattern type ever started moving the score, every historical evaluation
+    // would silently mean something different. This pins that down.
+    it.each([
+      'abc_correction',
+      'five_wave_trend',
+      'head_and_shoulders',
+      'cup_and_handle',
+      'other',
+      'none',
+    ] as const)(
+      'scores identically regardless of pattern type (%s)',
+      (type) => {
+        const r = scoreSetupQuality(
+          makeChecklist({
+            pattern: { identified: true, type, confidence: 'high' },
+          }),
+        );
+        expect(r.breakdown[1]).toEqual({
+          factor: 'pattern',
+          points: 25,
+          max: 25,
+        });
+        expect(r.total).toBe(100);
+      },
+    );
+
+    it('scores identically whether or not a custom name is present', () => {
+      const withName = scoreSetupQuality(
+        makeChecklist({
+          pattern: {
+            identified: true,
+            type: 'other',
+            customName: 'Bat Harmonic',
+            confidence: 'medium',
+          },
+        }),
+      );
+      const withoutName = scoreSetupQuality(
+        makeChecklist({
+          pattern: { identified: true, type: 'other', confidence: 'medium' },
+        }),
+      );
+      expect(withName.total).toBe(withoutName.total);
+      expect(withName.breakdown).toEqual(withoutName.breakdown);
+    });
   });
 
   describe('priceZone (25 pts): confluence / at-level / none', () => {

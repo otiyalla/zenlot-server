@@ -5,6 +5,7 @@ import { TradingPlanService } from './trading-plan.service';
 import { SubmitChecklistDto } from './dto/submit-checklist.dto';
 import { TradingPlan } from './engine';
 import { EvaluationCoachingEnqueueService } from './coaching/coaching-enqueue.service';
+import { SetupPatternService } from './setup-pattern.service';
 
 const USER_ID = 'u1';
 
@@ -61,6 +62,8 @@ function makeService(opts: {
   checklistUpdateMany?: jest.Mock;
   evalFindFirst?: jest.Mock;
   evalUpdateMany?: jest.Mock;
+  recordPattern?: jest.Mock;
+  linkUsageToTrade?: jest.Mock;
 }) {
   const checklistCreate =
     opts.checklistCreate ?? jest.fn().mockResolvedValue({ id: 'chk-1' });
@@ -114,10 +117,20 @@ function makeService(opts: {
     enqueuePreTradeCoaching,
   } as unknown as EvaluationCoachingEnqueueService;
 
+  const recordPattern =
+    opts.recordPattern ?? jest.fn().mockResolvedValue(undefined);
+  const linkUsageToTrade =
+    opts.linkUsageToTrade ?? jest.fn().mockResolvedValue(undefined);
+  const setupPatterns = {
+    record: recordPattern,
+    linkUsageToTrade,
+  } as unknown as SetupPatternService;
+
   const service = new EvaluationService(
     prisma,
     tradingPlanService,
     coachingEnqueue,
+    setupPatterns,
   );
   return {
     service,
@@ -129,6 +142,8 @@ function makeService(opts: {
     evalFindFirst,
     evalUpdateMany,
     enqueuePreTradeCoaching,
+    recordPattern,
+    linkUsageToTrade,
   };
 }
 
@@ -387,5 +402,141 @@ describe('EvaluationService soft-gate', () => {
     };
     expect(arg.data.tradeId).toBe('t1');
     expect(arg.data.skipped).toBe(true);
+  });
+
+  it('links the recorded pattern usage to the trade after a successful claim', async () => {
+    const { service, linkUsageToTrade } = makeService({
+      checklistFindFirst: jest
+        .fn()
+        .mockResolvedValue({ id: 'chk-1', userId: USER_ID, tradeId: null }),
+    });
+
+    await service.linkChecklistToTrade(USER_ID, 't1', 'chk-1');
+
+    expect(linkUsageToTrade).toHaveBeenCalledWith(USER_ID, 'chk-1', 't1');
+  });
+
+  it('does not link pattern usage when the checklist claim was lost', async () => {
+    const { service, linkUsageToTrade } = makeService({
+      checklistFindFirst: jest
+        .fn()
+        .mockResolvedValue({ id: 'chk-1', userId: USER_ID, tradeId: null }),
+      checklistUpdateMany: jest.fn().mockResolvedValue({ count: 0 }),
+    });
+
+    await service.linkChecklistToTrade(USER_ID, 't1', 'chk-1');
+
+    expect(linkUsageToTrade).not.toHaveBeenCalled();
+  });
+
+  it('still links the trade when pattern-usage linking fails', async () => {
+    const { service } = makeService({
+      checklistFindFirst: jest
+        .fn()
+        .mockResolvedValue({ id: 'chk-1', userId: USER_ID, tradeId: null }),
+      linkUsageToTrade: jest.fn().mockRejectedValue(new Error('db down')),
+    });
+
+    await expect(
+      service.linkChecklistToTrade(USER_ID, 't1', 'chk-1'),
+    ).resolves.toBe(true);
+  });
+});
+
+describe('EvaluationService setup pattern (SCRUM-59)', () => {
+  const otherChecklist = (customName?: string): SubmitChecklistDto => ({
+    ...strongChecklist,
+    pattern: {
+      identified: true,
+      type: 'other',
+      confidence: 'high',
+      note: '',
+      ...(customName === undefined ? {} : { customName }),
+    },
+  });
+
+  it('records the declared pattern against the new checklist', async () => {
+    const { service, recordPattern } = makeService({});
+
+    await service.submitChecklist(
+      USER_ID,
+      otherChecklist('Bat Harmonic'),
+      'en',
+    );
+
+    expect(recordPattern).toHaveBeenCalledWith(
+      USER_ID,
+      expect.objectContaining({ type: 'other', customName: 'Bat Harmonic' }),
+      'chk-1',
+    );
+  });
+
+  it('normalises the custom name before it is persisted anywhere', async () => {
+    const { service, checklistCreate, recordPattern } = makeService({});
+
+    await service.submitChecklist(
+      USER_ID,
+      otherChecklist('  Head   and\tShoulders  '),
+      'en',
+    );
+
+    const stored = checklistCreate.mock.calls[0][0] as {
+      data: { checklist: { pattern: { customName?: string } } };
+    };
+    expect(stored.data.checklist.pattern.customName).toBe('Head and Shoulders');
+    expect(recordPattern).toHaveBeenCalledWith(
+      USER_ID,
+      expect.objectContaining({ customName: 'Head and Shoulders' }),
+      'chk-1',
+    );
+  });
+
+  it('drops a custom name that is only whitespace', async () => {
+    const { service, checklistCreate } = makeService({});
+
+    await service.submitChecklist(USER_ID, otherChecklist('   '), 'en');
+
+    const stored = checklistCreate.mock.calls[0][0] as {
+      data: { checklist: { pattern: Record<string, unknown> } };
+    };
+    expect(stored.data.checklist.pattern).not.toHaveProperty('customName');
+  });
+
+  it('drops a stale custom name left on a non-other pattern type', async () => {
+    const { service, checklistCreate } = makeService({});
+
+    await service.submitChecklist(
+      USER_ID,
+      {
+        ...strongChecklist,
+        pattern: {
+          identified: true,
+          type: 'double_top',
+          confidence: 'high',
+          note: '',
+          customName: 'leftover text',
+        },
+      },
+      'en',
+    );
+
+    const stored = checklistCreate.mock.calls[0][0] as {
+      data: { checklist: { pattern: Record<string, unknown> } };
+    };
+    expect(stored.data.checklist.pattern).not.toHaveProperty('customName');
+  });
+
+  it('still returns the evaluation when recording the pattern fails', async () => {
+    const { service } = makeService({
+      recordPattern: jest.fn().mockRejectedValue(new Error('db down')),
+    });
+
+    const result = await service.submitChecklist(
+      USER_ID,
+      otherChecklist('Bat Harmonic'),
+      'en',
+    );
+
+    expect(result.setupQuality.grade).toBe('A');
   });
 });

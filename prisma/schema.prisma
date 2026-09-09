@@ -61,6 +61,7 @@ model trade {
   preTradeEvaluations preTradeEvaluation[]
   executionGrades     executionGrade[]
   tradeVerdicts       tradeVerdict[]
+  setupPatternUsages  setupPatternUsage[]
 
   @@index([userId])
   @@index([status, symbol])
@@ -188,6 +189,8 @@ model user {
   executionGrades              executionGrade[]
   tradeVerdicts                tradeVerdict[]
   behavioralReports            behavioralReport[]
+  customSetupPatterns          customSetupPattern[]
+  setupPatternUsages           setupPatternUsage[]
 }
 
 /// An Expo push token for one of a user's devices. A user can have many devices;
@@ -335,9 +338,60 @@ model preTradeChecklist {
   skipped     Boolean  @default(false)
   submittedAt DateTime @default(now())
   evaluation  preTradeEvaluation?
+  patternUsage setupPatternUsage?
 
   @@index([userId])
   @@index([tradeId])
+}
+
+// SCRUM-59: the trader's own library of custom setup pattern names, built up
+// from the "Other" option on the pre-trade checklist. `normalizedName` is the
+// case-folded, whitespace-collapsed form and carries the per-user uniqueness
+// constraint, so "Head and Shoulders" and "head  and shoulders" stay one entry;
+// `name` keeps the casing the trader actually typed, for display.
+model customSetupPattern {
+  id             String              @id @default(uuid())
+  user           user                @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  userId         String
+  name           String              @db.VarChar(64)
+  normalizedName String              @db.VarChar(64)
+  usageCount     Int                 @default(1)
+  lastUsedAt     DateTime            @default(now())
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  usages         setupPatternUsage[]
+
+  @@unique([userId, normalizedName])
+  @@index([userId, lastUsedAt(sort: Desc)])
+}
+
+// SCRUM-59: one row per checklist that declared a pattern, linking that pattern
+// to the trade it was used on. A library row is reused across many trades, so
+// the link cannot live on customSetupPattern itself. Recorded for EVERY pattern
+// type (not just custom ones) so "how do my head-and-shoulders trades perform?"
+// is a single indexed query. `tradeId` is backfilled when the checklist is
+// linked to its trade, and stays null for a declared-but-never-logged setup.
+// The evaluation and its AI coaching are one join away via checklistId, since
+// preTradeEvaluation.checklistId is unique.
+model setupPatternUsage {
+  id              String              @id @default(uuid())
+  user            user                @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  userId          String
+  patternType     String
+  customPattern   customSetupPattern? @relation(fields: [customPatternId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  customPatternId String?
+  // Snapshot of the declared name, so history survives a library edit/delete.
+  customName      String?             @db.VarChar(64)
+  confidence      String?
+  checklist       preTradeChecklist?  @relation(fields: [checklistId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  checklistId     String?             @unique
+  trade           trade?              @relation(fields: [tradeId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tradeId         String?
+  createdAt       DateTime            @default(now())
+
+  @@index([userId, patternType])
+  @@index([tradeId])
+  @@index([customPatternId])
 }
 
 // Pre-trade evaluation result. tradeId is NULLABLE (mirrors preTradeChecklist —
