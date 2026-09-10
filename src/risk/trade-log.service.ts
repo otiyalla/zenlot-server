@@ -369,6 +369,9 @@ export class TradeLogService {
       void this.notifications.notifyDrawdownBreach(userId, period);
     }
 
+    // Emit trade-closed event so clients update trade history and analytics.
+    this.quoteGateway.emitTradeClosed(userId, updated);
+
     // Phase 2 post-trade grading (spec Sections 6 & 7). Runs AFTER the close
     // transaction has committed and is fully best-effort — gradeClosedTrade
     // never throws, but we void + .catch defensively so it can never affect the

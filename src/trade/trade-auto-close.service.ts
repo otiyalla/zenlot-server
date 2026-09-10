@@ -314,9 +314,13 @@ export class TradeAutoCloseService implements OnModuleInit {
 
     // Phase 2 post-trade grading (spec Sections 6 & 7). Runs AFTER the close
     // transaction has committed and is fully best-effort — never affects the
-    // auto-close. Language defaults to 'en' (no request context in the job).
+    // auto-close. Load the user's preferred language so coaching is localised.
+    const userLanguage = await this.prisma.user
+      .findUnique({ where: { id: trade.userId }, select: { language: true } })
+      .then((u) => u?.language ?? 'en')
+      .catch(() => 'en');
     void this.postTradeGrading
-      .gradeClosedTrade(trade.userId, trade.id)
+      .gradeClosedTrade(trade.userId, trade.id, userLanguage)
       .catch(() => undefined);
   }
 

@@ -234,10 +234,23 @@ export class DrawdownService {
     }
 
     const existingPeakBalance = toNumber(existing.peakBalance);
-    const dailyOpenBalance = toNumber(existing.dailyOpenBalance);
-    const weeklyOpenBalance = toNumber(existing.weeklyOpenBalance);
-    const monthlyOpenBalance = toNumber(existing.monthlyOpenBalance);
     const roundedBalance = roundCurrency(balance);
+    // When the row was seeded at zero (no risk profile balance set yet), treat
+    // the first positive manual balance as a full initialization: set all period
+    // opening balances to this value so drawdown computes correctly from day one.
+    const isUninitialized =
+      toNumber(existing.dailyOpenBalance) === 0 &&
+      toNumber(existing.weeklyOpenBalance) === 0 &&
+      toNumber(existing.monthlyOpenBalance) === 0;
+    const dailyOpenBalance = isUninitialized
+      ? roundedBalance
+      : toNumber(existing.dailyOpenBalance);
+    const weeklyOpenBalance = isUninitialized
+      ? roundedBalance
+      : toNumber(existing.weeklyOpenBalance);
+    const monthlyOpenBalance = isUninitialized
+      ? roundedBalance
+      : toNumber(existing.monthlyOpenBalance);
     const peakBalance = Math.max(existingPeakBalance, roundedBalance);
     const dd = calculateDrawdown(
       roundedBalance,
@@ -252,6 +265,9 @@ export class DrawdownService {
       data: {
         accountBalance: roundedBalance,
         peakBalance,
+        dailyOpenBalance,
+        weeklyOpenBalance,
+        monthlyOpenBalance,
         dailyDrawdownPct: dd.daily,
         weeklyDrawdownPct: dd.weekly,
         monthlyDrawdownPct: dd.monthly,
