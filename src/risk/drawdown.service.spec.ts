@@ -426,8 +426,26 @@ describe('DrawdownService.resetCircuitBreakers', () => {
 
   function makeService(update: jest.Mock, rows: Row[]) {
     const findMany = jest.fn().mockResolvedValue(rows);
+    // Build a transaction-client proxy: SELECT FOR UPDATE is a no-op in tests,
+    // findUniqueOrThrow re-reads the same row that findMany returned, and update
+    // forwards to the same mock so test assertions on update still work.
+    const makeTxDb = (row: Row) => ({
+      $queryRaw: jest.fn().mockResolvedValue([]),
+      drawdownState: {
+        findUniqueOrThrow: jest.fn().mockResolvedValue(row),
+        update,
+      },
+    });
+    const $transaction = jest.fn().mockImplementation(async (cb: (db: unknown) => Promise<unknown>) => {
+      // Execute callback for each row that would reach the transaction.
+      // In practice each $transaction call covers one row, so pass the first
+      // row that matches the userId the callback locks on.
+      const row = rows[0];
+      return cb(makeTxDb(row));
+    });
     const prisma = {
       drawdownState: { findMany, update },
+      $transaction,
     } as unknown as PrismaService;
     return { service: new DrawdownService(prisma), findMany };
   }
