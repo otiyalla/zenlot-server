@@ -265,14 +265,19 @@ export function detectInconsistentSizing(
   language: string | Language = 'en',
 ): BehavioralPattern | null {
   const lang = resolveLanguage(language);
-  const sizingDeviations = trades.filter((t) => {
-    if (!t.suggestedLotSize) return false;
+  const tradesWithSuggestion = trades.filter((t) => !!t.suggestedLotSize);
+  const sizingDeviations = tradesWithSuggestion.filter((t) => {
     const deviation =
-      Math.abs(t.actualLotSize - t.suggestedLotSize) / t.suggestedLotSize;
+      Math.abs(t.actualLotSize - t.suggestedLotSize!) / t.suggestedLotSize!;
     return deviation > INCONSISTENT_SIZING_DEVIATION;
   });
 
-  const rate = trades.length > 0 ? sizingDeviations.length / trades.length : 0;
+  // Denominator is only trades that have a suggestion — legacy trades without
+  // one cannot deviate and must not dilute the rate (spec 8.2).
+  const rate =
+    tradesWithSuggestion.length > 0
+      ? sizingDeviations.length / tradesWithSuggestion.length
+      : 0;
   if (
     rate < INCONSISTENT_SIZING_RATE ||
     sizingDeviations.length < INCONSISTENT_SIZING_MIN_SAMPLE
@@ -285,7 +290,7 @@ export function detectInconsistentSizing(
     severity: 'warning',
     confidence: rate,
     sampleSize: sizingDeviations.length,
-    totalTrades: trades.length,
+    totalTrades: tradesWithSuggestion.length,
     evidence: sizingDeviations.map((t) => t.tradeId),
     metric: patternMetric(
       'inconsistent_sizing',

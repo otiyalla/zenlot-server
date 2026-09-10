@@ -288,6 +288,7 @@ export class TradeService {
     id: string,
     userId: string,
     updateTradeDto: UpdateTradeDto,
+    language: string = 'en',
   ) {
     const existing = await this.findOneForUser(id, userId);
     const preservePlannedRr =
@@ -315,6 +316,7 @@ export class TradeService {
         existing,
         this.toUpdateData(updateTradeDto, preservePlannedRr),
         updateTradeDto.closedPrice ?? 0,
+        language,
       );
     }
 

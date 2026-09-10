@@ -68,6 +68,7 @@ export class QuoteService {
     const fmpClient = axios.create({
       method: 'get',
       baseURL: forex_url,
+      timeout: 8000,
     });
     const fmpApiKey = this.configService.get<string>('FMP_API_KEY');
     if (!fmpApiKey) throw new Error('FMP API key is required');
