@@ -33,6 +33,7 @@ export class UniRateClient implements FxQuote {
     this.uniRateClient = axios.create({
       baseURL: 'https://api.unirateapi.com/api/convert',
       method: 'get',
+      timeout: 8000,
     });
   }
 

@@ -286,29 +286,42 @@ export class DrawdownService {
       // never double-fires when the hourly job runs again the same local day).
       if (row.lastResetLocalDate === date) continue;
 
-      const accountBalance = toNumber(row.accountBalance);
-      await this.prisma.drawdownState.update({
-        where: { userId: row.userId },
-        data: {
-          dailyOpenBalance: accountBalance,
-          dailyDrawdownPct: 0,
-          dailyBreached: false,
-          lastResetLocalDate: date,
-          ...(isMonday
-            ? {
-                weeklyOpenBalance: accountBalance,
-                weeklyDrawdownPct: 0,
-                weeklyBreached: false,
-              }
-            : {}),
-          ...(isMonthStart
-            ? {
-                monthlyOpenBalance: accountBalance,
-                monthlyDrawdownPct: 0,
-                monthlyBreached: false,
-              }
-            : {}),
-        },
+      await this.prisma.$transaction(async (db) => {
+        // Lock the row so this reset serializes with concurrent applyBalanceDelta
+        // calls — without the lock, a trade settlement committing between the
+        // findMany read and this update can write opening balances from a stale
+        // pre-settlement balance snapshot or overwrite a newly-set breach flag.
+        await db.$queryRaw`SELECT "userId" FROM "drawdownState" WHERE "userId" = ${row.userId} FOR UPDATE`;
+        const fresh = await db.drawdownState.findUniqueOrThrow({
+          where: { userId: row.userId },
+        });
+        // Re-check the guard inside the transaction — another concurrent reset
+        // may have already run for this local date.
+        if (fresh.lastResetLocalDate === date) return;
+        const accountBalance = toNumber(fresh.accountBalance);
+        await db.drawdownState.update({
+          where: { userId: row.userId },
+          data: {
+            dailyOpenBalance: accountBalance,
+            dailyDrawdownPct: 0,
+            dailyBreached: false,
+            lastResetLocalDate: date,
+            ...(isMonday
+              ? {
+                  weeklyOpenBalance: accountBalance,
+                  weeklyDrawdownPct: 0,
+                  weeklyBreached: false,
+                }
+              : {}),
+            ...(isMonthStart
+              ? {
+                  monthlyOpenBalance: accountBalance,
+                  monthlyDrawdownPct: 0,
+                  monthlyBreached: false,
+                }
+              : {}),
+          },
+        });
       });
     }
   }
