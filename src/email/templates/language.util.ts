@@ -1,16 +1,13 @@
-export type SupportedEmailLanguage = 'en' | 'fr' | 'es';
+import {
+  resolveSupportedLanguage,
+  type SupportedLanguage,
+} from '../../utils/locale.util';
+
+export type SupportedEmailLanguage = SupportedLanguage;
 
 export const resolveSupportedEmailLanguage = (
   language: string | null | undefined,
-): SupportedEmailLanguage => {
-  const normalizedLanguage = String(language ?? '')
-    .trim()
-    .toLowerCase();
-  if (normalizedLanguage === 'fr' || normalizedLanguage === 'es') {
-    return normalizedLanguage;
-  }
-  return 'en';
-};
+): SupportedEmailLanguage => resolveSupportedLanguage(language);
 
 export const getLocaleForLanguage = (
   language: SupportedEmailLanguage,

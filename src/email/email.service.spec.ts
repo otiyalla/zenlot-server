@@ -74,6 +74,57 @@ describe('EmailService', () => {
     expect(message.html).toContain('gestion du risque');
   });
 
+  it('sendWelcomeEmail sends gender-neutral Spanish content for es language', async () => {
+    const result = await service.sendWelcomeEmail(
+      'user@example.com',
+      'Ana',
+      'Garcia',
+      'es',
+    );
+
+    expect(result).toBe(true);
+    expect(transport.send).toHaveBeenCalledTimes(1);
+
+    const message = transport.send.mock.calls[0][0];
+    expect(message.subject).toBe(
+      'Te damos la bienvenida a Zenlot, Ana \u2014 construyamos tu disciplina de trading',
+    );
+    expect(message.html).toContain('Te damos la bienvenida a Zenlot');
+    // "Bienvenido" is masculine and misgenders most recipients; the greeting
+    // must stay neutral.
+    expect(message.subject).not.toContain('Bienvenido');
+    expect(message.html).not.toContain('Bienvenido');
+  });
+
+  it('sendWelcomeEmail resolves a regional Spanish tag to Spanish', async () => {
+    const result = await service.sendWelcomeEmail(
+      'user@example.com',
+      'Ana',
+      'Garcia',
+      'es-419',
+    );
+
+    expect(result).toBe(true);
+
+    const message = transport.send.mock.calls[0][0];
+    expect(message.html).toContain('Te damos la bienvenida a Zenlot');
+  });
+
+  it('sendWelcomeEmail does not treat a lookalike tag as Spanish', async () => {
+    // 'est' is Estonian; it only shares a prefix with 'es'.
+    const result = await service.sendWelcomeEmail(
+      'user@example.com',
+      'John',
+      'Doe',
+      'est',
+    );
+
+    expect(result).toBe(true);
+
+    const message = transport.send.mock.calls[0][0];
+    expect(message.html).toContain('Welcome to Zenlot, John!');
+  });
+
   it('sendPasswordResentEmail sends Spanish content for es language', async () => {
     const result = await service.sendPasswordResentEmail(
       'user@example.com',

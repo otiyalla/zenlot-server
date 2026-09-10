@@ -29,6 +29,24 @@ describe('buildBehavioralReportContent', () => {
     expect(c.body).toContain('sobreoperar');
   });
 
+  it.each([
+    ['es-419', 'sobreoperar'],
+    ['es_MX', 'sobreoperar'],
+  ])('resolves the regional tag %s to Spanish copy', (locale, expected) => {
+    const c = buildBehavioralReportContent('overtrading', locale, { ...data });
+    expect(c.body).toContain(expected);
+  });
+
+  it.each([['est'], ['fry']])(
+    'does not treat the lookalike tag %s as fr/es',
+    (locale) => {
+      const c = buildBehavioralReportContent('overtrading', locale, {
+        ...data,
+      });
+      expect(c.title).toBe('Your weekly trading review is ready');
+    },
+  );
+
   it('falls back to the generic copy when no top-priority pattern', () => {
     const c = buildBehavioralReportContent(null, 'en', { ...data });
     expect(c.body).toContain('A new behavioral pattern was detected');

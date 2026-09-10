@@ -1,3 +1,5 @@
+import { resolveSupportedLanguage } from '../utils/locale.util';
+
 import {
   NotificationCategory,
   NotificationContent,
@@ -21,12 +23,10 @@ import {
  * 'en' for unknown locales (mirrors the app's i18n enableFallback behaviour).
  */
 
-const resolveLocale = (locale?: string): NotificationLocale => {
-  const normalized = locale?.toLowerCase();
-  if (normalized?.startsWith('fr')) return 'fr';
-  if (normalized?.startsWith('es')) return 'es';
-  return 'en';
-};
+// Shared with the email templates so both surfaces resolve a language tag the
+// same way: primary subtag only, so 'es-419' is Spanish but 'est' is not.
+const resolveLocale = (locale?: string): NotificationLocale =>
+  resolveSupportedLanguage(locale);
 
 // Notification body shown in the tray; kept short so it reads well collapsed.
 const COACHING_BODY_MAX = 220;
