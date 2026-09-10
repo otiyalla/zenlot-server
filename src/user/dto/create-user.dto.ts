@@ -62,7 +62,7 @@ export class CreateUserDto {
   email: string;
 
   @IsString()
-  @IsIn(['en', 'fr'])
+  @IsIn(['en', 'fr', 'es'])
   language: string;
 
   @IsString()

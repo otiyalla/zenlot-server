@@ -45,6 +45,18 @@ export const buildPasswordResetTemplate = ({
         "Si vous n'avez <strong>pas</strong> demande cette reinitialisation de mot de passe, veuillez contacter immediatement notre equipe support a",
       footer: "Merci d'utiliser Zenlot.",
     },
+    es: {
+      subject: 'Confirmación de restablecimiento de contraseña - Zenlot',
+      headline: '🔐 Restablecimiento de contraseña',
+      greeting: 'Hola',
+      resetMessage:
+        'Tu contraseña se ha <strong>restablecido correctamente</strong>. Usa la contraseña temporal a continuación para iniciar sesión:',
+      recommendation:
+        'Por tu seguridad, te recomendamos encarecidamente cambiar esta contraseña en cuanto inicies sesión.',
+      warning:
+        'Si <strong>no</strong> solicitaste este restablecimiento de contraseña, contacta a nuestro equipo de soporte de inmediato en',
+      footer: 'Gracias por elegir Zenlot.',
+    },
   };
 
   const copy = copyByLanguage[supportedLanguage];

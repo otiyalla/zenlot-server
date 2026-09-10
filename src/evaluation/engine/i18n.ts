@@ -2,13 +2,14 @@
  * Localization for the Phase 2 evaluation engine's user-facing strings:
  * plan-adherence violation messages and behavioral-pattern metric strings.
  *
- * Mirrors the Phase 1 risk-engine i18n convention exactly (resolve + {en, fr}
- * maps keyed by stable English keys). `resolveLanguage` is reused from the risk
- * engine — there is one notion of "supported language" across the backend.
+ * Mirrors the Phase 1 risk-engine i18n convention exactly (resolve + {en, fr,
+ * es} maps keyed by stable English keys). `resolveLanguage` is reused from the
+ * risk engine — there is one notion of "supported language" across the
+ * backend.
  *
  * Logic keys (`rule`, pattern `type`) stay stable/English for audit and
  * detection; only the human-readable `message` / `metric` text is localized.
- * Both EN and FR are required from day one.
+ * EN, FR, and ES are required.
  */
 
 import { resolveLanguage, Language } from '../../risk/engine/i18n';
@@ -48,6 +49,16 @@ const VIOLATION_MESSAGES: Record<
     timeConfluenceRequired:
       "Votre plan exige une confluence temporelle — l'entrée est hors de la fenêtre horaire",
   },
+  es: {
+    momentumAlignment:
+      'Tu plan exige alineación de momentum — dirección poco clara en el marco superior o ausencia de reversión en el marco inferior',
+    patternRequired:
+      'Tu plan exige un patrón identificable — no se declaró ninguno',
+    priceZoneRequired:
+      'Tu plan exige una entrada en un nivel de precio significativo — no se declaró ninguno',
+    timeConfluenceRequired:
+      'Tu plan exige confluencia horaria — la entrada está fuera de la ventana horaria',
+  },
 };
 
 const STOP_PLACEMENT_MESSAGE: Record<
@@ -58,6 +69,8 @@ const STOP_PLACEMENT_MESSAGE: Record<
     `Your plan specifies ${planned} stops — declared as ${declared}`,
   fr: (planned, declared) =>
     `Votre plan spécifie des stops ${planned} — déclaré comme ${declared}`,
+  es: (planned, declared) =>
+    `Tu plan especifica stops ${planned} — declarado como ${declared}`,
 };
 
 /** Localized message for a non-templated violation rule, falling back to EN. */
@@ -143,6 +156,26 @@ const PATTERN_METRICS: Record<Language, Record<string, MetricBuilder>> = {
       `${p.pct}% des trades à déclencheur objectif sont entrés au-delà du déclencheur déclaré`,
     weak_setup_bias: (p) =>
       `${p.pct}% des trades ont obtenu un score de qualité de setup inférieur à 55`,
+  },
+  es: {
+    early_exit: (p) =>
+      `${p.pct}% de las operaciones ganadoras se cerraron antes del objetivo`,
+    revenge_trading: (p) =>
+      `El apego al plan cae de ${p.overall} a ${p.after} en las 4h posteriores a una pérdida`,
+    lucky_streak: (p) =>
+      `${p.streak} operaciones consecutivas ganadas a pesar de infracciones de reglas`,
+    inconsistent_sizing: (p) =>
+      `${p.pct}% de las operaciones dimensionadas con más de un 20% de desviación respecto a la recomendación del motor de riesgo`,
+    overtrading: (p) =>
+      `Se superó el límite diario de operaciones en ${p.exceededDays} de ${p.activeDays} días de trading activos`,
+    stop_widening: (p) =>
+      `${p.count} operaciones tuvieron un stop movido más lejos de la entrada después de abrir`,
+    rule_breaking_streak: (p) =>
+      `${p.streak} operaciones consecutivas con una infracción grave del plan`,
+    chasing_entries: (p) =>
+      `${p.pct}% de las operaciones con disparador objetivo entraron más allá del disparador declarado`,
+    weak_setup_bias: (p) =>
+      `${p.pct}% de las operaciones obtuvieron una calidad de configuración por debajo de 55`,
   },
 };
 

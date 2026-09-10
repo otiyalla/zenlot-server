@@ -233,7 +233,7 @@ describe('evaluateGovernance', () => {
     ).toBeUndefined();
   });
 
-  it('localizes check messages by language (en default, fr)', () => {
+  it('localizes check messages by language (en default, fr, es)', () => {
     const en = evaluateGovernance(
       baseCalc,
       emptyPortfolio,
@@ -247,10 +247,19 @@ describe('evaluateGovernance', () => {
       profile,
       'fr',
     );
+    const es = evaluateGovernance(
+      baseCalc,
+      emptyPortfolio,
+      noDrawdown,
+      profile,
+      'es',
+    );
     const enMsg = en.checks.find((c) => c.rule === 'maxOpenTrades')?.message;
     const frMsg = fr.checks.find((c) => c.rule === 'maxOpenTrades')?.message;
+    const esMsg = es.checks.find((c) => c.rule === 'maxOpenTrades')?.message;
     expect(enMsg).toBe('Open trade count');
     expect(frMsg).toBe('Nombre de trades ouverts');
+    expect(esMsg).toBe('Número de operaciones abiertas');
   });
 
   it('localizes the blockedReason', () => {
