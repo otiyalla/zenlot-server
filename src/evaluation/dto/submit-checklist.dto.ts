@@ -4,9 +4,11 @@ import {
   IsIn,
   IsOptional,
   IsString,
+  MaxLength,
   ValidateNested,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { CUSTOM_PATTERN_NAME_MAX } from '../setup-pattern.util';
 import type {
   Confidence,
   EntryTriggerType,
@@ -24,6 +26,20 @@ const HIGHER_TF_DIRECTIONS: HigherTfDirection[] = [
 const PATTERN_TYPES: PatternType[] = [
   'abc_correction',
   'five_wave_trend',
+  'head_and_shoulders',
+  'inverse_head_and_shoulders',
+  'double_top',
+  'double_bottom',
+  'triple_top',
+  'triple_bottom',
+  'ascending_triangle',
+  'descending_triangle',
+  'symmetrical_triangle',
+  'bull_flag',
+  'bear_flag',
+  'rising_wedge',
+  'falling_wedge',
+  'cup_and_handle',
   'other',
   'none',
 ];
@@ -71,6 +87,20 @@ class PatternDto {
   @IsIn(PATTERN_TYPES)
   @ApiProperty({ enum: PATTERN_TYPES })
   type: PatternType;
+
+  // Must be declared: the global pipe runs with forbidNonWhitelisted, so an
+  // undeclared field would 400 the whole request rather than be stripped.
+  @IsOptional()
+  @IsString()
+  @MaxLength(CUSTOM_PATTERN_NAME_MAX)
+  @ApiPropertyOptional({
+    maxLength: CUSTOM_PATTERN_NAME_MAX,
+    description:
+      'Free-text pattern name, used when type is "other". Ignored for any ' +
+      "other type. Accepted names are added to the user's custom pattern " +
+      'library and offered as autocomplete suggestions on later checklists.',
+  })
+  customName?: string;
 
   @IsIn(CONFIDENCES)
   @ApiProperty({ enum: CONFIDENCES })

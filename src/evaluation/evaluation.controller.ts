@@ -29,6 +29,7 @@ import {
 } from './behavioral-report.service';
 import { UpsertTradingPlanDto } from './dto/upsert-trading-plan.dto';
 import { SubmitChecklistDto } from './dto/submit-checklist.dto';
+import { SetupPatternService } from './setup-pattern.service';
 import { DEFAULT_PERIOD_DAYS } from './engine';
 
 /**
@@ -49,6 +50,7 @@ export class EvaluationController {
     private readonly evaluationService: EvaluationService,
     private readonly postTradeGrading: PostTradeGradingService,
     private readonly behavioralReports: BehavioralReportService,
+    private readonly setupPatterns: SetupPatternService,
   ) {}
 
   @Get('plan')
@@ -61,6 +63,23 @@ export class EvaluationController {
   })
   getPlan(@Request() req: AuthenticatedRequest) {
     return this.tradingPlanService.getCurrentPlan(req.user.id);
+  }
+
+  @Get('setup-patterns')
+  @ApiOperation({
+    summary:
+      "The authenticated user's custom setup pattern names, most-used first",
+    description:
+      'Feeds the autocomplete under the checklist\'s "Other" pattern option. ' +
+      'The library is capped per user, so the whole list is returned and the ' +
+      'client filters it locally as the trader types.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Custom pattern names with their usage counts.',
+  })
+  getSetupPatterns(@Request() req: AuthenticatedRequest) {
+    return this.setupPatterns.list(req.user.id);
   }
 
   @Put('plan')
