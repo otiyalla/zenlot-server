@@ -1,6 +1,9 @@
-export const jwtConstants = {
-  secret: process.env.JWT_SECRET,
-  expiresIn: process.env.JWT_EXPIRES ?? '3600s',
-  refreshSecret: process.env.JWT_REFRESH_SECRET,
-  refreshTokenExpiresIn: process.env.JWT_REFRESH_EXPIRES ?? '7d'
-};
+import type { StringValue } from 'ms';
+
+export const defaultExpiresIn: StringValue = '3600s';
+export const defaultRefreshExpiresIn: StringValue = '7d';
+
+export const resolveExpiration = (
+  value: string | undefined,
+  fallback: StringValue,
+): StringValue => (value?.trim() ? (value as StringValue) : fallback);

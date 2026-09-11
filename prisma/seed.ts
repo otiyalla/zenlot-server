@@ -1,16 +1,19 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from './generated/prisma/client';
+import { Subset } from './generated/prisma/internal/prismaNamespace';
 //import { PrismaClient } from '../generated/prisma';
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  log: ['query', 'info', 'warn', 'error'],
+} as Subset<Prisma.PrismaClientOptions, Prisma.PrismaClientOptions>);
   
 (async () => {
   // You must provide a unique 'id' for the where clause as required by your generated Prisma types.
   // If you want to use email as a unique field, update your Prisma schema and regenerate the client.
   // For now, using a hardcoded id for demonstration:
   const demoUser = await prisma.user.upsert({
-    where: { id: 1 },
+    where: { id: 'ert-765-ert-rtf-765-rtf' },
     create: { 
-      id: 1, 
+      id: 'ert-765-ert-rtf-765-rtf', 
       email: 'demo@zenlot.io', 
       fname: 'Demo User', 
       lname: 'User', 

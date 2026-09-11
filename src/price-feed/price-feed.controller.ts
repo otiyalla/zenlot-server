@@ -1,20 +1,70 @@
-import { Controller } from '@nestjs/common';
+import { Query, Controller, Get } from '@nestjs/common';
 import { PriceFeedService } from './price-feed.service';
-import { Get } from '@nestjs/common';
-import { Query, Param } from '@nestjs/common';
+import {
+  CreatePriceFeedDto,
+  ExchangeRateDto,
+} from './dto/create-price-feed.dto';
+import {
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiResponse,
+  ApiSecurity,
+  ApiTags,
+} from '@nestjs/swagger';
 
+@ApiTags('PriceFeed')
+@ApiSecurity('access-token')
 @Controller('pricefeed')
 export class PriceFeedController {
-    constructor(private readonly priceFeedService: PriceFeedService) {}
+  constructor(private readonly priceFeedService: PriceFeedService) {}
 
-    @Get()
-    async getPriceFeed(@Query() symbol: string) {
-        console.log('PriceFeedController: getPriceFeed called with symbol:', symbol);
-        return this.priceFeedService.addPriceFeedJob(symbol);
-    }
+  @Get()
+  @ApiOperation({ summary: 'Get price feed by symbol' })
+  @ApiQuery({
+    name: 'symbol',
+    required: true,
+    description: 'Instrument symbol',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Price feed job queued successfully.',
+  })
+  async getPriceFeed(@Query() query: CreatePriceFeedDto) {
+    console.log(
+      'PriceFeedController: getPriceFeed called with symbol:',
+      query.symbol,
+    );
+    return this.priceFeedService.addPriceFeedJob(query);
+  }
 
-    @Get('exchangeRate/:symbol')
-    async getFX(@Param('symbol') symbol: string) {
-        return this.priceFeedService.getFX(symbol);
-    }
+  @Get('search')
+  @ApiOperation({ summary: 'Search available forex symbols' })
+  @ApiQuery({
+    name: 'query',
+    required: true,
+    description: 'Symbol or quote currency search text',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Available forex symbols fetched successfully.',
+  })
+  async search(@Query('query') query: string) {
+    return this.priceFeedService.search(query);
+  }
+
+  @Get('exchangeRate')
+  @ApiOperation({ summary: 'Get exchange rate for a symbol' })
+  @ApiParam({
+    name: 'symbol',
+    required: true,
+    description: 'Instrument symbol',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Exchange rate fetched successfully.',
+  })
+  async getFX(@Query() query: ExchangeRateDto) {
+    return this.priceFeedService.getFX(query);
+  }
 }

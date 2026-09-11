@@ -1,19 +1,24 @@
-import { IsNumber, IsString, MinLength, IsOptional } from "class-validator";
+import { ApiProperty } from '@nestjs/swagger';
+import { IsString, MinLength, IsOptional, IsUUID } from 'class-validator';
 
 export class UserPasswordDto {
-    @IsNumber()
-    userId: number;
-    
-    @IsString()
-    @MinLength(8)
-    currentPassword: string;
+  @IsUUID()
+  @ApiProperty({ description: 'The user id' })
+  userId: string;
 
-    @IsString()
-    @MinLength(8)
-    newPassword: string;
+  @IsString()
+  @MinLength(8)
+  @ApiProperty({ description: 'The user current password' })
+  currentPassword: string;
 
-    @IsString()
-    @IsOptional()
-    @MinLength(8)
-    confirmPassword?: string;
+  @IsString()
+  @MinLength(8)
+  @ApiProperty({ description: 'The user new password' })
+  newPassword: string;
+
+  @IsString()
+  @IsOptional()
+  @MinLength(8)
+  @ApiProperty({ description: 'The user confirm password' })
+  confirmPassword?: string;
 }
