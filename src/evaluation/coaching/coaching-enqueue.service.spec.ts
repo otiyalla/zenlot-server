@@ -31,7 +31,10 @@ const verdict: TradeVerdict = {
 
 const report = { userId: 'u1', patterns: [] } as unknown as BehavioralReport;
 
-function make(add: jest.Mock, getJob: jest.Mock = jest.fn().mockResolvedValue(null)) {
+function make(
+  add: jest.Mock,
+  getJob: jest.Mock = jest.fn().mockResolvedValue(null),
+) {
   return new EvaluationCoachingEnqueueService({
     add,
     getJob,
@@ -124,11 +127,10 @@ describe('EvaluationCoachingEnqueueService', () => {
       const job = retainedJob('failed', Date.now() - 1_000);
       const add = jest.fn().mockResolvedValue({});
 
-      await make(add, jest.fn().mockResolvedValue(job)).enqueueBehavioralSummary(
-        'r1',
-        report,
-        'en',
-      );
+      await make(
+        add,
+        jest.fn().mockResolvedValue(job),
+      ).enqueueBehavioralSummary('r1', report, 'en');
 
       // The add still runs; BullMQ drops it as a duplicate id, which is what
       // keeps reads during the cooldown from calling the provider again.
@@ -139,11 +141,10 @@ describe('EvaluationCoachingEnqueueService', () => {
       const job = retainedJob('active', Date.now() - COOLDOWN_MS - 1_000);
       const add = jest.fn().mockResolvedValue({});
 
-      await make(add, jest.fn().mockResolvedValue(job)).enqueueBehavioralSummary(
-        'r1',
-        report,
-        'en',
-      );
+      await make(
+        add,
+        jest.fn().mockResolvedValue(job),
+      ).enqueueBehavioralSummary('r1', report, 'en');
 
       expect(job.remove).not.toHaveBeenCalled();
     });
