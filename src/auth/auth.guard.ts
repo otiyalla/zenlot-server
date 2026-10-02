@@ -36,14 +36,12 @@ export class AuthGuard implements CanActivate {
       }
 
       // Optional authentication: if a valid token is present attach req.user,
-      // but never block the request if absent or invalid.
+      // but never block the request if absent or invalid. An unexpected
+      // verification failure (e.g. database down) propagates as 5xx rather
+      // than silently treating a signed-in caller as anonymous.
       if (token) {
-        try {
-          const user = await this.authService.verifyToken(token);
-          if (user) request.user = user;
-        } catch {
-          // Verification unavailable (e.g. database down): stay anonymous.
-        }
+        const user = await this.authService.verifyToken(token);
+        if (user) request.user = user;
       }
       return true;
     }

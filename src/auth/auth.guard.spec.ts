@@ -154,17 +154,26 @@ describe('AuthGuard', () => {
       await expect(guard.canActivate(ctx)).rejects.toBe(dbError);
     });
 
-    it('keeps public routes reachable (anonymous) when verification is unavailable', async () => {
+    it('fails a public request with a supplied token instead of treating the caller as anonymous', async () => {
       const { guard, authService } = makeGuard(true);
-      authService.verifyToken.mockRejectedValue(new Error('db down'));
+      const dbError = new Error('db down');
+      authService.verifyToken.mockRejectedValue(dbError);
       const ctx = makeContext({
         isPublic: true,
-        url: '/legal/terms',
+        url: '/feedback',
         headers: { accesstoken: 'valid-token' },
       });
 
-      await expect(guard.canActivate(ctx)).resolves.toBe(true);
+      await expect(guard.canActivate(ctx)).rejects.toBe(dbError);
       expect(ctx.request.user).toBeUndefined();
+    });
+
+    it('keeps public routes open to callers without a token', async () => {
+      const { guard, authService } = makeGuard(true);
+      const ctx = makeContext({ isPublic: true, url: '/feedback' });
+
+      await expect(guard.canActivate(ctx)).resolves.toBe(true);
+      expect(authService.verifyToken).not.toHaveBeenCalled();
     });
   });
 

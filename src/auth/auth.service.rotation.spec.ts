@@ -337,6 +337,19 @@ describe('AuthService refresh-token rotation', () => {
     ).resolves.toHaveProperty('accessToken');
   });
 
+  it('reaches the live token through a long rotation chain inside the grace window', async () => {
+    const original = await issue();
+    let latest = (await service.refreshTokens(original)).refreshToken; // lost
+    for (let i = 0; i < 8; i += 1) {
+      advance(1_000);
+      latest = (await service.refreshTokens(latest)).refreshToken;
+    }
+
+    const retry = await service.refreshTokens(original);
+
+    expect(decodeToken(retry.refreshToken)).toBe(decodeToken(latest));
+  });
+
   it('caps a re-issued successor at its stored expiry', async () => {
     const original = await issue();
     await service.refreshTokens(original);

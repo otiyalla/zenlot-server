@@ -50,8 +50,9 @@ const storedRefreshTokenForms = (token: string) =>
     ? [hashRefreshToken(token)]
     : [hashRefreshToken(token), token];
 
-// Bounds how far a grace-window retry follows a rotation chain.
-const MAX_GRACE_CHAIN_HOPS = 5;
+// Safety bound on how far a grace-window retry follows a rotation chain. The
+// real limit is the window itself: every link must have been rotated within it.
+const MAX_GRACE_CHAIN_HOPS = 100;
 
 interface VerifiedRefreshToken {
   user: StoredUser;
