@@ -88,6 +88,14 @@ export class EvaluationCoachingEnqueueService {
         // attempts out so a transient provider outage has time to recover.
         backoff: { type: 'exponential', delay: 2_000 },
         removeOnComplete: true,
+        // BullMQ keeps failed jobs, and an add that collides with a retained
+        // id is silently dropped — so a job that exhausted its attempts during
+        // an outage would block its own replacement forever and leave the
+        // summary permanently empty. Dropping the terminal failure lets the
+        // next read enqueue fresh work; the failure is already recorded by the
+        // processor's logger and Sentry. Intermediate retries are unaffected:
+        // the job is still held while it waits to run again.
+        removeOnFail: true,
       });
     } catch (error) {
       this.logger.error(

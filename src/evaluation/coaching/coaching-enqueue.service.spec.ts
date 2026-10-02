@@ -46,6 +46,7 @@ describe('EvaluationCoachingEnqueueService', () => {
         jobId: `${GENERATE_PRE_TRADE_COACHING_JOB}-e1`,
         backoff: { type: 'exponential', delay: 2_000 },
         removeOnComplete: true,
+        removeOnFail: true,
       },
     );
   });
@@ -60,6 +61,7 @@ describe('EvaluationCoachingEnqueueService', () => {
         jobId: `${GENERATE_POST_TRADE_COACHING_JOB}-v1`,
         backoff: { type: 'exponential', delay: 2_000 },
         removeOnComplete: true,
+        removeOnFail: true,
       },
     );
   });
@@ -74,6 +76,7 @@ describe('EvaluationCoachingEnqueueService', () => {
         jobId: `${GENERATE_BEHAVIORAL_SUMMARY_JOB}-r1`,
         backoff: { type: 'exponential', delay: 2_000 },
         removeOnComplete: true,
+        removeOnFail: true,
       },
     );
   });
