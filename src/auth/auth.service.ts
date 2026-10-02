@@ -652,12 +652,24 @@ export class AuthService {
   ): Promise<string> {
     const withinGrace = (at: Date | null) =>
       at !== null && Date.now() - at.getTime() <= REFRESH_TOKEN_REUSE_GRACE_MS;
-    // Derived successors only ever exist in hashed form.
+    // Derived successors only ever exist in hashed form. The lookup runs behind
+    // the same user row lock rotation holds until it commits: an unlocked read
+    // can observe a successor as still active in the instant before the
+    // rotation replacing it commits, and handing that about-to-be-revoked token
+    // back makes the client's next refresh look like reuse — which revokes
+    // every session on the account.
     const findSuccessor = (of: string) => {
       const successorToken = this.deriveSuccessorToken(of);
-      return this.prisma.refreshToken
-        .findUnique({ where: { token: hashRefreshToken(successorToken) } })
-        .then((row) => (row ? { ...row, raw: successorToken } : null));
+      return this.prisma.$transaction(async (tx) => {
+        await tx.user.updateMany({
+          where: { id: userId },
+          data: { authVersion: { increment: 0 } },
+        });
+        const row = await tx.refreshToken.findUnique({
+          where: { token: hashRefreshToken(successorToken) },
+        });
+        return row ? { ...row, raw: successorToken } : null;
+      });
     };
 
     let successor = await findSuccessor(token);

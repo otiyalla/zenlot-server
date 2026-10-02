@@ -466,6 +466,30 @@ describe('AuthService', () => {
     );
   });
 
+  it('takes the user row lock before reading the successor', async () => {
+    jest
+      .spyOn(service, 'verifyRefreshToken')
+      .mockResolvedValue({ user, token: 'old-db-token' } as any);
+    prisma.refreshToken.updateMany.mockResolvedValue({ count: 0 });
+    prisma.refreshToken.findFirst.mockResolvedValue({ revokedAt: new Date() });
+    prisma.refreshToken.findUnique.mockResolvedValue({
+      isRevoked: false,
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    (jwtService.sign as jest.Mock).mockImplementation((claims: any) =>
+      claims.token ? `public:${claims.token}` : 'new-access-token',
+    );
+
+    await service.refreshTokens('old-public-token');
+
+    // Rotation holds this lock until it commits, so reading the successor
+    // behind it cannot observe a token that is about to be revoked.
+    const lastLock = prisma.user.updateMany.mock.invocationCallOrder.at(-1)!;
+    const successorRead =
+      prisma.refreshToken.findUnique.mock.invocationCallOrder.at(-1)!;
+    expect(lastLock).toBeLessThan(successorRead);
+  });
+
   it("returns the concurrent winner's successor instead of minting a second one", async () => {
     jest
       .spyOn(service, 'verifyRefreshToken')
@@ -484,7 +508,10 @@ describe('AuthService', () => {
 
     const result = await service.refreshTokens('old-public-token');
 
-    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    // Two transactions: the rotation attempt that lost the race, then the
+    // locked re-read of the winner's successor (an unlocked read could see it
+    // active in the instant before a further rotation replaced it).
+    expect(prisma.$transaction).toHaveBeenCalledTimes(2);
     expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
       where: {
         token: { in: [hashed('old-db-token'), 'old-db-token'] },

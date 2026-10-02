@@ -71,6 +71,13 @@ export class EvaluationCoachingEnqueueService {
     await this.enqueue(GENERATE_BEHAVIORAL_SUMMARY_JOB, data, reportId);
   }
 
+  /**
+   * How long a terminally failed job is kept. It blocks a same-id re-enqueue
+   * for this long, so repeated report reads cannot turn into repeated provider
+   * calls while the provider is still unavailable.
+   */
+  private static readonly FAILED_JOB_COOLDOWN_SECONDS = 15 * 60;
+
   private async enqueue(
     jobName: string,
     data:
@@ -91,11 +98,15 @@ export class EvaluationCoachingEnqueueService {
         // BullMQ keeps failed jobs, and an add that collides with a retained
         // id is silently dropped — so a job that exhausted its attempts during
         // an outage would block its own replacement forever and leave the
-        // summary permanently empty. Dropping the terminal failure lets the
-        // next read enqueue fresh work; the failure is already recorded by the
-        // processor's logger and Sentry. Intermediate retries are unaffected:
-        // the job is still held while it waits to run again.
-        removeOnFail: true,
+        // summary permanently empty. Retaining the terminal failure for a
+        // cooldown instead gives both halves: reads during the cooldown collide
+        // with it and make no provider calls, and once it ages out the next
+        // read enqueues fresh work. Without the cooldown, retry frequency would
+        // track read traffic and hammer an provider that is still down. The
+        // failure itself is recorded by the processor's logger and Sentry.
+        removeOnFail: {
+          age: EvaluationCoachingEnqueueService.FAILED_JOB_COOLDOWN_SECONDS,
+        },
       });
     } catch (error) {
       this.logger.error(
