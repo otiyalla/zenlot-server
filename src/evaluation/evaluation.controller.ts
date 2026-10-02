@@ -2,7 +2,6 @@ import {
   Body,
   Controller,
   Get,
-  HttpStatus,
   Param,
   Post,
   Put,
@@ -203,10 +202,8 @@ export class EvaluationController {
     );
 
     if (isInsufficientData(result)) {
-      // Spec 11: 204 with a discriminator body. Fastify omits the body on a
-      // standards-compliant 204; the client keys off the status. We still
-      // return the payload so non-stripping clients and tests can read it.
-      reply.status(HttpStatus.NO_CONTENT);
+      // A 200 with a discriminator body (not 204: Fastify strips 204 bodies).
+      // The client keys off the `insufficient_data` marker.
       return {
         message: 'insufficient_data',
         tradesRequired: result.tradesRequired,

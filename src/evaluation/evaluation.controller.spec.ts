@@ -107,7 +107,7 @@ describe('EvaluationController', () => {
     expect(getOrGenerate).toHaveBeenCalledWith('u1', 90, 'fr');
   });
 
-  it('GET /behavioral-report sets 204 + insufficient_data body when < 10 trades', async () => {
+  it('GET /behavioral-report returns 200 + insufficient_data body when < 10 trades', async () => {
     getOrGenerate.mockResolvedValueOnce({
       insufficientData: true,
       tradesRequired: 10,
@@ -116,7 +116,8 @@ describe('EvaluationController', () => {
     const status = jest.fn();
     const reply = { status } as never;
     const result = await controller.getBehavioralReport(req, reply, undefined);
-    expect(status).toHaveBeenCalledWith(204);
+    // No 204: Fastify strips 204 bodies, and the client keys off the marker.
+    expect(status).not.toHaveBeenCalled();
     expect(result).toEqual({
       message: 'insufficient_data',
       tradesRequired: 10,

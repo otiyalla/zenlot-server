@@ -17,12 +17,13 @@ jest.mock('./dto/candle-query.dto', () => ({
 
 describe('CandleController authentication', () => {
   let app: NestFastifyApplication;
-  let authService: { verify: jest.Mock };
+  let authService: { verify: jest.Mock; verifyToken: jest.Mock };
   let candleService: { getCandles: jest.Mock };
 
   beforeAll(async () => {
     authService = {
-      verify: jest.fn().mockResolvedValue({ id: 'user-id' }),
+      verify: jest.fn(),
+      verifyToken: jest.fn().mockResolvedValue({ id: 'user-id' }),
     };
     candleService = {
       getCandles: jest.fn().mockResolvedValue({
@@ -89,7 +90,7 @@ describe('CandleController authentication', () => {
       message: 'No tokens provided',
       statusCode: 401,
     });
-    expect(authService.verify).not.toHaveBeenCalled();
+    expect(authService.verifyToken).not.toHaveBeenCalled();
     expect(candleService.getCandles).not.toHaveBeenCalled();
   });
 
@@ -103,7 +104,8 @@ describe('CandleController authentication', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(authService.verify).toHaveBeenCalledWith('valid-access-token', '');
+    expect(authService.verifyToken).toHaveBeenCalledWith('valid-access-token');
+    expect(authService.verify).not.toHaveBeenCalled();
     expect(candleService.getCandles).toHaveBeenCalledWith({
       symbol: 'EURUSD',
       timeframe: 'H1',

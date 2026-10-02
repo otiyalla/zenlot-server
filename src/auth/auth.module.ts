@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { BullModule } from '@nestjs/bullmq';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtModule } from '@nestjs/jwt';
@@ -11,6 +12,10 @@ import { EmailModule } from '../email/email.module';
 import { AnalyticsModule } from '../analytics/analytics.module';
 import { AuditModule } from '../audit/audit.module';
 import { SocketSessionModule } from './socket-session.module';
+import {
+  REFRESH_TOKEN_CLEANUP_QUEUE,
+  RefreshTokenCleanupProcessor,
+} from './refresh-token-cleanup.processor';
 
 @Module({
   imports: [
@@ -20,6 +25,7 @@ import { SocketSessionModule } from './socket-session.module';
     AnalyticsModule,
     AuditModule,
     SocketSessionModule,
+    BullModule.registerQueue({ name: REFRESH_TOKEN_CLEANUP_QUEUE }),
     JwtModule.registerAsync({
       global: true,
       inject: [ConfigService],
@@ -36,6 +42,7 @@ import { SocketSessionModule } from './socket-session.module';
   ],
   providers: [
     AuthService,
+    RefreshTokenCleanupProcessor,
     {
       provide: APP_GUARD,
       useClass: AuthGuard,

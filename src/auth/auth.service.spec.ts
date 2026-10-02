@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-return, @typescript-eslint/require-await */
 import { AuthService } from './auth.service';
-import { JwtService } from '@nestjs/jwt';
+import { JwtService, TokenExpiredError } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { UnauthorizedException } from '@nestjs/common';
 import * as crypto from 'crypto';
@@ -10,6 +10,15 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AnalyticsService } from '../analytics/analytics.service';
 import { AuditService } from '../audit/audit.service';
 import { SocketSessionRegistry } from './socket-session-registry.service';
+import * as Sentry from '@sentry/nestjs';
+
+jest.mock('@sentry/nestjs', () => ({
+  captureException: jest.fn(),
+  captureMessage: jest.fn(),
+}));
+
+const hashed = (token: string) =>
+  `sha256:${crypto.createHash('sha256').update(token).digest('hex')}`;
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -38,9 +47,13 @@ describe('AuthService', () => {
   };
 
   beforeEach(() => {
+    jest.clearAllMocks();
     jwtService = {
       sign: jest.fn(),
       verify: jest.fn(),
+      decode: jest.fn(() => ({
+        exp: Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60,
+      })),
     } as unknown as JwtService;
     prisma = {
       user: {
@@ -49,6 +62,7 @@ describe('AuthService', () => {
       refreshToken: {
         create: jest.fn(),
         findFirst: jest.fn(),
+        findUnique: jest.fn(),
         updateMany: jest.fn(),
       },
       $transaction: jest
@@ -189,12 +203,14 @@ describe('AuthService', () => {
       },
       expect.objectContaining({ secret: configMock.JWT_REFRESH_SECRET }),
     );
+    // Only the hash is stored; the raw value lives solely inside the JWT.
     expect(prisma.refreshToken.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           userId: user.id,
-          token:
+          token: hashed(
             '6161616161616161616161616161616161616161616161616161616161616161',
+          ),
         }),
       }),
     );
@@ -202,21 +218,22 @@ describe('AuthService', () => {
     randomSpy.mockRestore();
   });
 
-  it('throws when refresh token cannot be persisted', async () => {
+  it('surfaces a database fault (not a 401) when a refresh token cannot be persisted', async () => {
     const randomSpy = jest
       .spyOn(crypto, 'randomBytes')
       .mockImplementation(
         () => Buffer.from('b'.repeat(32)) as unknown as Buffer,
       );
     (jwtService.sign as jest.Mock).mockReturnValue('public-refresh-token');
-    prisma.refreshToken.create.mockRejectedValue(new Error('db unavailable'));
+    const dbError = new Error('db unavailable');
+    prisma.refreshToken.create.mockRejectedValue(dbError);
 
     await expect(
       service.createRefreshToken({
         email: user.email,
         sub: user.id,
       }),
-    ).rejects.toBeInstanceOf(UnauthorizedException);
+    ).rejects.toBe(dbError);
     randomSpy.mockRestore();
   });
 
@@ -226,6 +243,8 @@ describe('AuthService', () => {
     });
     prisma.refreshToken.findFirst.mockResolvedValue({
       token: 'db-refresh-token',
+      isRevoked: false,
+      revokedAt: null,
       user: { ...user, password: 'hashed' },
     });
 
@@ -238,15 +257,17 @@ describe('AuthService', () => {
 
     expect(prisma.refreshToken.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({
-          token: 'db-refresh-token',
-          isRevoked: false,
-        }),
+        where: {
+          token: { in: [hashed('db-refresh-token'), 'db-refresh-token'] },
+          expiresAt: { gt: expect.any(Date) },
+        },
       }),
     );
     expect(result).toEqual({
       user: { ...user, password: undefined, isAuthenticated: true },
       token: 'db-refresh-token',
+      isRevoked: false,
+      revokedAt: null,
     });
   });
 
@@ -273,24 +294,15 @@ describe('AuthService', () => {
     expect(userService.findByEmail).not.toHaveBeenCalled();
   });
 
-  it('rejects revoked refresh tokens', async () => {
+  it('rejects unknown or expired refresh tokens', async () => {
     (jwtService.verify as jest.Mock).mockReturnValue({
-      token: 'revoked-token',
+      token: 'unknown-token',
     });
     prisma.refreshToken.findFirst.mockResolvedValue(null);
 
     await expect(
       service.verifyRefreshToken('public-refresh-token'),
     ).rejects.toBeInstanceOf(UnauthorizedException);
-
-    expect(prisma.refreshToken.findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          token: 'revoked-token',
-          isRevoked: false,
-        }),
-      }),
-    );
   });
 
   it('fails sign-in when existing session revocation is unavailable', async () => {
@@ -320,7 +332,7 @@ describe('AuthService', () => {
     expect(createRefreshToken).not.toHaveBeenCalled();
   });
 
-  it('fails refresh rotation when old-token revocation is unavailable', async () => {
+  it('surfaces a database fault (not a 401) from verify when revocation is unavailable', async () => {
     jest.spyOn(service, 'verifyToken').mockResolvedValue(null);
     jest
       .spyOn(service, 'verifyRefreshToken')
@@ -335,7 +347,10 @@ describe('AuthService', () => {
 
     await expect(
       service.verify('expired-access-token', 'valid-refresh-token'),
-    ).rejects.toBeInstanceOf(UnauthorizedException);
+    ).rejects.toBe(revocationError);
+    expect(auditService.log).not.toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'AUTH_VERIFY_FAILED' }),
+    );
   });
 
   it('fails sign-out when session revocation is unavailable', async () => {
@@ -357,16 +372,19 @@ describe('AuthService', () => {
     jest
       .spyOn(service, 'verifyRefreshToken')
       .mockResolvedValue({ user, token: 'old-db-token' } as any);
+    const revocationError = new Error('refresh-token database unavailable');
     const revoke = jest
       .spyOn(service as any, 'revokeRefreshToken')
-      .mockRejectedValue(new Error('refresh-token database unavailable'));
+      .mockRejectedValue(revocationError);
     const createRefreshToken = jest
       .spyOn(service, 'createRefreshToken')
       .mockResolvedValue('must-not-be-created');
 
-    await expect(
-      service.refreshTokens('old-public-token'),
-    ).rejects.toBeInstanceOf(UnauthorizedException);
+    // A server fault must not look like a rejected session (401): the client
+    // keeps the still-valid refresh token and retries.
+    await expect(service.refreshTokens('old-public-token')).rejects.toBe(
+      revocationError,
+    );
     expect(revoke).toHaveBeenCalledWith('old-db-token', prisma);
     expect(createRefreshToken).not.toHaveBeenCalled();
   });
@@ -380,6 +398,27 @@ describe('AuthService', () => {
     expect(result).toBe(payload);
   });
 
+  it('rejects an invalid access token with a 401 when no refresh token is supplied', async () => {
+    jest.spyOn(service, 'verifyToken').mockResolvedValue(null);
+    const verifyRefreshToken = jest.spyOn(service, 'verifyRefreshToken');
+
+    await expect(service.verify('expired-access-token')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+    expect(verifyRefreshToken).not.toHaveBeenCalled();
+    expect(auditService.log).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'AUTH_VERIFY_FAILED' }),
+    );
+  });
+
+  it('treats an empty refresh token like a missing one', async () => {
+    jest.spyOn(service, 'verifyToken').mockResolvedValue(null);
+
+    await expect(
+      service.verify('expired-access-token', ''),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
   it('refreshes tokens when the access token is invalid and refresh token is valid', async () => {
     jest.spyOn(service, 'verifyToken').mockResolvedValue(null);
     jest
@@ -391,7 +430,7 @@ describe('AuthService', () => {
 
     const revokeSpy = jest
       .spyOn(service as any, 'revokeRefreshToken')
-      .mockResolvedValue(undefined);
+      .mockResolvedValue(true);
 
     (jwtService.sign as jest.Mock).mockReturnValue('new-access-token');
 
@@ -427,32 +466,58 @@ describe('AuthService', () => {
     );
   });
 
-  it('does not rotate a refresh token already claimed concurrently', async () => {
+  it("returns the concurrent winner's successor instead of minting a second one", async () => {
     jest
       .spyOn(service, 'verifyRefreshToken')
       .mockResolvedValue({ user, token: 'old-db-token' } as any);
     prisma.refreshToken.updateMany.mockResolvedValue({ count: 0 });
+    prisma.refreshToken.findUnique.mockResolvedValue({
+      isRevoked: false,
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    (jwtService.sign as jest.Mock).mockImplementation((claims: any) =>
+      claims.token ? `public:${claims.token}` : 'new-access-token',
+    );
     const createRefreshToken = jest.spyOn(service, 'createRefreshToken');
+
+    const result = await service.refreshTokens('old-public-token');
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+      where: {
+        token: { in: [hashed('old-db-token'), 'old-db-token'] },
+        isRevoked: false,
+      },
+      data: { isRevoked: true, revokedAt: expect.any(Date) },
+    });
+    expect(createRefreshToken).not.toHaveBeenCalled();
+    const successor = crypto
+      .createHmac('sha256', configMock.JWT_REFRESH_SECRET)
+      .update('rotate:old-db-token')
+      .digest('hex');
+    expect(prisma.refreshToken.findUnique).toHaveBeenCalledWith({
+      where: { token: hashed(successor) },
+    });
+    expect(result.refreshToken).toBe(`public:${successor}`);
+  });
+
+  it('rejects a concurrently claimed token whose successor is gone', async () => {
+    jest
+      .spyOn(service, 'verifyRefreshToken')
+      .mockResolvedValue({ user, token: 'old-db-token' } as any);
+    prisma.refreshToken.updateMany.mockResolvedValue({ count: 0 });
+    prisma.refreshToken.findUnique.mockResolvedValue(null);
 
     await expect(
       service.refreshTokens('old-public-token'),
     ).rejects.toBeInstanceOf(UnauthorizedException);
-
-    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
-    expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
-      where: { token: 'old-db-token', isRevoked: false },
-      data: { isRevoked: true },
-    });
-    expect(createRefreshToken).not.toHaveBeenCalled();
   });
 
   it('includes the current auth version in dedicated refresh access tokens', async () => {
     jest
       .spyOn(service, 'verifyRefreshToken')
       .mockResolvedValue({ user, token: 'old-db-token' } as any);
-    jest
-      .spyOn(service as any, 'revokeRefreshToken')
-      .mockResolvedValue(undefined);
+    jest.spyOn(service as any, 'revokeRefreshToken').mockResolvedValue(true);
     jest
       .spyOn(service, 'createRefreshToken')
       .mockResolvedValue('new-refresh-token');
@@ -489,6 +554,130 @@ describe('AuthService', () => {
     });
     expect(revoke).not.toHaveBeenCalled();
     expect(createRefreshToken).not.toHaveBeenCalled();
+  });
+
+  describe('refresh failure classification', () => {
+    it('rejects a malformed or expired refresh JWT with a 401', async () => {
+      (jwtService.verify as jest.Mock).mockImplementation(() => {
+        throw new TokenExpiredError('jwt expired', new Date());
+      });
+
+      await expect(
+        service.refreshTokens('expired-public-token'),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(prisma.refreshToken.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('surfaces a database fault during the refresh-token lookup as a server error', async () => {
+      (jwtService.verify as jest.Mock).mockReturnValue({ token: 'db-token' });
+      const dbError = new Error('connection refused');
+      prisma.refreshToken.findFirst.mockRejectedValue(dbError);
+
+      await expect(service.refreshTokens('public-token')).rejects.toBe(dbError);
+      expect(auditService.log).not.toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'AUTH_REFRESH_FAILED' }),
+      );
+    });
+
+    it('still rejects a revoked refresh token with a 401', async () => {
+      (jwtService.verify as jest.Mock).mockReturnValue({ token: 'db-token' });
+      prisma.refreshToken.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.refreshTokens('public-token'),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(auditService.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'AUTH_REFRESH_FAILED' }),
+      );
+    });
+  });
+
+  describe('refresh-token expiry', () => {
+    const DAY = 24 * 60 * 60;
+
+    it.each([
+      ['7d', 7 * DAY],
+      ['1w', 7 * DAY],
+      ['7 days', 7 * DAY],
+      ['12h', 12 * 60 * 60],
+      ['3600s', 3600],
+    ])(
+      'stores the expiry the JWT carries for JWT_REFRESH_EXPIRES=%s',
+      async (value, expectedSeconds) => {
+        const realJwt = new JwtService();
+        const svc = new AuthService(
+          realJwt,
+          userService as unknown as UserService,
+          emailService as unknown as EmailService,
+          prisma as unknown as PrismaService,
+          {
+            get: (key: string) =>
+              key === 'JWT_REFRESH_EXPIRES'
+                ? value
+                : configMock[key as keyof typeof configMock],
+          } as unknown as ConfigService,
+          analytics as unknown as AnalyticsService,
+          auditService as unknown as AuditService,
+          socketSessions as unknown as SocketSessionRegistry,
+        );
+        const issuedAt = Date.now() / 1000;
+
+        const publicToken = await svc.createRefreshToken({
+          email: user.email,
+          sub: user.id,
+        });
+
+        const { exp } = realJwt.decode<{ exp: number }>(publicToken);
+        const { expiresAt } = prisma.refreshToken.create.mock.calls[0][0].data;
+        expect(expiresAt.getTime()).toBe(exp * 1000);
+        expect(Math.abs(exp - (issuedAt + expectedSeconds))).toBeLessThan(5);
+      },
+    );
+  });
+
+  describe('Sentry noise', () => {
+    it('does not report routine expired access tokens', async () => {
+      (jwtService.verify as jest.Mock).mockImplementation(() => {
+        throw new TokenExpiredError('jwt expired', new Date());
+      });
+
+      await expect(service.verifyToken('expired')).resolves.toBeNull();
+      expect(Sentry.captureException).not.toHaveBeenCalled();
+    });
+
+    it('does not report a token whose auth version is stale', async () => {
+      (jwtService.verify as jest.Mock).mockReturnValue({
+        email: user.email,
+        sub: user.id,
+        authVersion: user.authVersion - 1,
+      });
+      userService.findByEmail.mockResolvedValue(user);
+
+      await expect(service.verifyToken('stale')).resolves.toBeNull();
+      expect(Sentry.captureException).not.toHaveBeenCalled();
+    });
+
+    it('still reports unexpected failures while verifying an access token', async () => {
+      (jwtService.verify as jest.Mock).mockReturnValue({
+        email: user.email,
+        sub: user.id,
+        authVersion: user.authVersion,
+      });
+      userService.findByEmail.mockRejectedValue(new Error('db down'));
+
+      await expect(service.verifyToken('valid')).resolves.toBeNull();
+      expect(Sentry.captureException).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not report a rejected refresh token', async () => {
+      (jwtService.verify as jest.Mock).mockReturnValue({ token: 'db-token' });
+      prisma.refreshToken.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.refreshTokens('public-token'),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(Sentry.captureException).not.toHaveBeenCalled();
+    });
   });
 
   it('resetPassword passes user language to sendPasswordResentEmail', async () => {
