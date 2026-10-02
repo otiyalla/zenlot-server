@@ -86,24 +86,23 @@ export class EvaluationCoachingEnqueueService {
       | BehavioralSummaryJobData,
     contextId: string,
   ): Promise<void> {
+    const jobId = `${jobName}-${contextId}`;
     try {
+      await this.discardExpiredFailedJob(jobId);
       await this.queue.add(jobName, data, {
         // Reads may re-enqueue reports whose summary is still missing. A stable
         // id makes that recovery path idempotent while a job is queued/running.
-        jobId: `${jobName}-${contextId}`,
+        jobId,
         // `attempts: 3` comes from the app-level BullMQ defaults. Space those
         // attempts out so a transient provider outage has time to recover.
         backoff: { type: 'exponential', delay: 2_000 },
         removeOnComplete: true,
-        // BullMQ keeps failed jobs, and an add that collides with a retained
-        // id is silently dropped — so a job that exhausted its attempts during
-        // an outage would block its own replacement forever and leave the
-        // summary permanently empty. Retaining the terminal failure for a
-        // cooldown instead gives both halves: reads during the cooldown collide
-        // with it and make no provider calls, and once it ages out the next
-        // read enqueues fresh work. Without the cooldown, retry frequency would
-        // track read traffic and hammer an provider that is still down. The
-        // failure itself is recorded by the processor's logger and Sentry.
+        // Keep a terminal failure for the cooldown so reads during it collide
+        // with the retained id and make no provider calls — otherwise retry
+        // frequency would track read traffic and hammer a provider that is
+        // still down. The failure itself is recorded by the processor's logger
+        // and Sentry. This age is housekeeping only; discardExpiredFailedJob
+        // above is what actually guarantees recovery (see its comment).
         removeOnFail: {
           age: EvaluationCoachingEnqueueService.FAILED_JOB_COOLDOWN_SECONDS,
         },
@@ -117,5 +116,27 @@ export class EvaluationCoachingEnqueueService {
         extra: { context: `EvaluationCoachingEnqueueService.${jobName}` },
       });
     }
+  }
+
+  /**
+   * Drops a terminally failed job once it is older than the cooldown, so the
+   * caller's `add` creates fresh work instead of being swallowed as a duplicate
+   * id. BullMQ's own `removeOnFail: { age }` cannot be relied on for this: it
+   * is applied lazily while another job moves to completed/failed, never on
+   * `add`. On a quiet queue — exactly the case where a report is waiting on a
+   * summary that failed — nothing else runs, so the failed job outlives its age
+   * indefinitely and every later read collides with it.
+   */
+  private async discardExpiredFailedJob(jobId: string): Promise<void> {
+    const existing = await this.queue.getJob(jobId);
+    if (!existing) return;
+    if ((await existing.getState()) !== 'failed') return;
+
+    const cooledDownAt =
+      (existing.finishedOn ?? 0) +
+      EvaluationCoachingEnqueueService.FAILED_JOB_COOLDOWN_SECONDS * 1_000;
+    if (Date.now() < cooledDownAt) return;
+
+    await existing.remove();
   }
 }
