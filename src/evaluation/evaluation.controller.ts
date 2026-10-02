@@ -217,8 +217,10 @@ export class EvaluationController {
   @Get('stats/summary')
   @ApiOperation({
     summary:
-      'Aggregate evaluation stats across ALL of the user’s evaluated trades ' +
-      '(avgProcessScore, goodTradeRate, luckyTradeRate, winRate, avgRMultiple).',
+      'Aggregate evaluation stats across ALL of the user’s evaluated trades — ' +
+      'the full report stats block (avgProcessScore, avgSetupQuality, ' +
+      'avgPlanAdherence, avgExecutionScore, goodTradeRate, luckyTradeRate, ' +
+      'winRate, avgRMultiple, best/worstProcessScore) plus tradesEvaluated.',
   })
   @ApiResponse({ status: 200, description: 'The aggregate stats summary.' })
   getStatsSummary(@Request() req: AuthenticatedRequest) {
