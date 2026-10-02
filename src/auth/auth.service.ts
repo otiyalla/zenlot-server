@@ -530,10 +530,12 @@ export class AuthService {
 
   // Helper methods
 
-  private async revokeAllRefreshTokens(userId: string): Promise<void> {
+  private async revokeAllRefreshTokens(
+    userId: string,
+    client: RefreshTokenClient = this.prisma,
+  ): Promise<void> {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-      await (this.prisma as any).refreshToken.updateMany({
+      await client.refreshToken.updateMany({
         where: {
           userId: userId,
           isRevoked: false,
@@ -650,7 +652,17 @@ export class AuthService {
       throw new UnauthorizedException('Refresh token has been revoked');
     }
 
-    await this.revokeAllRefreshTokens(userId);
+    // Take the user row lock that rotation (and password reset) hold until they
+    // commit. Under READ COMMITTED a lone revoke-all can wait on the successor
+    // a concurrent rotation is replacing, then miss the replacement it inserts;
+    // behind the lock the revocation sees and revokes it.
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.updateMany({
+        where: { id: userId },
+        data: { authVersion: { increment: 0 } },
+      });
+      await this.revokeAllRefreshTokens(userId, tx);
+    });
     this.logger.warn(
       `Refresh token reuse detected for user ${userId}; revoked all sessions`,
     );

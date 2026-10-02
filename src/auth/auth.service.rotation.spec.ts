@@ -63,7 +63,9 @@ const createPrisma = () => {
     user: {
       updateMany: jest.fn(async ({ where }: any) => ({
         count:
-          where.id === user.id && where.authVersion === user.authVersion
+          where.id === user.id &&
+          (where.authVersion === undefined ||
+            where.authVersion === user.authVersion)
             ? 1
             : 0,
       })),
@@ -260,6 +262,36 @@ describe('AuthService refresh-token rotation', () => {
     await expect(service.refreshTokens(successor)).rejects.toBeInstanceOf(
       UnauthorizedException,
     );
+  });
+
+  it('also revokes the successor a concurrent rotation is inserting when reuse is detected', async () => {
+    const original = await issue();
+    const { refreshToken: successor } = await service.refreshTokens(original);
+    advance(REFRESH_TOKEN_REUSE_GRACE_MS + 1);
+
+    // Hold the legitimate rotation of the successor mid-transaction: the
+    // successor is revoked, its replacement not yet inserted.
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const create = prisma.refreshToken.create.getMockImplementation();
+    prisma.refreshToken.create.mockImplementationOnce(async (args: any) => {
+      await gate;
+      return create(args);
+    });
+
+    const rotation = service.refreshTokens(successor);
+    await new Promise((resolve) => setImmediate(resolve));
+    const reuse = service.refreshTokens(original);
+    await new Promise((resolve) => setImmediate(resolve));
+    release();
+
+    const [rotated, reused] = await Promise.allSettled([rotation, reuse]);
+    expect(rotated.status).toBe('fulfilled');
+    expect(reused.status).toBe('rejected');
+    expect(prisma.rows).toHaveLength(3);
+    expect(prisma.rows.every((r: Row) => r.isRevoked)).toBe(true);
   });
 
   it('rejects a grace-window replay once the successor itself was revoked, without a reuse alarm', async () => {
