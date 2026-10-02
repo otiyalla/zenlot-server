@@ -80,7 +80,15 @@ export class EvaluationCoachingEnqueueService {
     contextId: string,
   ): Promise<void> {
     try {
-      await this.queue.add(jobName, data, { removeOnComplete: true });
+      await this.queue.add(jobName, data, {
+        // Reads may re-enqueue reports whose summary is still missing. A stable
+        // id makes that recovery path idempotent while a job is queued/running.
+        jobId: `${jobName}-${contextId}`,
+        // `attempts: 3` comes from the app-level BullMQ defaults. Space those
+        // attempts out so a transient provider outage has time to recover.
+        backoff: { type: 'exponential', delay: 2_000 },
+        removeOnComplete: true,
+      });
     } catch (error) {
       this.logger.error(
         `Failed to enqueue ${jobName} for ${contextId}`,

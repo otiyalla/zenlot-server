@@ -42,7 +42,11 @@ describe('EvaluationCoachingEnqueueService', () => {
     expect(add).toHaveBeenCalledWith(
       GENERATE_PRE_TRADE_COACHING_JOB,
       { evaluationId: 'e1', evaluation, language: 'en' },
-      { removeOnComplete: true },
+      {
+        jobId: `${GENERATE_PRE_TRADE_COACHING_JOB}-e1`,
+        backoff: { type: 'exponential', delay: 2_000 },
+        removeOnComplete: true,
+      },
     );
   });
 
@@ -52,7 +56,11 @@ describe('EvaluationCoachingEnqueueService', () => {
     expect(add).toHaveBeenCalledWith(
       GENERATE_POST_TRADE_COACHING_JOB,
       { verdictId: 'v1', verdict, language: 'fr' },
-      { removeOnComplete: true },
+      {
+        jobId: `${GENERATE_POST_TRADE_COACHING_JOB}-v1`,
+        backoff: { type: 'exponential', delay: 2_000 },
+        removeOnComplete: true,
+      },
     );
   });
 
@@ -62,7 +70,11 @@ describe('EvaluationCoachingEnqueueService', () => {
     expect(add).toHaveBeenCalledWith(
       GENERATE_BEHAVIORAL_SUMMARY_JOB,
       { reportId: 'r1', report, language: 'en' },
-      { removeOnComplete: true },
+      {
+        jobId: `${GENERATE_BEHAVIORAL_SUMMARY_JOB}-r1`,
+        backoff: { type: 'exponential', delay: 2_000 },
+        removeOnComplete: true,
+      },
     );
   });
 

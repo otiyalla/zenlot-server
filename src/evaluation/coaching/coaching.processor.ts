@@ -121,9 +121,14 @@ export class EvaluationCoachingProcessor extends WorkerHost {
     );
     if (!summary) {
       this.logger.warn(
-        `No behavioral summary generated for report ${data.reportId}`,
+        `No behavioral summary generated for report ${data.reportId}; retrying`,
       );
-      return;
+      // The app-level BullMQ configuration gives jobs three attempts. Throwing
+      // here prevents an unavailable/empty provider response from being marked
+      // successful and permanently leaving aiSummary null.
+      throw new Error(
+        `Behavioral summary generation returned no content for ${data.reportId}`,
+      );
     }
     await this.prisma.behavioralReport.update({
       where: { id: data.reportId },
