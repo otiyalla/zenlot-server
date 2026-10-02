@@ -50,6 +50,9 @@ const storedRefreshTokenForms = (token: string) =>
     ? [hashRefreshToken(token)]
     : [hashRefreshToken(token), token];
 
+// Bounds how far a grace-window retry follows a rotation chain.
+const MAX_GRACE_CHAIN_HOPS = 5;
+
 interface VerifiedRefreshToken {
   user: StoredUser;
   token: string;
@@ -242,9 +245,11 @@ export class AuthService {
       // Expired/invalid tokens are routine (every access token expires within
       // the hour), so only unexpected failures are worth a Sentry event.
       if (isAuthRejection(error)) return null;
+      // Anything else (e.g. the database is down) must surface as 5xx, not as
+      // an invalid token: clients sign out on 401.
       this.logger.error('Error verifying token', error);
       Sentry.captureException(error, { extra: { context: 'verifyToken' } });
-      return null; // Return null if token verification fails
+      throw error;
     }
   }
 
@@ -282,12 +287,15 @@ export class AuthService {
     }
   }
 
-  private signRefreshToken(token: string): string {
+  // `expiresAt` caps a re-issued token at its stored record's expiry.
+  private signRefreshToken(token: string, expiresAt?: Date): string {
     return this.jwtService.sign(
       { token },
       {
         secret: this.getRefreshSecret(),
-        expiresIn: this.getRefreshExpiresIn(),
+        expiresIn: expiresAt
+          ? Math.max(1, Math.floor((expiresAt.getTime() - Date.now()) / 1000))
+          : this.getRefreshExpiresIn(),
       },
     );
   }
@@ -615,10 +623,19 @@ export class AuthService {
         this.deriveSuccessorToken(presented.token),
       );
     });
-    // null: a concurrent refresh rotated this token an instant ago.
-    return (
-      replacement ??
-      this.redeemRotatedRefreshToken(presented.token, payload.sub, new Date())
+    if (replacement) return replacement;
+
+    // A concurrent refresh rotated this token after we read it. Judge the
+    // replay by when that actually happened: a request stalled past the
+    // grace window is reuse, not a duplicate.
+    const record = await this.prisma.refreshToken.findFirst({
+      where: { token: { in: storedRefreshTokenForms(presented.token) } },
+      select: { revokedAt: true },
+    });
+    return this.redeemRotatedRefreshToken(
+      presented.token,
+      payload.sub,
+      record?.revokedAt ?? null,
     );
   }
 
@@ -632,22 +649,35 @@ export class AuthService {
     userId: string,
     revokedAt: Date | null,
   ): Promise<string> {
-    const successorToken = this.deriveSuccessorToken(token);
+    const withinGrace = (at: Date | null) =>
+      at !== null && Date.now() - at.getTime() <= REFRESH_TOKEN_REUSE_GRACE_MS;
     // Derived successors only ever exist in hashed form.
-    const successor = await this.prisma.refreshToken.findUnique({
-      where: { token: hashRefreshToken(successorToken) },
-    });
+    const findSuccessor = (of: string) => {
+      const successorToken = this.deriveSuccessorToken(of);
+      return this.prisma.refreshToken
+        .findUnique({ where: { token: hashRefreshToken(successorToken) } })
+        .then((row) => (row ? { ...row, raw: successorToken } : null));
+    };
+
+    let successor = await findSuccessor(token);
     if (!successor) {
       // Revoked without rotation: sign-out, sign-in elsewhere, password reset.
       throw new UnauthorizedException('Refresh token has been revoked');
     }
 
-    const withinGrace =
-      revokedAt !== null &&
-      Date.now() - revokedAt.getTime() <= REFRESH_TOKEN_REUSE_GRACE_MS;
-    if (withinGrace) {
-      if (!successor.isRevoked && successor.expiresAt > new Date()) {
-        return this.signRefreshToken(successorToken);
+    if (withinGrace(revokedAt)) {
+      // Follow the chain while each link was itself rotated within the grace
+      // window, so retrying a lost response still lands on the live token
+      // after another request already rotated its successor.
+      for (let hop = 0; hop < MAX_GRACE_CHAIN_HOPS; hop += 1) {
+        if (!successor.isRevoked) {
+          if (successor.expiresAt <= new Date()) break;
+          return this.signRefreshToken(successor.raw, successor.expiresAt);
+        }
+        if (!withinGrace(successor.revokedAt)) break;
+        const next = await findSuccessor(successor.raw);
+        if (!next) break; // revoked without rotation (e.g. sign-out)
+        successor = next;
       }
       throw new UnauthorizedException('Refresh token has been revoked');
     }

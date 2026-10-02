@@ -140,6 +140,34 @@ describe('AuthGuard', () => {
     });
   });
 
+  describe('verification failures that are not invalid tokens', () => {
+    it('propagates a database fault on protected routes instead of answering 401', async () => {
+      const { guard, authService } = makeGuard(false);
+      const dbError = new Error('db down');
+      authService.verifyToken.mockRejectedValue(dbError);
+      const ctx = makeContext({
+        isPublic: false,
+        url: '/trade',
+        headers: { accesstoken: 'valid-token' },
+      });
+
+      await expect(guard.canActivate(ctx)).rejects.toBe(dbError);
+    });
+
+    it('keeps public routes reachable (anonymous) when verification is unavailable', async () => {
+      const { guard, authService } = makeGuard(true);
+      authService.verifyToken.mockRejectedValue(new Error('db down'));
+      const ctx = makeContext({
+        isPublic: true,
+        url: '/legal/terms',
+        headers: { accesstoken: 'valid-token' },
+      });
+
+      await expect(guard.canActivate(ctx)).resolves.toBe(true);
+      expect(ctx.request.user).toBeUndefined();
+    });
+  });
+
   describe('no in-band refresh', () => {
     it('ignores refresh-token headers: never rotates or returns tokens in response headers', async () => {
       const { guard, authService } = makeGuard(false);

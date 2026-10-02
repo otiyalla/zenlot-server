@@ -471,6 +471,8 @@ describe('AuthService', () => {
       .spyOn(service, 'verifyRefreshToken')
       .mockResolvedValue({ user, token: 'old-db-token' } as any);
     prisma.refreshToken.updateMany.mockResolvedValue({ count: 0 });
+    // The winner revoked it moments ago.
+    prisma.refreshToken.findFirst.mockResolvedValue({ revokedAt: new Date() });
     prisma.refreshToken.findUnique.mockResolvedValue({
       isRevoked: false,
       expiresAt: new Date(Date.now() + 60_000),
@@ -657,16 +659,22 @@ describe('AuthService', () => {
       expect(Sentry.captureException).not.toHaveBeenCalled();
     });
 
-    it('still reports unexpected failures while verifying an access token', async () => {
+    it('reports and propagates unexpected failures while verifying an access token (5xx, not 401)', async () => {
       (jwtService.verify as jest.Mock).mockReturnValue({
         email: user.email,
         sub: user.id,
         authVersion: user.authVersion,
       });
-      userService.findByEmail.mockRejectedValue(new Error('db down'));
+      const dbError = new Error('db down');
+      userService.findByEmail.mockRejectedValue(dbError);
 
-      await expect(service.verifyToken('valid')).resolves.toBeNull();
+      await expect(service.verifyToken('valid')).rejects.toBe(dbError);
       expect(Sentry.captureException).toHaveBeenCalledTimes(1);
+      // /auth/verify surfaces it as a server error, not an invalid token.
+      await expect(service.verify('valid')).rejects.toBe(dbError);
+      expect(auditService.log).not.toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'AUTH_VERIFY_FAILED' }),
+      );
     });
 
     it('does not report a rejected refresh token', async () => {

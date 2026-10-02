@@ -294,6 +294,64 @@ describe('AuthService refresh-token rotation', () => {
     expect(prisma.rows.every((r: Row) => r.isRevoked)).toBe(true);
   });
 
+  it('treats a request stalled past the grace window (lost race) as reuse, not a duplicate', async () => {
+    const original = await issue();
+    // The stalled request reads the token while it is still active...
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const findFirst = prisma.refreshToken.findFirst.getMockImplementation();
+    prisma.refreshToken.findFirst.mockImplementationOnce(async (args: any) => {
+      const row = await findFirst(args);
+      await gate;
+      return row;
+    });
+    const stalled = service.refreshTokens(original);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    // ...another request rotates it, and the stalled one resumes 61s later.
+    await service.refreshTokens(original);
+    advance(REFRESH_TOKEN_REUSE_GRACE_MS + 1);
+    release();
+
+    await expect(stalled).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(prisma.rows.every((r: Row) => r.isRevoked)).toBe(true);
+    expect(auditService.log).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'AUTH_REFRESH_REUSE_DETECTED' }),
+    );
+  });
+
+  it('follows a rotation chain inside the grace window so a retried lost response lands on the live token', async () => {
+    const original = await issue();
+    const { refreshToken: b } = await service.refreshTokens(original); // response lost
+    advance(5_000);
+    const { refreshToken: c } = await service.refreshTokens(b); // another request rotates B
+    advance(5_000);
+
+    const retry = await service.refreshTokens(original);
+
+    expect(decodeToken(retry.refreshToken)).toBe(decodeToken(c));
+    await expect(
+      service.refreshTokens(retry.refreshToken),
+    ).resolves.toHaveProperty('accessToken');
+  });
+
+  it('caps a re-issued successor at its stored expiry', async () => {
+    const original = await issue();
+    await service.refreshTokens(original);
+    advance(30_000);
+
+    const replay = await service.refreshTokens(original);
+
+    const { exp } = jwt.decode<{ exp: number }>(replay.refreshToken);
+    const successorRow = prisma.rows[1] as Row;
+    expect(exp * 1000).toBeLessThanOrEqual(successorRow.expiresAt.getTime());
+    expect(exp * 1000).toBeGreaterThan(
+      successorRow.expiresAt.getTime() - 2_000,
+    );
+  });
+
   it('rejects a grace-window replay once the successor itself was revoked, without a reuse alarm', async () => {
     const original = await issue();
     await service.refreshTokens(original);

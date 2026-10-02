@@ -44,7 +44,10 @@ after which the raw fallback in `storedRefreshTokenForms` can be removed.
 3. **Revoked token, within `REFRESH_TOKEN_REUSE_GRACE_MS` (60s) of rotation:**
    the same successor is re-issued. A lost or timed-out response, or two
    refreshes in flight at once, therefore never strands the client with a
-   revoked token.
+   revoked token. If that successor was itself rotated within the window, the
+   chain is followed to the live token. Re-issued tokens expire with their
+   stored record, and a request that lost the race is judged by the recorded
+   revocation time, so one stalled past the window counts as reuse.
 4. **Rotated token replayed after the grace window:** treated as token theft —
    every refresh token for the user is revoked and `AUTH_REFRESH_REUSE_DETECTED`
    is audited.
