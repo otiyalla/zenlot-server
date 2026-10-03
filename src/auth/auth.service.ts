@@ -513,6 +513,7 @@ export class AuthService {
   async signout(userId: string, ipAddress?: string, userAgent?: string) {
     try {
       await this.revokeAllRefreshTokens(userId);
+      await this.removePushTokens(userId);
       await this.auditService.log({
         userId,
         action: 'AUTH_SIGNOUT_SUCCESS',
@@ -538,6 +539,23 @@ export class AuthService {
   }
 
   // Helper methods
+
+  // Sign-out revokes every session for the user, so their devices must stop
+  // receiving pushes too. The client's own push unregister is authenticated by
+  // the access token and silently fails when that has expired, which would
+  // otherwise leave a signed-out account's alerts reaching the device.
+  // Best-effort: session revocation above is the security boundary and has
+  // already succeeded, so a failure here must not fail the sign-out.
+  private async removePushTokens(userId: string): Promise<void> {
+    try {
+      await this.prisma.pushToken.deleteMany({ where: { userId } });
+    } catch (error) {
+      this.logger.warn('Could not remove push tokens on sign-out');
+      Sentry.captureException(error, {
+        extra: { userId, context: 'removePushTokens' },
+      });
+    }
+  }
 
   private async revokeAllRefreshTokens(
     userId: string,
