@@ -423,7 +423,7 @@ describe('UserService', () => {
     });
     expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
       where: { userId: 'user-1', isRevoked: false },
-      data: { isRevoked: true },
+      data: { isRevoked: true, revokedAt: expect.any(Date) },
     });
     expect(socketSessions.advanceAuthVersion).toHaveBeenCalledWith('user-1', 4);
   });

@@ -5,7 +5,6 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { IncomingHttpHeaders } from 'http';
-import * as Sentry from '@sentry/nestjs';
 import { AuthService } from './auth.service';
 import { Reflector } from '@nestjs/core';
 import { IS_PUBLIC_KEY } from '../custom_decorator/public.decorator'; // Adjust the import path as necessary
@@ -24,103 +23,49 @@ export class AuthGuard implements CanActivate {
     ]);
 
     const request = context.switchToHttp().getRequest<{
-      headers: import('http').IncomingHttpHeaders;
+      headers: IncomingHttpHeaders;
+      url?: string;
       user?: unknown;
     }>();
-    const tokens = this.extractTokenFromHeader(request);
+    const token = this.extractAccessToken(request);
 
     if (isPublic) {
       // Auth endpoints handle their own token operations (refresh, verify).
-      // Running optional-auth here would rotate and revoke the refresh token
-      // before the controller can use the same token from the request body.
-      const url = (request as unknown as { url?: string }).url ?? '';
-      if (url.startsWith('/auth/')) {
+      if ((request.url ?? '').startsWith('/auth/')) {
         return true;
       }
 
-      // Optional authentication: if a token is present try to verify it and
-      // attach req.user, but never block the request if absent or invalid.
-      if (tokens?.token) {
-        try {
-          const result = (await this.authService.verify(
-            tokens.token,
-            tokens.refreshToken,
-          )) as
-            | (Record<string, unknown> & {
-                accessToken?: string;
-                refreshToken?: string;
-              })
-            | null;
-          if (result) {
-            request.user = result;
-            if (
-              result.accessToken &&
-              result.refreshToken &&
-              result.accessToken !== tokens.token
-            ) {
-              const response = context.switchToHttp().getResponse<{
-                setHeader: (name: string, value: string) => void;
-              }>();
-              response.setHeader('new-access-token', result.accessToken);
-              response.setHeader('new-refresh-token', result.refreshToken);
-            }
-          }
-        } catch {
-          // Token invalid or expired — proceed as unauthenticated.
-        }
+      // Optional authentication: if a valid token is present attach req.user,
+      // but never block the request if absent or invalid. An unexpected
+      // verification failure (e.g. database down) propagates as 5xx rather
+      // than silently treating a signed-in caller as anonymous.
+      if (token) {
+        const user = await this.authService.verifyToken(token);
+        if (user) request.user = user;
       }
       return true;
     }
 
-    if (!tokens || (!tokens.token && !tokens.refreshToken)) {
+    if (!token) {
       throw new UnauthorizedException('No tokens provided');
     }
 
-    const { token, refreshToken } = tokens;
-    try {
-      const result = (await this.authService.verify(token, refreshToken)) as
-        | (Record<string, unknown> & {
-            accessToken?: string;
-            refreshToken?: string;
-          })
-        | null;
-      if (!result) {
-        throw new UnauthorizedException('Invalid token');
-      }
-
-      // If new tokens were generated (refresh token was used), set them in response headers
-      if (
-        result.accessToken &&
-        result.refreshToken &&
-        result.accessToken !== token
-      ) {
-        const response = context.switchToHttp().getResponse<{
-          setHeader: (name: string, value: string) => void;
-        }>();
-        response.setHeader('new-access-token', result.accessToken);
-        response.setHeader('new-refresh-token', result.refreshToken);
-      }
-
-      request.user = result;
-      return true;
-    } catch (error) {
-      Sentry.captureException(error, {
-        extra: { context: 'AuthGuard.canActivate' },
-      });
+    // verifyToken, not verify(): this runs on every request, and verify() is
+    // the /auth/verify endpoint's logic (audit row + analytics per call). It
+    // never rotates refresh tokens: refreshing is only POST /auth/refresh.
+    const user = await this.authService.verifyToken(token);
+    if (!user) {
+      // Routine (expired token), so no Sentry event.
       throw new UnauthorizedException('Invalid token');
     }
+    request.user = user;
+    return true;
   }
 
-  private extractTokenFromHeader(request: {
+  private extractAccessToken(request: {
     headers: IncomingHttpHeaders;
-  }): { token: string; refreshToken: string } | undefined {
-    const token = (request.headers['accesstoken'] ??
-      request.headers['accesstoken']) as string | undefined;
-    const refreshToken = (request.headers['refresh_access_token'] ??
-      request.headers['refreshtoken']) as string | undefined;
-    if (!token && !refreshToken) {
-      return undefined;
-    }
-    return { token: token ?? '', refreshToken: refreshToken ?? '' };
+  }): string | undefined {
+    const header = request.headers['accesstoken'];
+    return (Array.isArray(header) ? header[0] : header) || undefined;
   }
 }

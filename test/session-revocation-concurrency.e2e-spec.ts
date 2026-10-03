@@ -205,4 +205,124 @@ describeWithDatabase('Session revocation concurrency (PostgreSQL)', () => {
       resetClient.release();
     }
   });
+  // Reuse detection revokes every refresh token for the user while a
+  // legitimate rotation of the current token may be mid-transaction.
+  const startRotationOfOldToken = async (
+    rotationClient: import('pg').PoolClient,
+  ) => {
+    await rotationClient.query('BEGIN');
+    const claim = await rotationClient.query(
+      `UPDATE ${schema}."user"
+       SET "authVersion" = $2
+       WHERE "id" = $1 AND "authVersion" = $2
+       RETURNING "id"`,
+      ['user-1', 3],
+    );
+    expect(claim.rowCount).toBe(1);
+    await rotationClient.query(
+      `UPDATE ${schema}."RefreshToken"
+       SET "isRevoked" = TRUE
+       WHERE "token" = $1 AND "isRevoked" = FALSE`,
+      ['old-token'],
+    );
+    await rotationClient.query(
+      `INSERT INTO ${schema}."RefreshToken" ("token", "userId")
+       VALUES ($1, $2)`,
+      ['replacement-token', 'user-1'],
+    );
+  };
+
+  const tokenStates = async () =>
+    (
+      await pool.query<{ token: string; isRevoked: boolean }>(
+        `SELECT "token", "isRevoked"
+         FROM ${schema}."RefreshToken"
+         ORDER BY "token"`,
+      )
+    ).rows;
+
+  it('shows why reuse revocation needs the user row lock: a lone revoke-all misses the replacement', async () => {
+    const rotationClient = await pool.connect();
+    const reuseClient = await pool.connect();
+    let reuseSettled = false;
+
+    try {
+      await startRotationOfOldToken(rotationClient);
+
+      // Blocks on old-token's row lock, then re-checks only that row; the
+      // replacement is outside this statement's snapshot.
+      const reuse = reuseClient
+        .query(
+          `UPDATE ${schema}."RefreshToken"
+           SET "isRevoked" = TRUE
+           WHERE "userId" = $1 AND "isRevoked" = FALSE`,
+          ['user-1'],
+        )
+        .finally(() => {
+          reuseSettled = true;
+        });
+
+      await new Promise((resolve) => setTimeout(resolve, 75));
+      expect(reuseSettled).toBe(false);
+
+      await rotationClient.query('COMMIT');
+      await reuse;
+
+      expect(await tokenStates()).toEqual([
+        { token: 'old-token', isRevoked: true },
+        { token: 'replacement-token', isRevoked: false },
+      ]);
+    } finally {
+      await Promise.allSettled([rotationClient.query('ROLLBACK')]);
+      rotationClient.release();
+      reuseClient.release();
+    }
+  });
+
+  it('makes reuse revocation behind the user row lock revoke the replacement a concurrent rotation commits', async () => {
+    const rotationClient = await pool.connect();
+    const reuseClient = await pool.connect();
+    let reuseSettled = false;
+
+    try {
+      await startRotationOfOldToken(rotationClient);
+
+      const reuse = (async () => {
+        await reuseClient.query('BEGIN');
+        await reuseClient.query(
+          `UPDATE ${schema}."user"
+           SET "authVersion" = "authVersion" + 0
+           WHERE "id" = $1`,
+          ['user-1'],
+        );
+        await reuseClient.query(
+          `UPDATE ${schema}."RefreshToken"
+           SET "isRevoked" = TRUE
+           WHERE "userId" = $1 AND "isRevoked" = FALSE`,
+          ['user-1'],
+        );
+        await reuseClient.query('COMMIT');
+      })().finally(() => {
+        reuseSettled = true;
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 75));
+      expect(reuseSettled).toBe(false);
+
+      await rotationClient.query('COMMIT');
+      await reuse;
+
+      expect(await tokenStates()).toEqual([
+        { token: 'old-token', isRevoked: true },
+        { token: 'replacement-token', isRevoked: true },
+      ]);
+    } finally {
+      await Promise.allSettled([
+        rotationClient.query('ROLLBACK'),
+        reuseClient.query('ROLLBACK'),
+      ]);
+      rotationClient.release();
+      reuseClient.release();
+    }
+  });
 });

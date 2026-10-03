@@ -2,7 +2,6 @@ import {
   Body,
   Controller,
   Get,
-  HttpStatus,
   Param,
   Post,
   Put,
@@ -176,19 +175,20 @@ export class EvaluationController {
   @ApiOperation({
     summary:
       'Latest behavioral-intelligence report, regenerating if stale. Returns ' +
-      '204 with an insufficient_data body when the user has < 10 evaluated ' +
-      'trades.',
+      '200 with an insufficient_data body instead when the user has < 10 ' +
+      'evaluated trades.',
   })
   @ApiQuery({
     name: 'period_days',
     required: false,
     description: 'Rolling analysis window in days (default 90).',
   })
-  @ApiResponse({ status: 200, description: 'The behavioral report.' })
   @ApiResponse({
-    status: 204,
+    status: 200,
     description:
-      '{ message: "insufficient_data", tradesRequired: 10, tradesEvaluated: N }',
+      'The behavioral report, or { message: "insufficient_data", ' +
+      'tradesRequired: 10, tradesEvaluated: N } when fewer than 10 trades ' +
+      'have been evaluated.',
   })
   async getBehavioralReport(
     @Request() req: AuthenticatedRequest,
@@ -203,10 +203,8 @@ export class EvaluationController {
     );
 
     if (isInsufficientData(result)) {
-      // Spec 11: 204 with a discriminator body. Fastify omits the body on a
-      // standards-compliant 204; the client keys off the status. We still
-      // return the payload so non-stripping clients and tests can read it.
-      reply.status(HttpStatus.NO_CONTENT);
+      // A 200 with a discriminator body (not 204: Fastify strips 204 bodies).
+      // The client keys off the `insufficient_data` marker.
       return {
         message: 'insufficient_data',
         tradesRequired: result.tradesRequired,

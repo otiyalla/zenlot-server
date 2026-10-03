@@ -1,91 +1,88 @@
 # Refresh Token Implementation
 
 ## Overview
-This implementation fixes the refresh token flow to ensure users stay signed in automatically when their access tokens expire, instead of being logged out.
 
-## Changes Made
+Access tokens are short-lived JWTs (`JWT_EXPIRES`, default `3600s`). Refresh
+tokens are long-lived (`JWT_REFRESH_EXPIRES`, default `7d`), single-use, and
+rotated on every refresh. The client holds a JWT signed with
+`JWT_REFRESH_SECRET` that wraps a random 32-byte value; the database stores only
+a SHA-256 hash of that value (`sha256:<hex>`).
 
-### 1. Database Schema Updates
-- **File**: `prisma/schema.prisma`
-- **Changes**: Added `RefreshToken` model with proper relationships
-- **Fields**:
-  - `id`: Unique identifier (cuid)
-  - `token`: The refresh token value (hex string)
-  - `userId`: Foreign key to user table
-  - `expiresAt`: Token expiration timestamp
-  - `createdAt`: Creation timestamp
-  - `isRevoked`: Boolean flag for token revocation
+Refreshing happens in exactly one place: `POST /auth/refresh`. The auth guard
+never refreshes; it only verifies the access token.
 
-### 2. Backend Service Updates
+## Data model (`prisma/schema.prisma`)
 
-#### Auth Service (`src/auth/auth.service.ts`)
-- **Token Storage**: Refresh tokens are now stored in database instead of being stateless JWTs
-- **Token Rotation**: Each refresh generates new access and refresh tokens
-- **Token Revocation**: Old refresh tokens are revoked when new ones are issued
-- **Security**: Uses cryptographically secure random tokens (32 bytes hex)
+`RefreshToken`: `id`, `token` (hashed value, unique), `userId`, `expiresAt`
+(copied from the signed JWT's `exp`), `createdAt`, `isRevoked`, `revokedAt`.
 
-#### Auth Controller (`src/auth/auth.controller.ts`)
-- **New Endpoint**: Added `POST /auth/refresh` for dedicated token refresh
-- **Existing Endpoint**: Enhanced `POST /auth/verify` to handle token refresh
+Rows written before hashing shipped hold the raw value. Lookups accept both
+forms until those rows expire (one `JWT_REFRESH_EXPIRES` after the release),
+after which the raw fallback in `storedRefreshTokenForms` can be removed.
 
-#### Auth Guard (`src/auth/auth.guard.ts`)
-- **Automatic Refresh**: Automatically attempts refresh when access token is expired
-- **Header Injection**: Sets new tokens in response headers for frontend consumption
-- **Error Handling**: Proper error handling for token refresh failures
+## Endpoints
 
-### 3. Frontend Updates
+- `POST /auth/signin` – revokes the user's existing refresh tokens (one active
+  session per user), bumps `authVersion`, returns `{ accessToken, refreshToken, user }`.
+- `POST /auth/signup` – returns a first token pair.
+- `POST /auth/refresh` – `{ refreshToken }` → `{ accessToken, refreshToken, user }`.
+- `POST /auth/verify` – `{ token }` → the user, or **401** if the token is
+  invalid. Still accepts `{ token, refreshToken }` and refreshes for app
+  versions that predate the dedicated refresh flow; current clients never send it.
+- `POST /auth/signout` – revokes all of the user's refresh tokens.
 
-#### API Layer (`api/index.ts`)
-- **Automatic Refresh**: Added `makeAuthenticatedRequest` function with automatic token refresh
-- **Retry Logic**: Automatically retries failed requests after token refresh
-- **Token Management**: Seamless token storage and retrieval
+## Rotation, grace window and reuse detection (`src/auth/auth.service.ts`)
 
-#### Auth Provider (`providers/AuthProvider.tsx`)
-- **Enhanced Verification**: Improved token verification with automatic refresh
-- **Token Updates**: Automatically updates stored tokens when refresh occurs
-- **Error Handling**: Better error handling for authentication failures
+1. The presented refresh token is decoded and its unexpired row loaded (revoked
+   or not).
+2. **Active token:** inside a transaction that first claims the user row
+   (`authVersion` guard against concurrent password resets), the old row is
+   revoked (`isRevoked`, `revokedAt`) and a successor is created. The successor
+   value is derived from the old one with an HMAC keyed by
+   `JWT_REFRESH_SECRET`, so it can be re-derived later without storing raw
+   values.
+3. **Revoked token, within `REFRESH_TOKEN_REUSE_GRACE_MS` (60s) of rotation:**
+   the same successor is re-issued. A lost or timed-out response, or two
+   refreshes in flight at once, therefore never strands the client with a
+   revoked token. If that successor was itself rotated within the window, the
+   chain is followed to the live token. Re-issued tokens expire with their
+   stored record, and a request that lost the race is judged by the recorded
+   revocation time, so one stalled past the window counts as reuse.
+4. **Rotated token replayed after the grace window:** treated as token theft —
+   every refresh token for the user is revoked and `AUTH_REFRESH_REUSE_DETECTED`
+   is audited.
+5. **Token revoked without rotation** (sign-out, sign-in elsewhere, password
+   reset): plain 401.
 
-#### Signin API (`api/signin.ts`)
-- **Refresh Endpoint**: Added proper refresh token API call
+## Error contract
 
-## Key Features
+- **401** only for a genuinely bad session: invalid/expired/revoked token or
+  credentials that changed mid-request. Clients treat it as "signed out".
+- **5xx** for server faults (e.g. the database is unavailable). Clients keep the
+  session and retry, so an outage never signs users out.
 
-### 1. Token Rotation
-- Each refresh generates completely new tokens
-- Old refresh tokens are immediately revoked
-- Prevents token reuse attacks
+Routine 401s (expired tokens) are not reported to Sentry; unexpected failures are.
 
-### 2. Database Storage
-- Refresh tokens are stored in database with expiration
-- Enables token revocation and tracking
-- Provides audit trail for security
+## Housekeeping
 
-### 3. Automatic Refresh
-- Frontend automatically refreshes tokens on API calls
-- Backend automatically refreshes tokens in auth guard
-- Seamless user experience
+`RefreshTokenCleanupProcessor` (BullMQ, daily at 03:30 UTC) deletes rows whose
+`expiresAt` has passed. Revoked-but-unexpired rows are kept for reuse detection.
 
-### 4. Security Enhancements
-- Cryptographically secure token generation
-- Token expiration tracking
-- Immediate token revocation
-- Protection against token replay attacks
+## Client contract (`zenlot` app)
 
-## Setup Instructions
+- `api/index.ts` `refreshSession()` is the only refresh path. Concurrent callers
+  share one in-flight request; a 401 retry first reuses a token another request
+  already refreshed.
+- A refresh rejected with 401/403 clears the stored tokens and emits
+  `onSessionExpired`, which `AuthProvider` turns into a local sign-out.
+  Network/5xx failures keep the session.
+- The rotated refresh token is persisted before the access token.
+- Sockets read the current access token on every (re)connect and, after a
+  server-side rejection, refresh (if needed) and reconnect, at most 3 times in
+  a row.
 
-### 1. Database Migration
-```bash
-# Option 1: Use Prisma (if permissions allow)
-cd zenlot-server
-npx prisma migrate dev --name add_refresh_tokens
-npx prisma generate
+## Environment variables
 
-# Option 2: Manual SQL (if Prisma fails due to permissions)
-# Run the SQL script in scripts/migrate-refresh-tokens.sql
-```
-
-### 2. Environment Variables
-Ensure these are set in your `.env` file:
 ```env
 JWT_SECRET=your_jwt_secret
 JWT_EXPIRES=3600s
@@ -93,90 +90,28 @@ JWT_REFRESH_SECRET=your_refresh_secret
 JWT_REFRESH_EXPIRES=7d
 ```
 
-### 3. Restart Services
+Any value `jsonwebtoken` accepts (e.g. `7d`, `1w`, `7 days`) works; the stored
+expiry always matches the token's own `exp`.
+
+## Manual testing
+
 ```bash
-# Restart backend
-cd zenlot-server
-npm run start:dev
-
-# Restart frontend
-cd zenlot
-npm start
-```
-
-## API Endpoints
-
-### New Endpoints
-- `POST /auth/refresh` - Refresh access token using refresh token
-
-### Enhanced Endpoints
-- `POST /auth/verify` - Now handles automatic token refresh
-- `POST /auth/signin` - Now stores refresh tokens in database
-- `POST /auth/signup` - Now stores refresh tokens in database
-
-## Testing
-
-### Test Scenarios
-1. **Normal Login**: User logs in, receives both access and refresh tokens
-2. **Token Expiry**: Access token expires, refresh token automatically generates new tokens
-3. **Refresh Expiry**: Both tokens expire, user must re-authenticate
-4. **Token Revocation**: User logs out, all refresh tokens are revoked
-5. **Multiple Devices**: Each login creates new refresh tokens, old ones remain valid until expiry
-
-### Manual Testing
-```bash
-# Test login
+# Sign in
 curl -X POST http://localhost:3000/auth/signin \
   -H "Content-Type: application/json" \
   -d '{"email":"test@example.com","password":"password"}'
 
-# Test token refresh
+# Refresh (re-sending the same refresh token within 60s still succeeds)
 curl -X POST http://localhost:3000/auth/refresh \
   -H "Content-Type: application/json" \
   -d '{"refreshToken":"your_refresh_token"}'
 
-# Test protected endpoint with expired access token
-curl -X GET http://localhost:3000/protected-endpoint \
-  -H "accessToken:expired_token" \
-  -H "refresh_access_token:valid_refresh_token"
+# Protected endpoint: only the access token header is read
+curl http://localhost:3000/protected-endpoint -H "accessToken: your_access_token"
 ```
 
-## Security Considerations
+## Rollout notes
 
-### 1. Token Storage
-- Refresh tokens are stored securely in database
-- Access tokens remain stateless JWTs
-- Proper expiration handling
-
-### 2. Token Rotation
-- Each refresh generates new tokens
-- Old tokens are immediately revoked
-- Prevents token reuse
-
-### 3. Error Handling
-- Proper error responses for invalid tokens
-- Graceful fallback to re-authentication
-- No sensitive information in error messages
-
-## Troubleshooting
-
-### Common Issues
-1. **"RefreshToken model not yet available"**: Run `npx prisma generate`
-2. **Permission denied on migration**: Use manual SQL script
-3. **Tokens not refreshing**: Check environment variables
-4. **Frontend not updating tokens**: Check API interceptor implementation
-
-### Debug Mode
-Enable debug logging by setting `LOG_LEVEL=debug` in environment variables.
-
-## Migration Notes
-
-### Backward Compatibility
-- Existing access tokens continue to work until expiry
-- No immediate impact on current users
-- Gradual migration as users refresh their sessions
-
-### Performance Impact
-- Minimal performance impact
-- Database queries only during token refresh
-- Cached token validation where possible
+The hashed-storage change is not readable by instances running the previous
+release. During a rolling deploy, a refresh served by an old instance for a
+token issued by a new one fails with 401 and that user signs in again.

@@ -31,8 +31,25 @@ const verdict: TradeVerdict = {
 
 const report = { userId: 'u1', patterns: [] } as unknown as BehavioralReport;
 
-function make(add: jest.Mock) {
-  return new EvaluationCoachingEnqueueService({ add } as unknown as Queue);
+function make(
+  add: jest.Mock,
+  getJob: jest.Mock = jest.fn().mockResolvedValue(null),
+) {
+  return new EvaluationCoachingEnqueueService({
+    add,
+    getJob,
+  } as unknown as Queue);
+}
+
+const COOLDOWN_MS = 15 * 60 * 1_000;
+
+/** A retained job as BullMQ hands it back from `getJob`. */
+function retainedJob(state: string, finishedOn: number) {
+  return {
+    getState: jest.fn().mockResolvedValue(state),
+    finishedOn,
+    remove: jest.fn().mockResolvedValue(undefined),
+  };
 }
 
 describe('EvaluationCoachingEnqueueService', () => {
@@ -42,7 +59,12 @@ describe('EvaluationCoachingEnqueueService', () => {
     expect(add).toHaveBeenCalledWith(
       GENERATE_PRE_TRADE_COACHING_JOB,
       { evaluationId: 'e1', evaluation, language: 'en' },
-      { removeOnComplete: true },
+      {
+        jobId: `${GENERATE_PRE_TRADE_COACHING_JOB}-e1`,
+        backoff: { type: 'exponential', delay: 2_000 },
+        removeOnComplete: true,
+        removeOnFail: { age: 15 * 60 },
+      },
     );
   });
 
@@ -52,7 +74,12 @@ describe('EvaluationCoachingEnqueueService', () => {
     expect(add).toHaveBeenCalledWith(
       GENERATE_POST_TRADE_COACHING_JOB,
       { verdictId: 'v1', verdict, language: 'fr' },
-      { removeOnComplete: true },
+      {
+        jobId: `${GENERATE_POST_TRADE_COACHING_JOB}-v1`,
+        backoff: { type: 'exponential', delay: 2_000 },
+        removeOnComplete: true,
+        removeOnFail: { age: 15 * 60 },
+      },
     );
   });
 
@@ -62,7 +89,12 @@ describe('EvaluationCoachingEnqueueService', () => {
     expect(add).toHaveBeenCalledWith(
       GENERATE_BEHAVIORAL_SUMMARY_JOB,
       { reportId: 'r1', report, language: 'en' },
-      { removeOnComplete: true },
+      {
+        jobId: `${GENERATE_BEHAVIORAL_SUMMARY_JOB}-r1`,
+        backoff: { type: 'exponential', delay: 2_000 },
+        removeOnComplete: true,
+        removeOnFail: { age: 15 * 60 },
+      },
     );
   });
 
@@ -71,5 +103,50 @@ describe('EvaluationCoachingEnqueueService', () => {
     await expect(
       make(add).enqueuePreTradeCoaching('e1', evaluation, 'en'),
     ).resolves.toBeUndefined();
+  });
+
+  describe('a previously failed job', () => {
+    const jobId = `${GENERATE_BEHAVIORAL_SUMMARY_JOB}-r1`;
+
+    it('is dropped once past the cooldown so the add creates fresh work', async () => {
+      // BullMQ applies removeOnFail age lazily (only as another job finishes),
+      // so on a quiet queue the failure outlives its age and silently swallows
+      // every same-id re-enqueue. Recovery must not depend on queue traffic.
+      const job = retainedJob('failed', Date.now() - COOLDOWN_MS - 1_000);
+      const add = jest.fn().mockResolvedValue({});
+      const getJob = jest.fn().mockResolvedValue(job);
+
+      await make(add, getJob).enqueueBehavioralSummary('r1', report, 'en');
+
+      expect(getJob).toHaveBeenCalledWith(jobId);
+      expect(job.remove).toHaveBeenCalledTimes(1);
+      expect(add).toHaveBeenCalledTimes(1);
+    });
+
+    it('is kept while still inside the cooldown', async () => {
+      const job = retainedJob('failed', Date.now() - 1_000);
+      const add = jest.fn().mockResolvedValue({});
+
+      await make(
+        add,
+        jest.fn().mockResolvedValue(job),
+      ).enqueueBehavioralSummary('r1', report, 'en');
+
+      // The add still runs; BullMQ drops it as a duplicate id, which is what
+      // keeps reads during the cooldown from calling the provider again.
+      expect(job.remove).not.toHaveBeenCalled();
+    });
+
+    it('leaves a job that is still queued or running alone', async () => {
+      const job = retainedJob('active', Date.now() - COOLDOWN_MS - 1_000);
+      const add = jest.fn().mockResolvedValue({});
+
+      await make(
+        add,
+        jest.fn().mockResolvedValue(job),
+      ).enqueueBehavioralSummary('r1', report, 'en');
+
+      expect(job.remove).not.toHaveBeenCalled();
+    });
   });
 });

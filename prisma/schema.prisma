@@ -263,8 +263,12 @@ model RefreshToken {
   expiresAt DateTime
   createdAt DateTime @default(now())
   isRevoked Boolean  @default(false)
+  /// When the token was revoked. A token revoked by rotation stays redeemable
+  /// for a short grace window (see REFRESH_TOKEN_REUSE_GRACE_MS).
+  revokedAt DateTime?
 
   @@index([userId])
+  @@index([expiresAt])
 }
 
 model auditLog {

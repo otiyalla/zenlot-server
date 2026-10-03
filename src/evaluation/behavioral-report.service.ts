@@ -77,6 +77,10 @@ export class BehavioralReportService {
     });
 
     if (latest && !this.isStale(latest, now)) {
+      // A previous enqueue may have failed while Redis was unavailable. A
+      // subsequent read is an opportunity to heal the missing async work;
+      // BullMQ's stable job id keeps concurrent reads from duplicating it.
+      this.enqueueSummaryIfNeeded(latest, language);
       return this.toContract(latest);
     }
 
@@ -116,13 +120,7 @@ export class BehavioralReportService {
 
     const row = await this.persist(report);
 
-    // Enqueue the AI summary ONLY when at least one pattern was detected (spec
-    // 9.2). Fire-and-forget + .catch-guarded so it can never fail this method.
-    if (report.patterns.length > 0) {
-      void this.coachingEnqueue
-        .enqueueBehavioralSummary(row.id, report, language)
-        .catch(() => undefined);
-    }
+    this.enqueueSummaryIfNeeded(row, language, report);
 
     return this.toContract(row);
   }
@@ -352,6 +350,36 @@ export class BehavioralReportService {
         aiSummary: null,
       },
     });
+  }
+
+  /**
+   * Ensures a patterned report has async summary work queued. This remains
+   * fire-and-forget so report reads are never blocked by Redis or an AI
+   * provider. Pattern-free reports intentionally have no AI summary.
+   */
+  private enqueueSummaryIfNeeded(
+    row: behavioralReport,
+    language: string,
+    report: BehavioralReport = this.toEngineReport(row),
+  ): void {
+    if (row.aiSummary || report.patterns.length === 0) return;
+
+    void this.coachingEnqueue
+      .enqueueBehavioralSummary(row.id, report, language)
+      .catch(() => undefined);
+  }
+
+  private toEngineReport(row: behavioralReport): BehavioralReport {
+    return {
+      userId: row.userId,
+      generatedAt: row.generatedAt.toISOString(),
+      tradesAnalyzed: row.tradesAnalyzed,
+      periodDays: row.periodDays,
+      patterns: (row.patterns as unknown as BehavioralPattern[]) ?? [],
+      stats: row.stats as unknown as BehavioralReportStats,
+      topPriority: (row.topPriority as BehavioralPatternType | null) ?? null,
+      summary: row.aiSummary ?? null,
+    };
   }
 
   private toContract(row: behavioralReport): BehavioralReportContract {

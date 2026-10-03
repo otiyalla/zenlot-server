@@ -369,6 +369,42 @@ describe('BehavioralReportService', () => {
       expect(reportCreate).not.toHaveBeenCalled();
     });
 
+    it('re-enqueues a missing summary for a fresh patterned report', async () => {
+      const pattern = {
+        type: 'overtrading',
+        severity: 'warning',
+        confidence: 0.5,
+        sampleSize: 3,
+        totalTrades: 12,
+        evidence: ['t1'],
+        metric: 'Daily trade limit exceeded on 3 days',
+      };
+      const fresh = {
+        id: 'report-pending-summary',
+        userId: USER_ID,
+        tradesAnalyzed: 12,
+        periodDays: 90,
+        patterns: [pattern],
+        stats: {},
+        topPriority: 'overtrading',
+        aiSummary: null,
+        generatedAt: new Date(NOW.getTime() - 60 * 60 * 1000),
+      };
+      const { service, enqueue } = makeService({ latestReport: fresh });
+
+      await service.getOrGenerate(USER_ID, 90, 'en', NOW);
+
+      expect(enqueue).toHaveBeenCalledWith(
+        'report-pending-summary',
+        expect.objectContaining({
+          patterns: [pattern],
+          topPriority: 'overtrading',
+          summary: null,
+        }),
+        'en',
+      );
+    });
+
     it('regenerates when the stored report is stale (> 24h)', async () => {
       const stale = {
         id: 'report-stale',

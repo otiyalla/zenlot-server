@@ -1,21 +1,23 @@
 import {
+  HttpException,
   Injectable,
   Logger,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import * as Sentry from '@sentry/nestjs';
-import { JwtService } from '@nestjs/jwt';
+import { JsonWebTokenError, JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { UserService } from '../user/user.service';
 import { EmailService } from '../email/email.service';
 import {
   defaultExpiresIn,
   defaultRefreshExpiresIn,
+  REFRESH_TOKEN_REUSE_GRACE_MS,
   resolveExpiration,
 } from './auth.constants';
 import { PrismaService } from '../prisma/prisma.service';
-import { randomBytes } from 'crypto';
+import { createHash, createHmac, randomBytes } from 'crypto';
 import { AnalyticsService } from '../analytics/analytics.service';
 import { AuditService } from '../audit/audit.service';
 import { CreateUserDto } from '../user/dto/create-user.dto';
@@ -32,6 +34,41 @@ interface RefreshTokenPayload {
 }
 
 type RefreshTokenClient = Pick<PrismaService, 'refreshToken'>;
+
+// Refresh tokens are stored hashed, so even a database leak combined with the
+// signing secret can't be replayed. The prefix marks hashed rows.
+const HASHED_REFRESH_TOKEN_PREFIX = 'sha256:';
+const hashRefreshToken = (token: string) =>
+  `${HASHED_REFRESH_TOKEN_PREFIX}${createHash('sha256').update(token).digest('hex')}`;
+
+// Rows written before hashing hold the raw value: accept that form until they
+// expire (JWT_REFRESH_EXPIRES after this shipped), then drop it. A raw value
+// carrying the hash prefix was never issued; matching it verbatim would let a
+// leaked hash stand in for its token.
+const storedRefreshTokenForms = (token: string) =>
+  token.startsWith(HASHED_REFRESH_TOKEN_PREFIX)
+    ? [hashRefreshToken(token)]
+    : [hashRefreshToken(token), token];
+
+// Safety bound on how far a grace-window retry follows a rotation chain. The
+// real limit is the window itself: every link must have been rotated within it.
+const MAX_GRACE_CHAIN_HOPS = 100;
+
+interface VerifiedRefreshToken {
+  user: StoredUser;
+  token: string;
+  // Revocation state at lookup. Revoked tokens are still returned so rotation
+  // can tell a grace-window replay from token reuse.
+  isRevoked?: boolean;
+  revokedAt?: Date | null;
+}
+
+// Only a genuinely bad session (invalid/expired/revoked token, credentials
+// changed mid-request) is a 401, which the client treats as "signed out".
+// Infrastructure faults (e.g. the database is down) must surface as 5xx so the
+// client keeps the session and retries instead of signing users out.
+const isAuthRejection = (error: unknown) =>
+  error instanceof HttpException || error instanceof JsonWebTokenError;
 
 interface StoredUser {
   id: string;
@@ -137,7 +174,7 @@ export class AuthService {
 
         await tx.refreshToken.updateMany({
           where: { userId: user.id, isRevoked: false },
-          data: { isRevoked: true },
+          data: { isRevoked: true, revokedAt: new Date() },
         });
         return this.createRefreshToken(payload, tx);
       });
@@ -206,100 +243,116 @@ export class AuthService {
         isAuthenticated: true,
       };
     } catch (error) {
+      // Expired/invalid tokens are routine (every access token expires within
+      // the hour), so only unexpected failures are worth a Sentry event.
+      if (isAuthRejection(error)) return null;
+      // Anything else (e.g. the database is down) must surface as 5xx, not as
+      // an invalid token: clients sign out on 401.
       this.logger.error('Error verifying token', error);
       Sentry.captureException(error, { extra: { context: 'verifyToken' } });
-      return null; // Return null if token verification fails
+      throw error;
     }
   }
 
   async createRefreshToken(
     payload: { email: string; sub: string },
-    db: Pick<PrismaService, 'refreshToken'> = this.prisma,
+    db: RefreshTokenClient = this.prisma,
+    token: string = randomBytes(32).toString('hex'),
   ) {
-    const token = randomBytes(32).toString('hex');
-    const publicRefreshToken = this.jwtService.sign(
-      { token },
-      {
-        secret: this.getRefreshSecret(),
-        expiresIn: this.getRefreshExpiresIn(),
-      },
+    const publicRefreshToken = this.signRefreshToken(token);
+    // Store exactly the expiry signed into the JWT. Re-parsing
+    // JWT_REFRESH_EXPIRES by hand misread valid values ("1w" became 1s).
+    const { exp } = this.jwtService.decode<{ exp?: number }>(
+      publicRefreshToken,
     );
-
-    const refreshTokenExpiry = new Date();
-    refreshTokenExpiry.setSeconds(
-      refreshTokenExpiry.getSeconds() +
-        this.parseExpiration(this.getRefreshExpiresIn()),
-    );
+    if (typeof exp !== 'number') {
+      throw new Error('Signed refresh token has no expiry');
+    }
+    const refreshTokenExpiry = new Date(exp * 1000);
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-      await (db as any).refreshToken.create({
+      await db.refreshToken.create({
         data: {
-          token,
+          token: hashRefreshToken(token),
           userId: payload.sub,
           expiresAt: refreshTokenExpiry,
         },
       });
-      return publicRefreshToken ?? '';
+      return publicRefreshToken;
     } catch (error) {
       this.logger.warn('Error creating refresh token', error);
       Sentry.captureException(error, {
         extra: { userId: payload.sub, context: 'createRefreshToken' },
       });
-      throw new UnauthorizedException('Could not create refresh token');
+      throw error;
     }
-    return publicRefreshToken ?? '';
   }
 
-  async verifyRefreshToken(
-    token: string,
-  ): Promise<{ user: StoredUser; token: string }> {
+  // `expiresAt` caps a re-issued token at its stored record's expiry.
+  private signRefreshToken(token: string, expiresAt?: Date): string {
+    return this.jwtService.sign(
+      { token },
+      {
+        secret: this.getRefreshSecret(),
+        expiresIn: expiresAt
+          ? Math.max(1, Math.floor((expiresAt.getTime() - Date.now()) / 1000))
+          : this.getRefreshExpiresIn(),
+      },
+    );
+  }
+
+  // Successors are derived from the token they replace (keyed by the refresh
+  // secret), so a replay inside the grace window can be answered with the very
+  // same successor without the server retaining raw token values.
+  private deriveSuccessorToken(token: string): string {
+    return createHmac('sha256', this.getRefreshSecret() ?? '')
+      .update(`rotate:${token}`)
+      .digest('hex');
+  }
+
+  // Decodes a public refresh token and loads its unexpired record, revoked or
+  // not (see VerifiedRefreshToken).
+  async verifyRefreshToken(token: string): Promise<VerifiedRefreshToken> {
     try {
       const decoded = this.jwtService.verify<RefreshTokenPayload>(token, {
         secret: this.getRefreshSecret(),
       });
 
-      const refreshTokenRecord: { token: string; user: StoredUser } | null =
-        await (
-          this.prisma as unknown as {
-            refreshToken: {
-              findFirst: (
-                args: unknown,
-              ) => Promise<{ token: string; user: StoredUser } | null>;
-            };
-          }
-        ).refreshToken.findFirst({
-          where: {
-            token: decoded.token,
-            isRevoked: false,
-            expiresAt: {
-              gt: new Date(),
-            },
+      const refreshTokenRecord = await this.prisma.refreshToken.findFirst({
+        where: {
+          token: { in: storedRefreshTokenForms(decoded.token) },
+          expiresAt: {
+            gt: new Date(),
           },
-          include: {
-            user: true,
-          },
-        });
+        },
+        include: {
+          user: true,
+        },
+      });
 
       if (!refreshTokenRecord) {
         throw new UnauthorizedException('Invalid or expired refresh token');
       }
 
-      const user = refreshTokenRecord.user;
       const newUser: StoredUser = {
-        ...user,
+        ...refreshTokenRecord.user,
         isAuthenticated: true,
         password: undefined,
       };
       return {
         user: newUser,
         token: decoded.token,
+        isRevoked: refreshTokenRecord.isRevoked,
+        revokedAt: refreshTokenRecord.revokedAt,
       };
     } catch (error) {
-      this.logger.error('Error verifying refresh token', error);
-      Sentry.captureException(error, {
-        extra: { context: 'verifyRefreshToken' },
-      });
+      if (!isAuthRejection(error)) {
+        this.logger.error('Error verifying refresh token', error);
+        Sentry.captureException(error, {
+          extra: { context: 'verifyRefreshToken' },
+        });
+        throw error;
+      }
       throw new UnauthorizedException('Invalid refresh token');
     }
   }
@@ -313,7 +366,8 @@ export class AuthService {
     try {
       const payload = await this.verifyToken(accessToken);
       if (!payload && refreshToken) {
-        const { user, token } = await this.verifyRefreshToken(refreshToken);
+        const presented = await this.verifyRefreshToken(refreshToken);
+        const { user } = presented;
 
         // Revoke first so a failed revocation never leaves the old token
         // usable while a replacement token has already been persisted.
@@ -323,7 +377,7 @@ export class AuthService {
           authVersion: user.authVersion,
         };
         const newRefreshTokenValue = await this.rotateRefreshToken(
-          token,
+          presented,
           newPayload,
         );
         this.analytics.trackTokensRefreshed(user.id, 'verify');
@@ -347,7 +401,12 @@ export class AuthService {
           refreshToken: newRefreshTokenValue,
         };
       }
-      if (payload?.id) {
+      if (!payload) {
+        // Never answer an invalid token with an empty 200: clients would read
+        // that as "keep the session" instead of refreshing or signing out.
+        throw new UnauthorizedException('Invalid token');
+      }
+      if (payload.id) {
         this.analytics.trackSessionVerified(payload.id, false);
         await this.auditService.log({
           userId: payload.id,
@@ -361,8 +420,11 @@ export class AuthService {
       }
       return payload;
     } catch (error) {
-      this.logger.error('Error verifying token', error);
-      Sentry.captureException(error, { extra: { context: 'verify' } });
+      if (!isAuthRejection(error)) {
+        this.logger.error('Error verifying token', error);
+        Sentry.captureException(error, { extra: { context: 'verify' } });
+        throw error;
+      }
       const distinctId = this.getAnonymousDistinctId(ipAddress || 'unknown');
       this.analytics.trackAuthFailed(distinctId, 'verify', 'invalid_token');
       await this.auditService.log({
@@ -477,16 +539,19 @@ export class AuthService {
 
   // Helper methods
 
-  private async revokeAllRefreshTokens(userId: string): Promise<void> {
+  private async revokeAllRefreshTokens(
+    userId: string,
+    client: RefreshTokenClient = this.prisma,
+  ): Promise<void> {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-      await (this.prisma as any).refreshToken.updateMany({
+      await client.refreshToken.updateMany({
         where: {
           userId: userId,
           isRevoked: false,
         },
         data: {
           isRevoked: true,
+          revokedAt: new Date(),
         },
       });
     } catch (error) {
@@ -500,23 +565,24 @@ export class AuthService {
     }
   }
 
+  // Returns false when the token was already revoked, i.e. a concurrent
+  // rotation claimed it first.
   private async revokeRefreshToken(
     token: string,
     client: RefreshTokenClient = this.prisma,
-  ): Promise<void> {
+  ): Promise<boolean> {
     try {
       const result = await client.refreshToken.updateMany({
         where: {
-          token: token,
+          token: { in: storedRefreshTokenForms(token) },
           isRevoked: false,
         },
         data: {
           isRevoked: true,
+          revokedAt: new Date(),
         },
       });
-      if (result.count !== 1) {
-        throw new UnauthorizedException('Refresh token is no longer valid');
-      }
+      return result.count === 1;
     } catch (error) {
       this.logger.warn('Could not revoke refresh token');
       Sentry.captureException(error, {
@@ -528,14 +594,22 @@ export class AuthService {
     }
   }
 
-  private rotateRefreshToken(
-    token: string,
+  private async rotateRefreshToken(
+    presented: VerifiedRefreshToken,
     payload: AccessTokenPayload,
   ): Promise<string> {
+    if (presented.isRevoked) {
+      return this.redeemRotatedRefreshToken(
+        presented.token,
+        payload.sub,
+        presented.revokedAt ?? null,
+      );
+    }
+
     // Lock the same user row that password reset updates before touching refresh
     // tokens. Reset-first makes this conditional claim fail; rotation-first makes
     // reset wait and then revoke the replacement created below.
-    return this.prisma.$transaction(async (tx) => {
+    const replacement = await this.prisma.$transaction(async (tx) => {
       const claimed = await tx.user.updateMany({
         where: { id: payload.sub, authVersion: payload.authVersion },
         data: { authVersion: payload.authVersion },
@@ -543,27 +617,109 @@ export class AuthService {
       if (claimed.count !== 1) {
         throw new UnauthorizedException('Credentials changed during refresh');
       }
-      await this.revokeRefreshToken(token, tx);
-      return this.createRefreshToken(payload, tx);
+      if (!(await this.revokeRefreshToken(presented.token, tx))) return null;
+      return this.createRefreshToken(
+        payload,
+        tx,
+        this.deriveSuccessorToken(presented.token),
+      );
     });
+    if (replacement) return replacement;
+
+    // A concurrent refresh rotated this token after we read it. Judge the
+    // replay by when that actually happened: a request stalled past the
+    // grace window is reuse, not a duplicate.
+    const record = await this.prisma.refreshToken.findFirst({
+      where: { token: { in: storedRefreshTokenForms(presented.token) } },
+      select: { revokedAt: true },
+    });
+    return this.redeemRotatedRefreshToken(
+      presented.token,
+      payload.sub,
+      record?.revokedAt ?? null,
+    );
   }
 
-  private parseExpiration(expiration: string): number {
-    const unit = expiration.slice(-1);
-    const value = parseInt(expiration.slice(0, -1));
+  // Handles an already-revoked token. Within the grace window after its
+  // rotation, re-issue the same successor so a lost/timed-out response or a
+  // duplicate in-flight refresh is idempotent instead of signing the user out.
+  // A rotated token replayed after the window means a copy is in someone
+  // else's hands: revoke every refresh token for the user (reuse detection).
+  private async redeemRotatedRefreshToken(
+    token: string,
+    userId: string,
+    revokedAt: Date | null,
+  ): Promise<string> {
+    const withinGrace = (at: Date | null) =>
+      at !== null && Date.now() - at.getTime() <= REFRESH_TOKEN_REUSE_GRACE_MS;
+    // Derived successors only ever exist in hashed form. The lookup runs behind
+    // the same user row lock rotation holds until it commits: an unlocked read
+    // can observe a successor as still active in the instant before the
+    // rotation replacing it commits, and handing that about-to-be-revoked token
+    // back makes the client's next refresh look like reuse — which revokes
+    // every session on the account.
+    const findSuccessor = (of: string) => {
+      const successorToken = this.deriveSuccessorToken(of);
+      return this.prisma.$transaction(async (tx) => {
+        await tx.user.updateMany({
+          where: { id: userId },
+          data: { authVersion: { increment: 0 } },
+        });
+        const row = await tx.refreshToken.findUnique({
+          where: { token: hashRefreshToken(successorToken) },
+        });
+        return row ? { ...row, raw: successorToken } : null;
+      });
+    };
 
-    switch (unit) {
-      case 's':
-        return value;
-      case 'm':
-        return value * 60;
-      case 'h':
-        return value * 60 * 60;
-      case 'd':
-        return value * 24 * 60 * 60;
-      default:
-        return value;
+    let successor = await findSuccessor(token);
+    if (!successor) {
+      // Revoked without rotation: sign-out, sign-in elsewhere, password reset.
+      throw new UnauthorizedException('Refresh token has been revoked');
     }
+
+    if (withinGrace(revokedAt)) {
+      // Follow the chain while each link was itself rotated within the grace
+      // window, so retrying a lost response still lands on the live token
+      // after another request already rotated its successor.
+      for (let hop = 0; hop < MAX_GRACE_CHAIN_HOPS; hop += 1) {
+        if (!successor.isRevoked) {
+          if (successor.expiresAt <= new Date()) break;
+          return this.signRefreshToken(successor.raw, successor.expiresAt);
+        }
+        if (!withinGrace(successor.revokedAt)) break;
+        const next = await findSuccessor(successor.raw);
+        if (!next) break; // revoked without rotation (e.g. sign-out)
+        successor = next;
+      }
+      throw new UnauthorizedException('Refresh token has been revoked');
+    }
+
+    // Take the user row lock that rotation (and password reset) hold until they
+    // commit. Under READ COMMITTED a lone revoke-all can wait on the successor
+    // a concurrent rotation is replacing, then miss the replacement it inserts;
+    // behind the lock the revocation sees and revokes it.
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.updateMany({
+        where: { id: userId },
+        data: { authVersion: { increment: 0 } },
+      });
+      await this.revokeAllRefreshTokens(userId, tx);
+    });
+    this.logger.warn(
+      `Refresh token reuse detected for user ${userId}; revoked all sessions`,
+    );
+    Sentry.captureMessage('Refresh token reuse detected', {
+      level: 'warning',
+      extra: { userId },
+    });
+    await this.auditService.log({
+      userId,
+      action: 'AUTH_REFRESH_REUSE_DETECTED',
+      resource: 'auth',
+      resourceId: userId,
+    });
+    throw new UnauthorizedException('Refresh token has been revoked');
   }
 
   // Add a dedicated refresh endpoint method
@@ -573,7 +729,8 @@ export class AuthService {
     userAgent?: string,
   ) {
     try {
-      const { user, token } = await this.verifyRefreshToken(refreshToken);
+      const presented = await this.verifyRefreshToken(refreshToken);
+      const { user } = presented;
       if (!user) {
         throw new UnauthorizedException('Invalid refresh token');
       }
@@ -586,7 +743,7 @@ export class AuthService {
         authVersion: user.authVersion,
       };
       const newRefreshTokenValue = await this.rotateRefreshToken(
-        token,
+        presented,
         payload,
       );
       this.analytics.trackTokensRefreshed(user.id, 'refresh');
@@ -610,8 +767,11 @@ export class AuthService {
         },
       };
     } catch (error) {
-      this.logger.error('Error refreshing tokens', error);
-      Sentry.captureException(error, { extra: { context: 'refreshTokens' } });
+      if (!isAuthRejection(error)) {
+        this.logger.error('Error refreshing tokens', error);
+        Sentry.captureException(error, { extra: { context: 'refreshTokens' } });
+        throw error;
+      }
       const distinctId = this.getAnonymousDistinctId(ipAddress || 'unknown');
       this.analytics.trackAuthFailed(
         distinctId,

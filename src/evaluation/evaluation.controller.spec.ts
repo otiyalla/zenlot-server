@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { DECORATORS } from '@nestjs/swagger/dist/constants';
 import { EvaluationController } from './evaluation.controller';
 import { TradingPlanService } from './trading-plan.service';
 import { EvaluationService } from './evaluation.service';
@@ -107,7 +108,7 @@ describe('EvaluationController', () => {
     expect(getOrGenerate).toHaveBeenCalledWith('u1', 90, 'fr');
   });
 
-  it('GET /behavioral-report sets 204 + insufficient_data body when < 10 trades', async () => {
+  it('GET /behavioral-report returns 200 + insufficient_data body when < 10 trades', async () => {
     getOrGenerate.mockResolvedValueOnce({
       insufficientData: true,
       tradesRequired: 10,
@@ -116,12 +117,31 @@ describe('EvaluationController', () => {
     const status = jest.fn();
     const reply = { status } as never;
     const result = await controller.getBehavioralReport(req, reply, undefined);
-    expect(status).toHaveBeenCalledWith(204);
+    // No 204: Fastify strips 204 bodies, and the client keys off the marker.
+    expect(status).not.toHaveBeenCalled();
     expect(result).toEqual({
       message: 'insufficient_data',
       tradesRequired: 10,
       tradesEvaluated: 3,
     });
+  });
+
+  it('documents the insufficient_data case as a 200 in Swagger, not a 204', () => {
+    const handler = EvaluationController.prototype.getBehavioralReport;
+    const responses = Reflect.getMetadata(
+      DECORATORS.API_RESPONSE,
+      handler,
+    ) as Record<string, { description: string }>;
+    const operation = Reflect.getMetadata(
+      DECORATORS.API_OPERATION,
+      handler,
+    ) as {
+      summary: string;
+    };
+
+    expect(Object.keys(responses)).toEqual(['200']);
+    expect(responses['200'].description).toContain('insufficient_data');
+    expect(operation.summary).not.toContain('204');
   });
 
   it('GET /stats/summary delegates to statsSummary', async () => {

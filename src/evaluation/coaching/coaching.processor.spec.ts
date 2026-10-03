@@ -130,14 +130,21 @@ describe('EvaluationCoachingProcessor.process', () => {
     });
   });
 
-  it('leaves the column null (no update) when no coaching was produced', async () => {
+  it('leaves pre/post coaching null when no coaching was produced', async () => {
     const { processor, preTradeUpdate, verdictUpdate, reportUpdate } =
       make(null);
     await processor.process(preTradeJob);
     await processor.process(postTradeJob);
-    await processor.process(behavioralJob);
     expect(preTradeUpdate).not.toHaveBeenCalled();
     expect(verdictUpdate).not.toHaveBeenCalled();
+    expect(reportUpdate).not.toHaveBeenCalled();
+  });
+
+  it('throws when no behavioral summary was produced so BullMQ retries', async () => {
+    const { processor, reportUpdate } = make(null);
+    await expect(processor.process(behavioralJob)).rejects.toThrow(
+      'Behavioral summary generation returned no content for r1',
+    );
     expect(reportUpdate).not.toHaveBeenCalled();
   });
 

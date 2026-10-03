@@ -221,7 +221,7 @@ export class UserService {
       });
       await tx.refreshToken.updateMany({
         where: { userId: id, isRevoked: false },
-        data: { isRevoked: true },
+        data: { isRevoked: true, revokedAt: new Date() },
       });
       return updated;
     });
