@@ -6,6 +6,7 @@ import { EvaluationController } from './evaluation.controller';
 import { TradingPlanService } from './trading-plan.service';
 import { EvaluationService } from './evaluation.service';
 import { PostTradeGradingService } from './post-trade-grading.service';
+import { SetupPatternService } from './setup-pattern.service';
 import { BehavioralReportService } from './behavioral-report.service';
 import { WeeklyBehavioralService } from './weekly-behavioral.service';
 import {
@@ -54,6 +55,7 @@ import {
     EntitlementsService,
     TradingPlanService,
     EvaluationService,
+    SetupPatternService,
     PostTradeGradingService,
     BehavioralReportService,
     WeeklyBehavioralService,
@@ -87,6 +89,7 @@ import {
   exports: [
     EntitlementsService,
     EvaluationService,
+    SetupPatternService,
     PostTradeGradingService,
     BehavioralReportService,
     EvaluationCoachingEnqueueService,

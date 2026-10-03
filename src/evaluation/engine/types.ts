@@ -55,9 +55,33 @@ export interface TradingPlan {
 // ─── PreTradeChecklist (spec Section 4) ───────────────────────────────────────
 
 export type HigherTfDirection = 'bullish' | 'bearish' | 'unclear';
+/**
+ * Declared chart pattern (SCRUM-59). `other` carries a free-text
+ * `pattern.customName`; `none` covers "no pattern used", which is also what a
+ * trader picks when they cannot identify one. The union only ever grows, so
+ * older clients sending the original four values keep working.
+ *
+ * NOTE: no scoring function reads this value — `setup-quality.ts` scores the
+ * pattern factor from `identified` + `confidence`, and `plan-adherence.ts` reads
+ * only `identified` — so adding values here cannot move any score.
+ */
 export type PatternType =
   | 'abc_correction'
   | 'five_wave_trend'
+  | 'head_and_shoulders'
+  | 'inverse_head_and_shoulders'
+  | 'double_top'
+  | 'double_bottom'
+  | 'triple_top'
+  | 'triple_bottom'
+  | 'ascending_triangle'
+  | 'descending_triangle'
+  | 'symmetrical_triangle'
+  | 'bull_flag'
+  | 'bear_flag'
+  | 'rising_wedge'
+  | 'falling_wedge'
+  | 'cup_and_handle'
   | 'other'
   | 'none';
 export type Confidence = 'high' | 'medium' | 'low';
@@ -87,6 +111,8 @@ export interface PreTradeChecklist {
   pattern: {
     identified: boolean;
     type: PatternType;
+    /** Free-text pattern name; only meaningful when `type` is 'other'. */
+    customName?: string;
     confidence: Confidence;
     note: string;
   };

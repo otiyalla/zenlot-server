@@ -18,6 +18,8 @@ import {
 import { TradingPlanService } from './trading-plan.service';
 import { SubmitChecklistDto } from './dto/submit-checklist.dto';
 import { EvaluationCoachingEnqueueService } from './coaching/coaching-enqueue.service';
+import { SetupPatternService } from './setup-pattern.service';
+import { normalizeSetupPatternName } from './setup-pattern.util';
 
 /**
  * Pre-trade evaluation persistence + orchestration (spec Section 5).
@@ -39,7 +41,33 @@ export class EvaluationService {
     private readonly prisma: PrismaService,
     private readonly tradingPlanService: TradingPlanService,
     private readonly coachingEnqueue: EvaluationCoachingEnqueueService,
+    private readonly setupPatterns: SetupPatternService,
   ) {}
+
+  /**
+   * Normalises the free-text setup pattern name before anything is stored, so
+   * the checklist JSON, the library entry and the usage row all agree.
+   *
+   * `customName` is only meaningful for `type: 'other'` — it is dropped for any
+   * other type so a stale value left behind by the client cannot be persisted —
+   * and a name that normalises to nothing is dropped entirely rather than
+   * stored as an empty string.
+   */
+  private sanitizeChecklistDto(dto: SubmitChecklistDto): SubmitChecklistDto {
+    const { display } =
+      dto.pattern.type === 'other'
+        ? normalizeSetupPatternName(dto.pattern.customName)
+        : { display: '' };
+
+    const pattern = { ...dto.pattern };
+    if (display) {
+      pattern.customName = display;
+    } else {
+      delete pattern.customName;
+    }
+
+    return { ...dto, pattern };
+  }
 
   /**
    * Persists a pre-trade checklist (with tradeId still null) and runs the engine
@@ -50,17 +78,34 @@ export class EvaluationService {
     dto: SubmitChecklistDto,
     language: string = 'en',
   ): Promise<PreTradeEvaluationResultWithChecklist> {
+    const sanitized = this.sanitizeChecklistDto(dto);
+
     const checklistRow = await this.prisma.preTradeChecklist.create({
       data: {
         userId,
         tradeId: null,
         skipped: false,
-        checklist: dto as unknown as Prisma.InputJsonValue,
+        checklist: sanitized as unknown as Prisma.InputJsonValue,
       },
     });
 
+    // Record the declared pattern + its library entry. Best-effort: the trader's
+    // evaluation must never fail because a suggestion could not be stored.
+    try {
+      await this.setupPatterns.record(
+        userId,
+        sanitized.pattern,
+        checklistRow.id,
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Failed to record setup pattern for checklist ${checklistRow.id}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+    }
+
     const plan = await this.tradingPlanService.getCurrentPlan(userId);
-    const domainChecklist = this.toDomainChecklist(dto, '');
+    const domainChecklist = this.toDomainChecklist(sanitized, '');
 
     const setupQuality = scoreSetupQuality(domainChecklist);
     const planAdherence = scorePlanAdherence(domainChecklist, plan, language);
@@ -212,6 +257,18 @@ export class EvaluationService {
         `Checklist ${checklistId} was claimed by a concurrent request; skipping link for trade ${tradeId}`,
       );
       return false;
+    }
+
+    // Point the declared pattern at the trade it was actually used on. Runs only
+    // after we won the claim, and best-effort: this link is reference data, so a
+    // failure here must not fail logging the trade.
+    try {
+      await this.setupPatterns.linkUsageToTrade(userId, checklist.id, tradeId);
+    } catch (error) {
+      this.logger.warn(
+        `Failed to link setup pattern usage for checklist ${checklistId} to trade ${tradeId}`,
+        error instanceof Error ? error.stack : undefined,
+      );
     }
 
     return true;
