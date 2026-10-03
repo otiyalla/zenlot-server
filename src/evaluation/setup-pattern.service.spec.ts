@@ -4,6 +4,7 @@ import { Prisma } from '../../prisma/generated/prisma/client';
 import {
   CUSTOM_PATTERN_LIBRARY_MAX,
   CUSTOM_PATTERN_NAME_MAX,
+  foldSetupPatternName,
   normalizeSetupPatternName,
 } from './setup-pattern.util';
 
@@ -81,6 +82,25 @@ describe('normalizeSetupPatternName', () => {
     );
   });
 
+  it.each([
+    ['ΟΣ', 'οσ'], // final vs medial sigma
+    ['ΟΔΟΣ', 'οδοσ'],
+    ['Straße', 'STRASSE'],
+    ['ẞ', 'ss'],
+    ['ǅ', 'ǆ'],
+    ['Head and Shoulders', 'HEAD  AND SHOULDERS'],
+  ])('gives casing-equivalent names %p and %p the same key', (a, b) => {
+    expect(normalizeSetupPatternName(a).normalized).toBe(
+      normalizeSetupPatternName(b).normalized,
+    );
+  });
+
+  it('folds independently of the process locale', () => {
+    // toLocaleLowerCase('tr') would map "I" to "ı"; the key must not.
+    expect(foldSetupPatternName('I')).toBe('i');
+    expect(foldSetupPatternName('ΟΣ')).toBe(foldSetupPatternName('οσ'));
+  });
+
   it('keeps the typed casing for display but case-folds the uniqueness key', () => {
     const { display, normalized } = normalizeSetupPatternName('Bull FLAG');
     expect(display).toBe('Bull FLAG');
@@ -145,7 +165,7 @@ describe('normalizeSetupPatternName', () => {
         CUSTOM_PATTERN_NAME_MAX,
       );
       expect(codePoints(display)).toBeLessThanOrEqual(CUSTOM_PATTERN_NAME_MAX);
-      expect(normalized).toBe(display.toLocaleLowerCase());
+      expect(normalized).toBe(foldSetupPatternName(display));
       expect(display.length).toBeGreaterThan(0);
     });
 
@@ -197,7 +217,7 @@ describe('normalizeSetupPatternName', () => {
             CUSTOM_PATTERN_NAME_MAX,
           );
           expect(hasLoneSurrogate(display)).toBe(false);
-          expect(normalized).toBe(display.toLocaleLowerCase());
+          expect(normalized).toBe(foldSetupPatternName(display));
         }
       }
     });

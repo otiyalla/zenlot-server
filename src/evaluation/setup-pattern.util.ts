@@ -22,8 +22,26 @@ export const CUSTOM_PATTERN_LIBRARY_MAX = 200;
 export interface NormalizedPatternName {
   /** The name as it should be displayed — the trader's own casing, tidied up. */
   display: string;
-  /** Case-folded form used only as the per-user uniqueness key. */
+  /** Case-folded form (see `foldSetupPatternName`), the per-user uniqueness key. */
   normalized: string;
+}
+
+/**
+ * Locale-independent Unicode case folding for the uniqueness key.
+ *
+ * Plain `toLowerCase()` is not a fold: it is context-sensitive, so "ΟΣ" becomes
+ * "ος" (final sigma) while the casing-equivalent "οσ" stays "οσ", and "ẞ" / "SS"
+ * never meet "ß". Round-tripping through upper case collapses every casing
+ * variant onto one form first, so the final lowercase pass depends only on the
+ * letters and their position: σ/ς/Σ collapse together, ß/ẞ/SS → "ss", and
+ * titlecase "ǅ" → "ǆ".
+ *
+ * Deliberately NOT `toLocaleLowerCase()`, which varies with the server's locale
+ * (Turkish maps "I" to "ı"). One deviation from strict CaseFolding.txt: dotless
+ * "ı" folds with "i". The client mirrors this exactly.
+ */
+export function foldSetupPatternName(value: string): string {
+  return value.toLowerCase().toUpperCase().toLowerCase();
 }
 
 /**
@@ -41,8 +59,8 @@ export interface NormalizedPatternName {
  * Length is measured in Unicode code points, not UTF-16 units: Postgres
  * VarChar(n) counts characters, and cutting a surrogate pair in half would leave
  * an unpaired surrogate that JSONB rejects. Case folding can lengthen a string
- * ("İ".toLowerCase() is two code points), so the display name is shortened
- * further, if need be, until its case-folded key also fits — both columns are
+ * ("İ" folds to two code points, "ß" to "ss"), so the display name is shortened
+ * further, if need be, until its folded key also fits — both columns are
  * VarChar(64).
  *
  * Returns empty strings for input that is absent or only whitespace, which
@@ -67,7 +85,7 @@ export function normalizeSetupPatternName(
   for (;;) {
     // Cutting can leave a trailing space; tidy it again.
     const display = points.join('').trim();
-    const normalized = display.toLocaleLowerCase();
+    const normalized = foldSetupPatternName(display);
     if ([...normalized].length <= CUSTOM_PATTERN_NAME_MAX) {
       return { display, normalized };
     }
