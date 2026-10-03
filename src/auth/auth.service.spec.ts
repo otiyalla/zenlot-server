@@ -65,6 +65,9 @@ describe('AuthService', () => {
         findUnique: jest.fn(),
         updateMany: jest.fn(),
       },
+      pushToken: {
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
       $transaction: jest
         .fn()
         .mockImplementation(async (callback: any) => callback(prisma)),
@@ -365,6 +368,45 @@ describe('AuthService', () => {
       user.id,
       'signout',
       'server_error',
+    );
+  });
+
+  it("removes the user's push tokens on sign-out", async () => {
+    jest
+      .spyOn(service as any, 'revokeAllRefreshTokens')
+      .mockResolvedValue(undefined);
+
+    await service.signout(user.id);
+
+    expect(prisma.pushToken.deleteMany).toHaveBeenCalledWith({
+      where: { userId: user.id },
+    });
+    expect(analytics.trackUserSignedOut).toHaveBeenCalledWith(user.id);
+  });
+
+  it('does not touch push tokens when session revocation fails', async () => {
+    jest
+      .spyOn(service as any, 'revokeAllRefreshTokens')
+      .mockRejectedValue(new Error('refresh-token database unavailable'));
+
+    await expect(service.signout(user.id)).rejects.toThrow();
+
+    expect(prisma.pushToken.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('still signs out when push-token removal fails', async () => {
+    jest
+      .spyOn(service as any, 'revokeAllRefreshTokens')
+      .mockResolvedValue(undefined);
+    prisma.pushToken.deleteMany.mockRejectedValue(
+      new Error('push-token database unavailable'),
+    );
+
+    await expect(service.signout(user.id)).resolves.toBeUndefined();
+
+    expect(analytics.trackUserSignedOut).toHaveBeenCalledWith(user.id);
+    expect(auditService.log).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'AUTH_SIGNOUT_SUCCESS' }),
     );
   });
 
