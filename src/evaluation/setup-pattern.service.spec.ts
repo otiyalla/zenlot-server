@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '../../prisma/generated/prisma/client';
 import {
   CUSTOM_PATTERN_LIBRARY_MAX,
+  CUSTOM_PATTERN_NAME_MAX,
   normalizeSetupPatternName,
 } from './setup-pattern.util';
 
@@ -125,6 +126,81 @@ describe('normalizeSetupPatternName', () => {
     const { display } = normalizeSetupPatternName(`${'a'.repeat(63)}  bbbb`);
     expect(display.length).toBeLessThanOrEqual(64);
     expect(display).toBe(display.trim());
+  });
+
+  describe('storage limits for non-ASCII input', () => {
+    const codePoints = (value: string) => [...value].length;
+    const hasLoneSurrogate = (value: string) =>
+      /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(
+        value,
+      );
+
+    it('keeps the case-folded key within the limit when lowercasing expands', () => {
+      // "İ" lowercases to two code points, so 64 of them would fold to 128.
+      const { display, normalized } = normalizeSetupPatternName(
+        'İ'.repeat(CUSTOM_PATTERN_NAME_MAX),
+      );
+
+      expect(codePoints(normalized)).toBeLessThanOrEqual(
+        CUSTOM_PATTERN_NAME_MAX,
+      );
+      expect(codePoints(display)).toBeLessThanOrEqual(CUSTOM_PATTERN_NAME_MAX);
+      expect(normalized).toBe(display.toLocaleLowerCase());
+      expect(display.length).toBeGreaterThan(0);
+    });
+
+    it('does not split a surrogate pair at the length boundary', () => {
+      const { display, normalized } = normalizeSetupPatternName(
+        `${'a'.repeat(CUSTOM_PATTERN_NAME_MAX - 1)}😀`,
+      );
+
+      expect(hasLoneSurrogate(display)).toBe(false);
+      expect(hasLoneSurrogate(normalized)).toBe(false);
+      expect(codePoints(display)).toBe(CUSTOM_PATTERN_NAME_MAX);
+      expect(display.endsWith('😀')).toBe(true);
+    });
+
+    it('counts an astral character as one character, not two', () => {
+      const name = '😀'.repeat(CUSTOM_PATTERN_NAME_MAX);
+      const { display } = normalizeSetupPatternName(name);
+
+      expect(display).toBe(name);
+      expect(display.length).toBe(CUSTOM_PATTERN_NAME_MAX * 2);
+    });
+
+    it('drops astral characters whole when the name is over the limit', () => {
+      const { display, normalized } = normalizeSetupPatternName(
+        '😀'.repeat(CUSTOM_PATTERN_NAME_MAX + 5),
+      );
+
+      expect(codePoints(display)).toBe(CUSTOM_PATTERN_NAME_MAX);
+      expect(hasLoneSurrogate(display)).toBe(false);
+      expect(hasLoneSurrogate(normalized)).toBe(false);
+    });
+
+    it('strips an unpaired surrogate from the input', () => {
+      expect(normalizeSetupPatternName('Bull\uD800Flag').display).toBe(
+        'BullFlag',
+      );
+    });
+
+    it('never yields a key over the limit for a mix of expanding characters', () => {
+      for (const unit of ['İ', 'ẞ', '㎏', 'ǅ', '😀', 'a']) {
+        for (const length of [1, 31, 32, 33, 63, 64, 65, 200]) {
+          const { display, normalized } = normalizeSetupPatternName(
+            unit.repeat(length),
+          );
+          expect(codePoints(display)).toBeLessThanOrEqual(
+            CUSTOM_PATTERN_NAME_MAX,
+          );
+          expect(codePoints(normalized)).toBeLessThanOrEqual(
+            CUSTOM_PATTERN_NAME_MAX,
+          );
+          expect(hasLoneSurrogate(display)).toBe(false);
+          expect(normalized).toBe(display.toLocaleLowerCase());
+        }
+      }
+    });
   });
 
   it('returns empty strings for absent or whitespace-only input', () => {

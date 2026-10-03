@@ -38,23 +38,39 @@ export interface NormalizedPatternName {
  * a double space (e.g. around a zero-width character), so whitespace is
  * collapsed once more afterwards.
  *
+ * Length is measured in Unicode code points, not UTF-16 units: Postgres
+ * VarChar(n) counts characters, and cutting a surrogate pair in half would leave
+ * an unpaired surrogate that JSONB rejects. Case folding can lengthen a string
+ * ("İ".toLowerCase() is two code points), so the display name is shortened
+ * further, if need be, until its case-folded key also fits — both columns are
+ * VarChar(64).
+ *
  * Returns empty strings for input that is absent or only whitespace, which
  * callers treat as "no custom name given".
  */
 export function normalizeSetupPatternName(
   raw: string | null | undefined,
 ): NormalizedPatternName {
-  const display = String(raw ?? '')
+  const tidy = String(raw ?? '')
     .normalize('NFKC')
     .replace(/\s+/gu, ' ')
     // Zero-width and control characters would corrupt display and comparison
-    // alike; real whitespace has already become plain spaces above.
+    // alike; real whitespace has already become plain spaces above. `\p{C}`
+    // also matches any unpaired surrogate in the input.
     .replace(/\p{C}/gu, '')
     .replace(/\s+/gu, ' ')
-    .trim()
-    .slice(0, CUSTOM_PATTERN_NAME_MAX)
-    // Slicing can strip back to a trailing space; tidy it again.
     .trim();
 
-  return { display, normalized: display.toLocaleLowerCase() };
+  // Spreading iterates by code point, so a surrogate pair is never split.
+  const points = [...tidy].slice(0, CUSTOM_PATTERN_NAME_MAX);
+
+  for (;;) {
+    // Cutting can leave a trailing space; tidy it again.
+    const display = points.join('').trim();
+    const normalized = display.toLocaleLowerCase();
+    if ([...normalized].length <= CUSTOM_PATTERN_NAME_MAX) {
+      return { display, normalized };
+    }
+    points.pop();
+  }
 }
