@@ -125,18 +125,16 @@ export class BehavioralReportService {
     return this.toContract(row);
   }
 
-  /** Aggregate stats across ALL of a user's evaluated trades (spec /stats/summary). */
+  /**
+   * Aggregate stats across ALL of a user's evaluated trades (spec /stats/summary).
+   * Returns the same shape as a report's `stats` so the client's stats block can
+   * render every tile from either source (spec §8.3 — the summary is the
+   * fallback when the report is stale or failed to load).
+   */
   async statsSummary(userId: string): Promise<StatsSummary> {
     const trades = await this.assembleEvaluatedTrades(userId);
     const stats: BehavioralReportStats = computeStats(trades);
-    return {
-      avgProcessScore: stats.avgProcessScore,
-      goodTradeRate: stats.goodTradeRate,
-      luckyTradeRate: stats.luckyTradeRate,
-      winRate: stats.winRate,
-      avgRMultiple: stats.avgRMultiple,
-      tradesEvaluated: trades.length,
-    };
+    return { ...stats, tradesEvaluated: trades.length };
   }
 
   private isStale(row: behavioralReport, now: Date): boolean {
@@ -423,12 +421,10 @@ export function isInsufficientData(
   return (value as InsufficientData).insufficientData === true;
 }
 
-/** Aggregate stats across all evaluated trades (spec GET /stats/summary). */
-export interface StatsSummary {
-  avgProcessScore: number;
-  goodTradeRate: number;
-  luckyTradeRate: number;
-  winRate: number;
-  avgRMultiple: number;
+/**
+ * Aggregate stats across all evaluated trades (spec GET /stats/summary). A full
+ * BehavioralReportStats plus the number of trades it was computed from.
+ */
+export interface StatsSummary extends BehavioralReportStats {
   tradesEvaluated: number;
 }

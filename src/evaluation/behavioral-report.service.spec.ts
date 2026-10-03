@@ -470,15 +470,41 @@ describe('BehavioralReportService', () => {
       expect(stats.goodTradeRate).toBeCloseTo(2 / 3, 2);
     });
 
+    it('returns the full report stats block, not just the headline five', async () => {
+      const trades = [
+        tradeRow(1, { outcome: 'win', rMultiple: 2, processScore: 90 }),
+        tradeRow(2, { outcome: 'loss', rMultiple: -1, processScore: 70 }),
+      ];
+      const { service } = makeService({ trades });
+      const stats = await service.statsSummary(USER_ID);
+      // The client's stats grid renders every one of these tiles from the
+      // summary; a missing key shows as "—".
+      expect(stats).toEqual(
+        expect.objectContaining({
+          avgSetupQuality: expect.any(Number),
+          avgExecutionScore: expect.any(Number),
+          bestProcessScore: 90,
+          worstProcessScore: 70,
+          tradesEvaluated: 2,
+        }),
+      );
+      expect('avgPlanAdherence' in stats).toBe(true);
+    });
+
     it('returns zeros for a user with no evaluated trades', async () => {
       const { service } = makeService({ trades: [] });
       const stats = await service.statsSummary(USER_ID);
       expect(stats).toEqual({
         avgProcessScore: 0,
+        avgSetupQuality: 0,
+        avgPlanAdherence: null,
+        avgExecutionScore: 0,
         goodTradeRate: 0,
         luckyTradeRate: 0,
         winRate: 0,
         avgRMultiple: 0,
+        bestProcessScore: 0,
+        worstProcessScore: 0,
         tradesEvaluated: 0,
       });
     });
