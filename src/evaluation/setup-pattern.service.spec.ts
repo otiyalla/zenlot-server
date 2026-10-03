@@ -40,13 +40,22 @@ function makeService(
   const usageUpdateMany =
     opts.usageUpdateMany ?? jest.fn().mockResolvedValue({ count: 1 });
 
-  const prisma = {
+  const executeRaw = jest.fn().mockResolvedValue(1);
+
+  // The interactive transaction hands the callback a client; the mock reuses the
+  // same fakes, so existing assertions on create/update/count still hold.
+  const prisma: Record<string, unknown> = {
     customSetupPattern: { findUnique, create, update, count, findMany },
     setupPatternUsage: { create: usageCreate, updateMany: usageUpdateMany },
-  } as unknown as PrismaService;
+    $executeRaw: executeRaw,
+  };
+  prisma.$transaction = jest.fn((cb: (tx: unknown) => Promise<unknown>) =>
+    cb(prisma),
+  );
 
   return {
-    service: new SetupPatternService(prisma),
+    service: new SetupPatternService(prisma as unknown as PrismaService),
+    executeRaw,
     findUnique,
     create,
     update,
@@ -259,11 +268,101 @@ describe('SetupPatternService.record', () => {
     expect(update).toHaveBeenCalled();
   });
 
-  it('adopts the winner when two devices create the same name at once', async () => {
+  it('takes the per-user lock before counting or creating', async () => {
+    const { service, executeRaw, count, create } = makeService();
+    const order: string[] = [];
+    executeRaw.mockImplementation(() => {
+      order.push('lock');
+      return Promise.resolve(1);
+    });
+    count.mockImplementation(() => {
+      order.push('count');
+      return Promise.resolve(0);
+    });
+    create.mockImplementation(() => {
+      order.push('create');
+      return Promise.resolve({ id: 'pattern-1' });
+    });
+
+    await service.record(USER_ID, declared(), CHECKLIST_ID);
+
+    expect(order).toEqual(['lock', 'count', 'create']);
+  });
+
+  it('never exceeds the library cap when distinct names are submitted concurrently', async () => {
+    // A tiny in-memory store whose transactions only serialize if the service
+    // takes the advisory lock, mirroring Postgres. Every call yields between
+    // read and write so an unlocked count-then-create would interleave.
+    const names = new Set<string>();
+    for (let i = 0; i < CUSTOM_PATTERN_LIBRARY_MAX - 2; i += 1) {
+      names.add(`seed-${i}`);
+    }
+    const yieldTick = () => new Promise((resolve) => setImmediate(resolve));
+
+    let lockTail: Promise<void> = Promise.resolve();
+    const makeTx = (release: { fn?: () => void }) => ({
+      $executeRaw: async () => {
+        const previous = lockTail;
+        lockTail = new Promise<void>((resolve) => {
+          release.fn = resolve;
+        });
+        await previous;
+        return 1;
+      },
+      customSetupPattern: {
+        findUnique: async ({
+          where,
+        }: {
+          where: { userId_normalizedName: { normalizedName: string } };
+        }) => {
+          await yieldTick();
+          return names.has(where.userId_normalizedName.normalizedName)
+            ? { id: 'existing' }
+            : null;
+        },
+        count: async () => {
+          await yieldTick();
+          return names.size;
+        },
+        create: async ({ data }: { data: { normalizedName: string } }) => {
+          await yieldTick();
+          names.add(data.normalizedName);
+          return { id: data.normalizedName };
+        },
+        update: () => Promise.resolve({}),
+      },
+    });
+    const prisma = {
+      $transaction: async (cb: (tx: unknown) => Promise<unknown>) => {
+        const release: { fn?: () => void } = {};
+        try {
+          return await cb(makeTx(release));
+        } finally {
+          release.fn?.();
+        }
+      },
+      setupPatternUsage: { create: jest.fn().mockResolvedValue({}) },
+    } as unknown as PrismaService;
+    const service = new SetupPatternService(prisma);
+
+    await Promise.all(
+      Array.from({ length: 10 }, (_, i) =>
+        service.record(
+          USER_ID,
+          declared({ customName: `Concurrent ${i}` }),
+          `chk-${i}`,
+        ),
+      ),
+    );
+
+    expect(names.size).toBe(CUSTOM_PATTERN_LIBRARY_MAX);
+  });
+
+  it('retries once and adopts the winner if a unique violation slips through', async () => {
     const findUnique = jest
       .fn()
       .mockResolvedValueOnce(null) // our read: not there yet
-      .mockResolvedValueOnce({ id: 'pattern-race' }); // after the race is lost
+      .mockResolvedValueOnce({ id: 'pattern-race' }); // retry finds the winner
     const { service, update, usageCreate } = makeService({
       findUnique,
       create: jest.fn().mockRejectedValue(uniqueViolation()),

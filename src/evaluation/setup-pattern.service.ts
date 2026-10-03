@@ -133,47 +133,71 @@ export class SetupPatternService {
     display: string,
     normalized: string,
   ): Promise<string | null> {
-    const existing = await this.prisma.customSetupPattern.findUnique({
-      where: { userId_normalizedName: { userId, normalizedName: normalized } },
-      select: { id: true },
-    });
-
-    if (existing) return this.bumpLibraryEntry(existing.id, display);
-
-    const count = await this.prisma.customSetupPattern.count({
-      where: { userId },
-    });
-    if (count >= CUSTOM_PATTERN_LIBRARY_MAX) {
-      this.logger.warn(
-        `Custom setup pattern library full for user ${userId}; not storing a new name`,
-      );
-      return null;
-    }
-
     try {
-      const created = await this.prisma.customSetupPattern.create({
-        data: { userId, name: display, normalizedName: normalized },
-        select: { id: true },
-      });
-      return created.id;
+      return await this.upsertLibraryEntryLocked(userId, display, normalized);
     } catch (error) {
       if (!this.isUniqueViolation(error)) throw error;
 
-      // Another device created the same name between our read and write. Take
-      // theirs and count this use against it.
-      const raced = await this.prisma.customSetupPattern.findUnique({
+      // The per-user lock should make this unreachable, but a unique violation
+      // aborts the whole transaction, so if one ever slips through (e.g. a
+      // writer that bypasses this service) run once more: the second pass finds
+      // the winner's row and counts this use against it.
+      return await this.upsertLibraryEntryLocked(userId, display, normalized);
+    }
+  }
+
+  /**
+   * The read-check-write for one library entry, run in a single transaction
+   * under a per-user advisory lock.
+   *
+   * The unique index only serializes writers of the SAME name. The cap check is
+   * a count followed by an insert, so without the lock enough concurrent
+   * submissions of DIFFERENT names near the cap would each observe the same
+   * count below the limit and each insert, growing the library past
+   * CUSTOM_PATTERN_LIBRARY_MAX. The lock is transaction-scoped
+   * (`pg_advisory_xact_lock`), so it is released on commit/rollback and only
+   * contends with this same user's other library writes.
+   */
+  private async upsertLibraryEntryLocked(
+    userId: string,
+    display: string,
+    normalized: string,
+  ): Promise<string | null> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('customSetupPattern'), hashtext(${userId}))`;
+
+      const existing = await tx.customSetupPattern.findUnique({
         where: {
           userId_normalizedName: { userId, normalizedName: normalized },
         },
         select: { id: true },
       });
-      return raced ? this.bumpLibraryEntry(raced.id, display) : null;
-    }
+
+      if (existing) return this.bumpLibraryEntry(tx, existing.id, display);
+
+      const count = await tx.customSetupPattern.count({ where: { userId } });
+      if (count >= CUSTOM_PATTERN_LIBRARY_MAX) {
+        this.logger.warn(
+          `Custom setup pattern library full for user ${userId}; not storing a new name`,
+        );
+        return null;
+      }
+
+      const created = await tx.customSetupPattern.create({
+        data: { userId, name: display, normalizedName: normalized },
+        select: { id: true },
+      });
+      return created.id;
+    });
   }
 
   /** Counts one more use of an existing entry and refreshes its display casing. */
-  private async bumpLibraryEntry(id: string, display: string): Promise<string> {
-    await this.prisma.customSetupPattern.update({
+  private async bumpLibraryEntry(
+    tx: Prisma.TransactionClient,
+    id: string,
+    display: string,
+  ): Promise<string> {
+    await tx.customSetupPattern.update({
       where: { id },
       data: {
         usageCount: { increment: 1 },
