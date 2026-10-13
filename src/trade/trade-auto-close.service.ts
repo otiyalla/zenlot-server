@@ -128,7 +128,10 @@ export class TradeAutoCloseService implements OnModuleInit {
               tradeError,
             );
             Sentry.captureException(tradeError, {
-              extra: { tradeId: trade.id, context: 'TradeAutoCloseService.closeTriggeredTrade' },
+              extra: {
+                tradeId: trade.id,
+                context: 'TradeAutoCloseService.closeTriggeredTrade',
+              },
             });
           }
         }

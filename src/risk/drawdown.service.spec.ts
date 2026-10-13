@@ -436,13 +436,15 @@ describe('DrawdownService.resetCircuitBreakers', () => {
         update,
       },
     });
-    const $transaction = jest.fn().mockImplementation(async (cb: (db: unknown) => Promise<unknown>) => {
-      // Execute callback for each row that would reach the transaction.
-      // In practice each $transaction call covers one row, so pass the first
-      // row that matches the userId the callback locks on.
-      const row = rows[0];
-      return cb(makeTxDb(row));
-    });
+    const $transaction = jest
+      .fn()
+      .mockImplementation(async (cb: (db: unknown) => Promise<unknown>) => {
+        // Execute callback for each row that would reach the transaction.
+        // In practice each $transaction call covers one row, so pass the first
+        // row that matches the userId the callback locks on.
+        const row = rows[0];
+        return cb(makeTxDb(row));
+      });
     const prisma = {
       drawdownState: { findMany, update },
       $transaction,

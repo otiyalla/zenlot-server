@@ -306,7 +306,12 @@ export class TradeController {
     @Body() updateTradeDto: UpdateTradeDto,
     @Request() req: AuthenticatedRequest,
   ) {
-    return this.tradeService.updateForUser(id, req.user.id, updateTradeDto, req.user.language ?? 'en');
+    return this.tradeService.updateForUser(
+      id,
+      req.user.id,
+      updateTradeDto,
+      req.user.language ?? 'en',
+    );
   }
 
   @Delete(':id')

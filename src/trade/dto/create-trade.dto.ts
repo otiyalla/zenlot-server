@@ -151,7 +151,8 @@ export class CreateTradeDto {
   @IsString()
   @IsOptional()
   @ApiProperty({
-    description: 'Optional note explaining why the governance rule(s) are being overridden.',
+    description:
+      'Optional note explaining why the governance rule(s) are being overridden.',
   })
   overrideReason?: string;
 }
