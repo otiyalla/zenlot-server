@@ -1,5 +1,10 @@
 # Claude Code — Project Guidelines
 
+@AGENTS.md
+
+Architecture, commands, invariants and PR conventions live in `AGENTS.md` (shared with
+Codex and other agents). This file only adds Claude-specific review behaviour.
+
 ## PR Review Workflow
 
 When reviewing a pull request:

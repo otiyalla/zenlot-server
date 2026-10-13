@@ -8,6 +8,9 @@ on:
       - dev
   pull_request:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -16,65 +19,42 @@ jobs:
   build-test:
     name: Lint, typecheck, build & test
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # `prisma generate` only needs a syntactically valid URL; nothing connects.
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+
+      # Corepack must be enabled before setup-node so `cache: yarn` can find it.
+      # The Yarn version comes from `packageManager` / `.yarnrc.yml` (Yarn 4).
+      - name: Enable Yarn through Corepack
+        run: corepack enable
 
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: 'yarn'
 
-      - name: Enable Yarn through Corepack
-        run: |
-          corepack enable
-          # Pin Yarn classic to match the v1 lockfile in this repo
-          corepack prepare yarn@1.22.22 --activate
-
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        run: yarn install --immutable
 
       - name: Generate Prisma client
         run: yarn db:generate
-        env:
-          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
 
+      # Non-mutating on purpose: `yarn lint` runs `--fix`, which would repair
+      # formatting errors inside CI and report green. --max-warnings is a
+      # ratchet: lower it as warnings are cleaned up, never raise it.
       - name: Lint
-        run: yarn lint
+        run: yarn lint:ci
 
       - name: Typecheck
-        run: npx tsc --noEmit -p tsconfig.json
+        run: yarn typecheck
 
       - name: Build
         run: yarn build
 
-      - name: Detect changed source files
-        id: changed
-        run: |
-          BASE=${{ github.event.pull_request.base.sha || github.event.before }}
-          HEAD=${{ github.sha }}
-          # Fall back to HEAD~1 on direct pushes where before is all-zeros
-          if [ "$BASE" = "0000000000000000000000000000000000000000" ] || [ -z "$BASE" ]; then
-            BASE=$(git rev-parse HEAD~1 2>/dev/null || echo "")
-          fi
-          if [ -z "$BASE" ]; then
-            echo "pattern=**" >> "$GITHUB_OUTPUT"
-          else
-            CHANGED=$(git diff --name-only "$BASE" "$HEAD" | sed -nE 's#^src/(.*)\.(ts|js)$#\1#p' | sort -u | tr '\n' '|' | sed 's/|$//')
-            if [ -z "$CHANGED" ]; then
-              echo "pattern=" >> "$GITHUB_OUTPUT"
-            else
-              echo "pattern=$CHANGED" >> "$GITHUB_OUTPUT"
-            fi
-          fi
-
-      - name: Test (changed files only)
-        if: steps.changed.outputs.pattern != ''
-        run: |
-          PATTERN="${{ steps.changed.outputs.pattern }}"
-          if [ "$PATTERN" = "**" ]; then
-            yarn test --ci
-          else
-            yarn test --ci --testPathPattern="$PATTERN"
-          fi
+      # Full suite (about a minute): the previous changed-files filter skipped
+      # tests for changes outside src/ and for dependents of a changed module.
+      - name: Test
+        run: yarn test --ci
