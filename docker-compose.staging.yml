@@ -3,7 +3,8 @@
 #
 # Runs on the staging VM (see docs/STAGING.md). The deploy workflow copies this
 # file to the VM and runs:
-#   API_IMAGE=ghcr.io/<owner>/zenlot-server:<sha> docker compose -f docker-compose.staging.yml --env-file .env.staging up -d
+#   docker compose -f docker-compose.staging.yml --env-file .env.staging --env-file .api-image.env up -d
+# where deploy.sh writes .api-image.env (API_IMAGE=ghcr.io/<owner>/zenlot-server:<sha>) on each deploy.
 #
 # Only Caddy is public. Redis stays on the internal network; Mailpit's UI binds to loopback.
 #

@@ -142,7 +142,11 @@ Repository **variables** (Settings -> Secrets and variables -> Actions -> Variab
 
 ## Operating it
 
-- Logs: `ssh deploy@<ip> 'cd ~/zenlot-staging && docker compose -f docker-compose.staging.yml --env-file .env.staging logs -f api'`
+- Compose commands: each deploy records the running image tag in `~/zenlot-staging/.api-image.env`,
+  so on the VM use `cd ~/zenlot-staging` and
+  `docker compose -f docker-compose.staging.yml --env-file .env.staging --env-file .api-image.env <command>`
+  (commands below abbreviate this as `docker compose ...`). Deploys keep the 3 newest API images on disk.
+- Logs: `ssh deploy@<ip> 'cd ~/zenlot-staging && docker compose -f docker-compose.staging.yml --env-file .env.staging --env-file .api-image.env logs -f api'`
 - Memory check: `ssh deploy@<ip> 'free -m && docker stats --no-stream'`. Repeated `Killed`/restarts of
   `api` or `redis` means it is out of memory.
 - Captured email (welcome / reset mails land here, nothing is delivered externally):
