@@ -1,11 +1,29 @@
 # Staging environment
 
-A single Google Cloud **e2-micro** (Always Free) VM runs the whole stack (API, Postgres, Redis,
-Mailpit, Caddy) via `docker-compose.staging.yml`. Pushes to `dev` deploy it automatically
+A single Google Cloud **e2-micro** (Always Free) VM runs the API, Redis, Mailpit and Caddy via
+`docker-compose.staging.yml`. The database is **hosted Prisma Postgres** (no local Postgres). Pushes to `dev` deploy it automatically
 (`.github/workflows/deploy-staging.yml`). The mobile app repo's Maestro workflow
 (`zenlot/.github/workflows/maestro-e2e.yml`) tests against it.
 
 Nothing here touches production: separate VM, database, JWT secrets and API keys.
+
+## Database
+
+`DATABASE_URL` in `.env.staging` is the Prisma Postgres connection string, the same
+`prisma+postgres://...` value you keep as `DEV_PRISMA_DB` in `.env.dev`. The repo's own
+`scripts/migrate-prod.ts` already runs `prisma migrate deploy` with that format, and the API
+accepts it at runtime (Accelerate). A direct `postgres://` URL would work too.
+
+Put it only in `~/zenlot-staging/.env.staging` on the VM (`chmod 600`). Never commit it or paste it
+into GitHub variables or chat.
+
+Staging uses the existing Prisma Postgres **dev** database. Day-to-day development runs against a
+local database, so the dev database is effectively dedicated to staging. Keep it that way:
+
+- Don't point local `prisma migrate dev` / `db:dev` at it. Staging applies migrations with
+  `migrate deploy` on every deploy, and `migrate dev` against the same database can report drift.
+- Its data is disposable: Maestro runs add `maestro-user.*@anawebs.com` accounts, trades and journals.
+- Some Prisma Postgres plans meter by operations; PR smoke runs plus nightly full runs add up.
 
 ## Free-tier limits to respect
 
@@ -17,10 +35,8 @@ Verify these on Google's Always Free page before relying on them; they can chang
   renewals) is tiny; image pulls are ingress and free.
 - The external IPv4 address is probably **not** free (about US$3-4/month). A billing account with
   a card is required. Set a budget alert (e.g. US$5) so surprises are visible.
-- 1 GB RAM is tight for Nest + Postgres + Redis. The compose file caps each service's memory and
-  the VM needs swap (step 3). If the API keeps getting OOM-killed, move Postgres to a free hosted
-  instance (Neon/Supabase), drop the `db` service and point `DATABASE_URL` at it. Keep Redis local:
-  BullMQ polls too often for a free hosted Redis quota.
+- 1 GB RAM is tight even without Postgres. The compose file caps each service's memory and the VM
+  needs swap (step 3). Keep Redis local: BullMQ polls too often for a free hosted Redis quota.
 
 ## One-time setup
 
@@ -75,7 +91,8 @@ sudo -u deploy mkdir -p /home/deploy/zenlot-staging
 ```
 
 Create `/home/deploy/zenlot-staging/.env.staging` from `deploy/staging/.env.staging.example`
-(generate secrets with `openssl rand -base64 48`; use fresh values, never production's):
+(generate secrets with `openssl rand -base64 48`; use fresh values, never production's; set
+`DATABASE_URL` as described under Database):
 
 ```bash
 sudo -u deploy nano /home/deploy/zenlot-staging/.env.staging
@@ -110,7 +127,7 @@ Create an environment named **staging** (Settings -> Environments) with:
 | variable | `STAGING_URL` | `https://staging-api.zenlot.net` |
 
 Then run **deploy-staging** from the Actions tab (or push to `dev`). The first deploy is slow
-(throttled CPU: image pull + Prisma migrations, `RUN_DB_MIGRATIONS=true`); the workflow waits up
+(throttled CPU: image pull + Prisma migrations against the hosted database, `RUN_DB_MIGRATIONS=true`); the workflow waits up
 to 8 minutes for `GET /health` to return 200.
 
 ### 6. GitHub (`zenlot` app repo)
@@ -127,11 +144,12 @@ Repository **variables** (Settings -> Secrets and variables -> Actions -> Variab
 
 - Logs: `ssh deploy@<ip> 'cd ~/zenlot-staging && docker compose -f docker-compose.staging.yml --env-file .env.staging logs -f api'`
 - Memory check: `ssh deploy@<ip> 'free -m && docker stats --no-stream'`. Repeated `Killed`/restarts of
-  `api` or `db` means it is out of memory (see the fallback above).
+  `api` or `redis` means it is out of memory.
 - Captured email (welcome / reset mails land here, nothing is delivered externally):
   `ssh -i staging_deploy -L 8025:localhost:8025 deploy@<ip>`, then open http://localhost:8025.
-- Reset all data: `docker compose ... down -v && docker compose ... up -d` (migrations re-run).
+- Reset all data: reset the hosted staging database (e.g. `prisma migrate reset` with
+  `DATABASE_URL` set to the **staging** URL, double-checking it is not dev or production), then redeploy.
 - E2E flows create `maestro-user.*@anawebs.com` accounts that accumulate. Reset the database
-  occasionally (the 30 GB disk is plenty), or add a cleanup job later.
+  occasionally, or add a cleanup job later.
 - Nightly E2E runs and PR smoke runs hit this one small VM, so expect slower responses than
   production; if flows time out, raise `EXPO_PUBLIC_API_TIMEOUT_MS` before suspecting the app.
