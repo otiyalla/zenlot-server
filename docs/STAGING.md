@@ -1,0 +1,137 @@
+# Staging environment
+
+A single Google Cloud **e2-micro** (Always Free) VM runs the whole stack (API, Postgres, Redis,
+Mailpit, Caddy) via `docker-compose.staging.yml`. Pushes to `dev` deploy it automatically
+(`.github/workflows/deploy-staging.yml`). The mobile app repo's Maestro workflow
+(`zenlot/.github/workflows/maestro-e2e.yml`) tests against it.
+
+Nothing here touches production: separate VM, database, JWT secrets and API keys.
+
+## Free-tier limits to respect
+
+Verify these on Google's Always Free page before relying on them; they can change.
+
+- e2-micro (2 shared vCPU, **1 GB RAM**) in `us-west1`, `us-central1` or `us-east1` only.
+- Boot disk must be **standard persistent disk** (`pd-standard`), 30 GB or less.
+- 1 GB/month free egress from North America. Our traffic (API responses, Caddy certificate
+  renewals) is tiny; image pulls are ingress and free.
+- The external IPv4 address is probably **not** free (about US$3-4/month). A billing account with
+  a card is required. Set a budget alert (e.g. US$5) so surprises are visible.
+- 1 GB RAM is tight for Nest + Postgres + Redis. The compose file caps each service's memory and
+  the VM needs swap (step 3). If the API keeps getting OOM-killed, move Postgres to a free hosted
+  instance (Neon/Supabase), drop the `db` service and point `DATABASE_URL` at it. Keep Redis local:
+  BullMQ polls too often for a free hosted Redis quota.
+
+## One-time setup
+
+### 1. Create the VM
+
+Do this yourself: it needs your Google account, a billing account and the `gcloud` CLI
+(`brew install --cask google-cloud-sdk`, then `gcloud auth login`).
+
+```bash
+gcloud projects create zenlot-staging-<suffix>            # or reuse a project
+gcloud config set project zenlot-staging-<suffix>
+# link a billing account in the console, then:
+gcloud services enable compute.googleapis.com
+
+gcloud compute addresses create zenlot-staging-ip --region=us-central1
+
+gcloud compute instances create zenlot-staging \
+  --zone=us-central1-a --machine-type=e2-micro \
+  --image-family=ubuntu-2404-lts-amd64 --image-project=ubuntu-os-cloud \
+  --boot-disk-size=30GB --boot-disk-type=pd-standard \
+  --address=zenlot-staging-ip --tags=zenlot-staging-web
+
+gcloud compute firewall-rules create zenlot-staging-web \
+  --allow=tcp:80,tcp:443 --target-tags=zenlot-staging-web
+
+gcloud compute addresses describe zenlot-staging-ip --region=us-central1 --format='value(address)'
+```
+
+SSH (port 22) is already allowed by the default network's `default-allow-ssh` rule.
+
+### 2. DNS
+
+Add an `A` record: `staging-api.zenlot.net` -> the VM's IP (printed above). Caddy gets the TLS
+certificate automatically once DNS resolves and ports 80/443 are open.
+
+### 3. Prepare the VM
+
+```bash
+gcloud compute ssh zenlot-staging --zone=us-central1-a
+
+# Swap: required on 1 GB of RAM (Prisma migrate + image pulls spike memory)
+sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+
+# Docker
+curl -fsSL https://get.docker.com | sudo sh
+
+# Dedicated deploy user (not managed by GCP's guest agent, so its authorized_keys is left alone)
+sudo useradd -m -s /bin/bash -G docker deploy
+sudo install -d -m 700 -o deploy -g deploy /home/deploy/.ssh
+sudo -u deploy mkdir -p /home/deploy/zenlot-staging
+```
+
+Create `/home/deploy/zenlot-staging/.env.staging` from `deploy/staging/.env.staging.example`
+(generate secrets with `openssl rand -base64 48`; use fresh values, never production's):
+
+```bash
+sudo -u deploy nano /home/deploy/zenlot-staging/.env.staging
+sudo chmod 600 /home/deploy/zenlot-staging/.env.staging
+```
+
+### 4. A deploy SSH key
+
+On your Mac:
+
+```bash
+ssh-keygen -t ed25519 -f staging_deploy -N '' -C zenlot-staging-deploy
+# install the public key for the deploy user:
+gcloud compute ssh zenlot-staging --zone=us-central1-a --command \
+  "echo '$(cat staging_deploy.pub)' | sudo tee -a /home/deploy/.ssh/authorized_keys >/dev/null && sudo chown deploy:deploy /home/deploy/.ssh/authorized_keys && sudo chmod 600 /home/deploy/.ssh/authorized_keys"
+ssh-keyscan -t ed25519 <vm-ip>        # -> STAGING_SSH_KNOWN_HOSTS
+ssh -i staging_deploy deploy@<vm-ip> docker ps    # sanity check
+```
+
+Delete the private key from your machine once it is stored as a GitHub secret.
+
+### 5. GitHub (`zenlot-server` repo)
+
+Create an environment named **staging** (Settings -> Environments) with:
+
+| Kind | Name | Value |
+|---|---|---|
+| secret | `STAGING_SSH_HOST` | VM IP |
+| secret | `STAGING_SSH_USER` | `deploy` |
+| secret | `STAGING_SSH_KEY` | contents of the private `staging_deploy` key |
+| secret | `STAGING_SSH_KNOWN_HOSTS` | the `ssh-keyscan` line |
+| variable | `STAGING_URL` | `https://staging-api.zenlot.net` |
+
+Then run **deploy-staging** from the Actions tab (or push to `dev`). The first deploy is slow
+(throttled CPU: image pull + Prisma migrations, `RUN_DB_MIGRATIONS=true`); the workflow waits up
+to 8 minutes for `GET /health` to return 200.
+
+### 6. GitHub (`zenlot` app repo)
+
+Repository **variables** (Settings -> Secrets and variables -> Actions -> Variables):
+
+| Variable | Value |
+|---|---|
+| `E2E_API_URL` | `https://staging-api.zenlot.net` (required: the workflow fails if unset or if it is a production host) |
+| `E2E_NIGHTLY_REF` | optional, branch the nightly run tests (default `dev`) |
+| `E2E_PR_RUN_IOS` | optional, `true` to also run iOS smoke on PRs (macOS minutes are billed at 10x on private repos) |
+
+## Operating it
+
+- Logs: `ssh deploy@<ip> 'cd ~/zenlot-staging && docker compose -f docker-compose.staging.yml --env-file .env.staging logs -f api'`
+- Memory check: `ssh deploy@<ip> 'free -m && docker stats --no-stream'`. Repeated `Killed`/restarts of
+  `api` or `db` means it is out of memory (see the fallback above).
+- Captured email (welcome / reset mails land here, nothing is delivered externally):
+  `ssh -i staging_deploy -L 8025:localhost:8025 deploy@<ip>`, then open http://localhost:8025.
+- Reset all data: `docker compose ... down -v && docker compose ... up -d` (migrations re-run).
+- E2E flows create `maestro-user.*@anawebs.com` accounts that accumulate. Reset the database
+  occasionally (the 30 GB disk is plenty), or add a cleanup job later.
+- Nightly E2E runs and PR smoke runs hit this one small VM, so expect slower responses than
+  production; if flows time out, raise `EXPO_PUBLIC_API_TIMEOUT_MS` before suspecting the app.
