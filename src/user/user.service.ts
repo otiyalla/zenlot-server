@@ -8,6 +8,31 @@ import { AuthenticatedUser } from './interfaces/authenticated-user.interface';
 import { UserGateway } from './user.gateway';
 import { UserPasswordDto } from './dto/user-password.dto';
 import { DEFAULT_USER_ROLE } from '../auth/roles.constants';
+import { deleteUserWithData, DeletedUserData } from './user-deletion';
+
+/**
+ * Every user column except `password`. Use this for anything returned from a
+ * user endpoint or broadcast to clients so the bcrypt hash never leaves the
+ * server.
+ */
+export const SAFE_USER_SELECT = {
+  id: true,
+  fname: true,
+  lname: true,
+  email: true,
+  role: true,
+  tags: true,
+  language: true,
+  accountCurrency: true,
+  theme: true,
+  rules: true,
+  createdAt: true,
+  updatedAt: true,
+  timezone: true,
+  togglePipValue: true,
+} as const satisfies Prisma.userSelect;
+
+export type SafeUser = Prisma.userGetPayload<{ select: typeof SAFE_USER_SELECT }>;
 
 @Injectable()
 export class UserService {
@@ -34,11 +59,7 @@ export class UserService {
       accountCurrency: accountCurrency,
       rules: user.rules ? JSON.parse(JSON.stringify(rules)) : undefined,
     };
-    const result = this.prisma.user.create({ data });
-    return {
-      ...result,
-      password: undefined
-    }
+    return this.prisma.user.create({ data, select: SAFE_USER_SELECT });
   }
 
   async validateUser(email: string, password: string): Promise<AuthenticatedUser | null>{
@@ -75,8 +96,12 @@ export class UserService {
     }
   }
 
-  async changePassword(dto: UserPasswordDto) {
-    const {userId, currentPassword, newPassword} = dto;
+  /**
+   * `userId` must come from the authorization layer (the authenticated user,
+   * or a target an admin is allowed to act on), never straight from the body.
+   */
+  async changePassword(userId: number, dto: UserPasswordDto) {
+    const {currentPassword, newPassword} = dto;
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user || !user.id) {
       throw new NotFoundException('password updated failed: user not found');
@@ -93,6 +118,7 @@ export class UserService {
     return this.prisma.user.update({
       where: { id },
       data: { password: hashedPassword },
+      select: { id: true },
     });
   }
 
@@ -100,12 +126,11 @@ export class UserService {
     return this.prisma.user.findUnique({ where: { email } });
   }
 
-  findAll() {
-    return this.prisma.user.findMany();
-  }
-
-  async findOne(id: number): Promise< any | null> {
-    const user = await this.prisma.user.findUnique({ where: { id } });
+  async findOne(id: number): Promise<SafeUser> {
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+      select: SAFE_USER_SELECT,
+    });
     if (!user) throw new NotFoundException('User not found');
     return user;
   }
@@ -128,11 +153,27 @@ export class UserService {
       await this.verifyEmailUpdate(id, dto.email);
     }
     const data: any = { ...dto, updatedAt: new Date()};
-    const update = await this.prisma.user.update({ where: { id }, data });
-    this.userGateway.server.emit('updated-user', { ...update, password: undefined });
+    const updated = await this.prisma.user.update({
+      where: { id },
+      data,
+      select: SAFE_USER_SELECT,
+    });
+    this.userGateway.server.emit('updated-user', updated);
+    return updated;
   }
-  
-  async remove(id: number) {
-    return this.prisma.user.delete({ where: { id } });
+
+  /**
+   * Deletes the user together with their journals, trades and refresh tokens.
+   * A plain `user.delete` fails for anyone with trades because `trade.userId`
+   * is `ON DELETE RESTRICT`.
+   */
+  async remove(id: number): Promise<{ id: number; deleted: DeletedUserData }> {
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!user) throw new NotFoundException('User not found');
+    const deleted = await deleteUserWithData(this.prisma, id);
+    return { id, deleted };
   }
 }

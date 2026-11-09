@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UserRole } from '../auth/roles.constants';
+import { deleteUserWithData } from '../user/user-deletion';
 
 export interface AdminActor {
   id: number;
@@ -51,11 +52,8 @@ export class AdminService {
 
   /**
    * Immediately and permanently deletes a user and every row that belongs to
-   * them (journals, trades, refresh tokens) in a single transaction.
-   *
-   * `trade.userId` is `ON DELETE RESTRICT`, so the user row cannot be removed
-   * until their trades are gone; all dependent rows are removed explicitly so
-   * the operation does not rely on database cascade rules.
+   * them (journals, trades, refresh tokens) in a single transaction. See
+   * `deleteUserWithData`.
    */
   async hardDeleteUser(
     targetId: number,
@@ -89,21 +87,12 @@ export class AdminService {
       );
     }
 
-    const [journals, trades, refreshTokens] = await this.prisma.$transaction([
-      this.prisma.journal.deleteMany({ where: { userId: user.id } }),
-      this.prisma.trade.deleteMany({ where: { userId: user.id } }),
-      this.prisma.refreshToken.deleteMany({ where: { userId: user.id } }),
-      this.prisma.user.delete({ where: { id: user.id } }),
-    ]);
+    const deleted = await deleteUserWithData(this.prisma, user.id);
 
     const result: AdminDeleteUserResult = {
       id: user.id,
       email: user.email,
-      deleted: {
-        journals: journals.count,
-        trades: trades.count,
-        refreshTokens: refreshTokens.count,
-      },
+      deleted,
     };
 
     this.logger.warn(
