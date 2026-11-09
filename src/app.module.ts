@@ -15,6 +15,7 @@ import { config } from './config/config.constant';
 import { QuoteGateway } from './quote/quote.gateway';
 import { QuoteModule } from './quote/quote.module';
 import { QuoteService } from './quote/quote.service';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
@@ -45,7 +46,8 @@ import { QuoteService } from './quote/quote.service';
       name: 'price-feed',
       //defaultJobOptions: {}
     }),
-    QuoteModule
+    QuoteModule,
+    AdminModule,
   ],
   controllers: [AppController],
   providers: [AppService, QuoteGateway, QuoteService ],

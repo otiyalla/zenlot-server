@@ -57,6 +57,18 @@ $ yarn run test:e2e
 $ yarn run test:cov
 ```
 
+### Unit tests
+
+`yarn test` only picks up `*.e2e-spec.ts` files (see `jest.config.js`). To run unit specs:
+
+```bash
+$ npx jest --testRegex='\.spec\.ts$' --testPathPattern='src/admin'
+```
+
+## Admin operations
+
+Admins (users with `role = 'admin'`) can list users and immediately hard-delete a user and all of their data, e.g. to clean up e2e accounts created in production. See [ADMIN_USER_DELETION.md](./ADMIN_USER_DELETION.md) for endpoints, safeguards, and how to promote an admin.
+
 ## Deployment
 
 When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.

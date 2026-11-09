@@ -7,6 +7,7 @@ import { Prisma } from '@prisma/client';
 import { AuthenticatedUser } from './interfaces/authenticated-user.interface';
 import { UserGateway } from './user.gateway';
 import { UserPasswordDto } from './dto/user-password.dto';
+import { DEFAULT_USER_ROLE } from '../auth/roles.constants';
 
 @Injectable()
 export class UserService {
@@ -16,7 +17,7 @@ export class UserService {
   ) {}
 
   async create(user: CreateUserDto) {
-    const {email, fname, lname, role, language, accountCurrency, rules} = user;
+    const {email, fname, lname, language, accountCurrency, rules} = user;
     const userFound = await this.prisma.user.findUnique({ where: { email } });
     if (userFound) throw new NotFoundException('User already exists with this email');
     const salt = await bcrypt.genSalt(10)
@@ -25,7 +26,9 @@ export class UserService {
       fname: fname,
       lname: lname,
       email: email,
-      role: role ?? 'trader',
+      // Never trust a client-supplied role: self-registration must not be able
+      // to create admins. Admins are promoted directly in the database.
+      role: DEFAULT_USER_ROLE,
       language: language,
       password: hashed,
       accountCurrency: accountCurrency,
@@ -119,6 +122,8 @@ export class UserService {
   //TODO: Test email update
   async update(id: number, dto: UpdateUserDto) {
     delete dto.id;
+    // Users cannot change their own role (e.g. escalate to admin).
+    delete dto.role;
     if (dto.email) {
       await this.verifyEmailUpdate(id, dto.email);
     }
