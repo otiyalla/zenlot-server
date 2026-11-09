@@ -230,4 +230,48 @@ describe('UserService sanitization', () => {
       }),
     );
   });
+
+  it('returns the created user without password or verification secrets', async () => {
+    prisma.user.findUnique.mockResolvedValue(null);
+    // Mimic Prisma's PrismaPromise, whose then/catch/finally are own
+    // enumerable properties: spreading an un-awaited query result copies
+    // `then`, and an async function returning that object resolves to the
+    // raw row. A native Promise would hide that regression.
+    const createdUser = {
+      id: 'u2',
+      fname: 'Grace',
+      lname: 'Hopper',
+      email: 'grace@example.com',
+      role: 'trader',
+      password: 'hash-2',
+      emailVerificationToken: 'verify-token',
+      emailVerificationTokenExpiry: new Date(),
+    };
+    (prisma.user as any).create = jest.fn(() => {
+      const promise = Promise.resolve(createdUser);
+      return {
+        then: promise.then.bind(promise),
+        catch: promise.catch.bind(promise),
+        finally: promise.finally.bind(promise),
+      };
+    });
+
+    const result = await service.create({
+      fname: 'Grace',
+      lname: 'Hopper',
+      email: 'grace@example.com',
+      language: 'en',
+      accountCurrency: 'USD',
+      password: 'password123',
+      rules: { forex: { takeProfit: [], stopLoss: [] } },
+    } as any);
+
+    expect(result).toMatchObject({ id: 'u2', email: 'grace@example.com' });
+    expect(result).not.toHaveProperty('password');
+    expect(result).not.toHaveProperty('emailVerificationToken');
+    expect(result).not.toHaveProperty('emailVerificationTokenExpiry');
+    const [{ data }] = (prisma.user as any).create.mock.calls[0];
+    expect(data.password).not.toBe('password123');
+    expect(data.password).toMatch(/^\$2[aby]\$10\$/);
+  });
 });
