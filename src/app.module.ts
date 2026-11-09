@@ -21,6 +21,7 @@ import { EmailModule } from './email/email.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { SentryModule, SentryGlobalFilter } from '@sentry/nestjs/setup';
 import { APP_FILTER } from '@nestjs/core';
+import { AdminModule } from './admin/admin.module';
 
 function getEnvFilePath(): string[] {
   const nodeEnv = process.env.NODE_ENV?.toLowerCase();
@@ -107,6 +108,7 @@ function getEnvFilePath(): string[] {
       name: 'deletion',
     }),
     QuoteModule,
+    AdminModule,
   ],
   controllers: [AppController],
   providers: [

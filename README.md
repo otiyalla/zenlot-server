@@ -57,6 +57,10 @@ $ yarn run test:e2e
 $ yarn run test:cov
 ```
 
+## Admin operations
+
+Admins (users with `role = 'admin'`) can list users and immediately hard-delete a user and all of their data, skipping the 30-day grace period of self-service deletion, e.g. to clean up e2e accounts created in production. See [ADMIN_USER_DELETION.md](./docs/ADMIN_USER_DELETION.md) for endpoints, safeguards, and how to promote an admin.
+
 ## Deployment
 
 When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
