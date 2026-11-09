@@ -1,0 +1,69 @@
+import {
+  Controller,
+  Post,
+  Get,
+  Body,
+  Param,
+  Patch,
+  Request,
+  ParseUUIDPipe,
+  ForbiddenException,
+} from '@nestjs/common';
+import { FeedbackService } from './feedback.service';
+import { CreateFeedbackDto } from './dto/create-feedback.dto';
+import { UpdateFeedbackStatusDto } from './dto/update-feedback-status.dto';
+import { Public } from '../custom_decorator/public.decorator';
+import { AuthenticatedRequest } from '../user/interfaces/authenticated-request.interface';
+import {
+  ApiOperation,
+  ApiParam,
+  ApiResponse,
+  ApiSecurity,
+  ApiTags,
+} from '@nestjs/swagger';
+
+@ApiTags('Feedback')
+@Controller('feedback')
+export class FeedbackController {
+  constructor(private readonly feedbackService: FeedbackService) {}
+
+  @Post()
+  @Public()
+  @ApiOperation({ summary: 'Submit feedback' })
+  @ApiResponse({ status: 201, description: 'Feedback submitted successfully.' })
+  async submitFeedback(
+    @Body() dto: CreateFeedbackDto,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<unknown> {
+    const ipAddress = req.ip;
+    const authenticatedUserId = req.user?.id;
+    return this.feedbackService.submitFeedback(dto, ipAddress, authenticatedUserId);
+  }
+
+  @Get()
+  @ApiSecurity('access-token')
+  @ApiOperation({ summary: 'Get feedback for the current user' })
+  @ApiResponse({ status: 200, description: 'Feedback fetched successfully.' })
+  async getUserFeedback(@Request() req: AuthenticatedRequest) {
+    return this.feedbackService.getFeedbackByUser(req.user.id);
+  }
+
+  @Patch(':id/status')
+  @ApiSecurity('access-token')
+  @ApiOperation({ summary: 'Update feedback status' })
+  @ApiParam({ name: 'id', required: true, description: 'Feedback id' })
+  @ApiResponse({
+    status: 200,
+    description: 'Feedback status updated successfully.',
+  })
+  async updateFeedbackStatus(
+    @Param('id', ParseUUIDPipe) feedbackId: string,
+    @Body() body: UpdateFeedbackStatusDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    if (req.user?.role !== 'admin') {
+      throw new ForbiddenException('Only admins can update feedback status');
+    }
+    return this.feedbackService.updateFeedbackStatus(feedbackId, body.status);
+  }
+}

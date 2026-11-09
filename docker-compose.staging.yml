@@ -1,0 +1,90 @@
+# Staging stack: api + Redis + Mailpit behind Caddy (automatic HTTPS). The database is hosted
+# Prisma Postgres, configured through DATABASE_URL in .env.staging.
+#
+# Runs on the staging VM (see docs/STAGING.md). The deploy workflow copies this
+# file to the VM and runs:
+#   docker compose -f docker-compose.staging.yml --env-file .env.staging --env-file .api-image.env up -d
+# where deploy.sh writes .api-image.env (API_IMAGE=ghcr.io/<owner>/zenlot-server:<sha>) on each deploy.
+#
+# Only Caddy is public. Redis stays on the internal network; Mailpit's UI binds to loopback.
+#
+# Sized for a GCP e2-micro (1 GB RAM, shared vCPU): every service has a memory cap so one
+# runaway container is OOM-killed on its own instead of taking the whole VM down, and the VM
+# needs the 2 GB swap file from docs/STAGING.md.
+name: zenlot-staging
+
+services:
+  api:
+    image: ${API_IMAGE:?set API_IMAGE to the image tag to deploy}
+    restart: unless-stopped
+    mem_limit: 512m
+    env_file: .env.staging
+    environment:
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=320
+      PORT: 3000
+      RUN_DB_MIGRATIONS: 'true'
+      # DATABASE_URL comes from .env.staging (hosted Prisma Postgres, no local database).
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      # Mail never leaves the box: Mailpit accepts any credentials and just stores messages.
+      EMAIL_PROVIDER: nodemailer
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      SMTP_USER: staging
+      SMTP_PASSWORD: staging
+    depends_on:
+      redis:
+        condition: service_started
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 180s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    mem_limit: 80m
+    # BullMQ requires maxmemory-policy noeviction; the cap just keeps Redis inside mem_limit.
+    command: ['redis-server', '--appendonly', 'yes', '--maxmemory', '48mb', '--maxmemory-policy', 'noeviction']
+    volumes:
+      - redis-data:/data
+
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    mem_limit: 64m
+    environment:
+      MP_MAX_MESSAGES: '500'
+      MP_SMTP_AUTH_ACCEPT_ANY: '1'
+      MP_SMTP_AUTH_ALLOW_INSECURE: '1'
+    ports:
+      # Loopback only: reach the web UI through an SSH tunnel (see docs/STAGING.md).
+      - '127.0.0.1:8025:8025'
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    mem_limit: 64m
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      STAGING_DOMAIN: ${STAGING_DOMAIN:?}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - api
+
+volumes:
+  redis-data:
+  caddy-data:
+  caddy-config:

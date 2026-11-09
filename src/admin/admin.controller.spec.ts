@@ -1,6 +1,5 @@
 import { ValidationPipe } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
-import { JwtService } from '@nestjs/jwt';
 import {
   FastifyAdapter,
   NestFastifyApplication,
@@ -23,12 +22,20 @@ describe('AdminController (HTTP)', () => {
     hardDeleteUser: jest.fn(),
     findUsers: jest.fn(),
   };
+  const ADMIN_ID = '00000000-0000-4000-8000-000000000001';
+  const TARGET_ID = '00000000-0000-4000-8000-000000000042';
   const users: Record<string, object> = {
-    'admin-token': { id: 1, email: 'admin@zenlot.com', role: 'admin' },
-    'trader-token': { id: 2, email: 'trader@zenlot.com', role: 'trader' },
+    'admin-token': { id: ADMIN_ID, email: 'admin@zenlot.com', role: 'admin' },
+    'trader-token': {
+      id: '00000000-0000-4000-8000-000000000002',
+      email: 'trader@zenlot.com',
+      role: 'trader',
+    },
   };
   const authService = {
-    verify: jest.fn((token: string) => Promise.resolve(users[token] ?? null)),
+    verifyToken: jest.fn((token: string) =>
+      Promise.resolve(users[token] ?? null),
+    ),
   };
 
   beforeAll(async () => {
@@ -37,7 +44,6 @@ describe('AdminController (HTTP)', () => {
       providers: [
         { provide: AdminService, useValue: adminService },
         { provide: AuthService, useValue: authService },
-        { provide: JwtService, useValue: {} },
         { provide: APP_GUARD, useClass: AuthGuard },
       ],
     }).compile();
@@ -71,7 +77,7 @@ describe('AdminController (HTTP)', () => {
   describe('DELETE /admin/users/:id', () => {
     it('returns 401 without a token', async () => {
       await request(app.getHttpServer())
-        .delete('/admin/users/42')
+        .delete(`/admin/users/${TARGET_ID}`)
         .send({ confirmEmail: 'e2e@zenlot.com' })
         .expect(401);
       expect(adminService.hardDeleteUser).not.toHaveBeenCalled();
@@ -79,8 +85,8 @@ describe('AdminController (HTTP)', () => {
 
     it('returns 403 for a non-admin user', async () => {
       await request(app.getHttpServer())
-        .delete('/admin/users/42')
-        .set('access_token', 'trader-token')
+        .delete(`/admin/users/${TARGET_ID}`)
+        .set('accesstoken', 'trader-token')
         .send({ confirmEmail: 'e2e@zenlot.com' })
         .expect(403);
       expect(adminService.hardDeleteUser).not.toHaveBeenCalled();
@@ -88,17 +94,17 @@ describe('AdminController (HTTP)', () => {
 
     it('returns 400 when confirmEmail is missing', async () => {
       await request(app.getHttpServer())
-        .delete('/admin/users/42')
-        .set('access_token', 'admin-token')
+        .delete(`/admin/users/${TARGET_ID}`)
+        .set('accesstoken', 'admin-token')
         .send({})
         .expect(400);
       expect(adminService.hardDeleteUser).not.toHaveBeenCalled();
     });
 
-    it('returns 400 when the id is not an integer', async () => {
+    it('returns 400 when the id is not a UUID', async () => {
       await request(app.getHttpServer())
-        .delete('/admin/users/abc')
-        .set('access_token', 'admin-token')
+        .delete('/admin/users/42')
+        .set('accesstoken', 'admin-token')
         .send({ confirmEmail: 'e2e@zenlot.com' })
         .expect(400);
       expect(adminService.hardDeleteUser).not.toHaveBeenCalled();
@@ -106,23 +112,25 @@ describe('AdminController (HTTP)', () => {
 
     it('deletes the user for an admin and passes the admin as the actor', async () => {
       const result = {
-        id: 42,
+        id: TARGET_ID,
         email: 'e2e@zenlot.com',
         deleted: { journals: 0, trades: 1, refreshTokens: 2 },
+        detachedJournals: 0,
       };
       adminService.hardDeleteUser.mockResolvedValue(result);
 
       const res = await request(app.getHttpServer())
-        .delete('/admin/users/42')
-        .set('access_token', 'admin-token')
+        .delete(`/admin/users/${TARGET_ID}`)
+        .set('accesstoken', 'admin-token')
         .send({ confirmEmail: 'e2e@zenlot.com' })
         .expect(200);
 
       expect(res.body).toEqual(result);
       expect(adminService.hardDeleteUser).toHaveBeenCalledWith(
-        42,
+        TARGET_ID,
         'e2e@zenlot.com',
-        expect.objectContaining({ id: 1, email: 'admin@zenlot.com' }),
+        { id: ADMIN_ID, email: 'admin@zenlot.com' },
+        expect.objectContaining({ ipAddress: expect.any(String) }),
       );
     });
   });
@@ -131,22 +139,22 @@ describe('AdminController (HTTP)', () => {
     it('returns 403 for a non-admin user', async () => {
       await request(app.getHttpServer())
         .get('/admin/users?email=e2e')
-        .set('access_token', 'trader-token')
+        .set('accesstoken', 'trader-token')
         .expect(403);
       expect(adminService.findUsers).not.toHaveBeenCalled();
     });
 
     it('returns matching users for an admin', async () => {
       adminService.findUsers.mockResolvedValue([
-        { id: 42, email: 'e2e@zenlot.com' },
+        { id: TARGET_ID, email: 'e2e@zenlot.com' },
       ]);
 
       const res = await request(app.getHttpServer())
         .get('/admin/users?email=e2e')
-        .set('access_token', 'admin-token')
+        .set('accesstoken', 'admin-token')
         .expect(200);
 
-      expect(res.body).toEqual([{ id: 42, email: 'e2e@zenlot.com' }]);
+      expect(res.body).toEqual([{ id: TARGET_ID, email: 'e2e@zenlot.com' }]);
       expect(adminService.findUsers).toHaveBeenCalledWith('e2e');
     });
   });

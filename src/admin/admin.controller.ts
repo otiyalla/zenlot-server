@@ -6,23 +6,25 @@ import {
   HttpCode,
   HttpStatus,
   Param,
-  ParseIntPipe,
+  ParseUUIDPipe,
   Query,
+  Request,
   UseGuards,
 } from '@nestjs/common';
 import {
   ApiOperation,
+  ApiParam,
   ApiResponse,
   ApiSecurity,
   ApiTags,
 } from '@nestjs/swagger';
-import { AdminService, AdminActor } from './admin.service';
+import { AdminService } from './admin.service';
 import { AdminDeleteUserDto } from './dto/admin-delete-user.dto';
 import { AdminFindUsersDto } from './dto/admin-find-users.dto';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { UserRole } from '../auth/roles.constants';
-import { CurrentUser } from '../custom_decorator/current-user.decorator';
+import { AuthenticatedRequest } from '../user/interfaces/authenticated-request.interface';
 
 @ApiTags('Admin')
 @ApiSecurity('access-token')
@@ -36,7 +38,7 @@ export class AdminController {
   @ApiOperation({
     summary: 'List users (admin only)',
     description:
-      'Returns id, email, name, role and createdAt for users, optionally filtered by an email substring. Use it to find the ids of accounts to delete.',
+      'Returns id, email, name, role, createdAt and deletion-schedule fields for users, optionally filtered by an email substring. Use it to find the ids of accounts to delete.',
   })
   @ApiResponse({ status: 200, description: 'Matching users.' })
   @ApiResponse({ status: 403, description: 'Caller is not an admin.' })
@@ -49,8 +51,9 @@ export class AdminController {
   @ApiOperation({
     summary: 'Immediately and permanently delete a user (admin only)',
     description:
-      "Deletes the user and all of their journals, trades and refresh tokens in one transaction. This cannot be undone. The request body must repeat the target user's email in confirmEmail.",
+      "Deletes the user and all of their data now, skipping the 30-day grace period of self-service deletion. This cannot be undone. The request body must repeat the target user's email in confirmEmail.",
   })
+  @ApiParam({ name: 'id', required: true, description: 'User id (UUID)' })
   @ApiResponse({
     status: 200,
     description: 'User deleted; returns counts of removed rows.',
@@ -58,7 +61,7 @@ export class AdminController {
   @ApiResponse({
     status: 400,
     description:
-      'confirmEmail mismatch, or the admin targeted their own account.',
+      'Invalid id, confirmEmail mismatch, or the admin targeted their own account.',
   })
   @ApiResponse({
     status: 403,
@@ -66,10 +69,15 @@ export class AdminController {
   })
   @ApiResponse({ status: 404, description: 'User not found.' })
   hardDeleteUser(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: AdminDeleteUserDto,
-    @CurrentUser() actor: AdminActor,
+    @Request() req: AuthenticatedRequest,
   ) {
-    return this.adminService.hardDeleteUser(id, dto.confirmEmail, actor);
+    return this.adminService.hardDeleteUser(
+      id,
+      dto.confirmEmail,
+      { id: req.user.id, email: req.user.email },
+      { ipAddress: req.ip, userAgent: req.headers['user-agent'] },
+    );
   }
 }

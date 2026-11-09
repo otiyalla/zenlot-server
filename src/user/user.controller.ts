@@ -6,72 +6,150 @@ import {
   Param,
   Delete,
   Put,
-  ParseIntPipe,
-  UnauthorizedException,
+  Request,
+  ParseUUIDPipe,
+  ForbiddenException,
 } from '@nestjs/common';
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UserPasswordDto } from './dto/user-password.dto';
-import { CurrentUser } from '../custom_decorator/current-user.decorator';
-import { AuthenticatedUser } from './interfaces/authenticated-user.interface';
-import { assertSelfOrAdmin } from '../auth/ownership';
+import { AuthenticatedRequest } from './interfaces/authenticated-request.interface';
+import {
+  ApiOperation,
+  ApiParam,
+  ApiResponse,
+  ApiSecurity,
+  ApiTags,
+} from '@nestjs/swagger';
 
-/**
- * Every route here sits behind the global `AuthGuard`. Routes that act on a
- * specific account additionally require the caller to own that account or be
- * an admin (403 otherwise). No route returns the password hash.
- *
- * There is intentionally no `GET /user` list route: the mobile client does not
- * use one, and admins can list users via `GET /admin/users`.
- */
+@ApiTags('User')
+@ApiSecurity('access-token')
 @Controller('user')
 export class UserController {
   constructor(private readonly userService: UserService) {}
 
+  private assertSelfOrAdmin(targetUserId: string, req: AuthenticatedRequest) {
+    if (req.user.id !== targetUserId && req.user.role !== 'admin') {
+      throw new ForbiddenException('Cannot access another user');
+    }
+  }
+
+  private assertAdmin(req: AuthenticatedRequest) {
+    if (req.user?.role !== 'admin') {
+      throw new ForbiddenException('Admin access required');
+    }
+  }
+
   @Post()
-  create(@Body() dto: CreateUserDto) {
-    return this.userService.create(dto);
+  @ApiOperation({ summary: 'Create a user' })
+  @ApiResponse({ status: 201, description: 'User created successfully.' })
+  create(@Body() dto: CreateUserDto, @Request() req: AuthenticatedRequest) {
+    return this.userService.create(dto, req.ip, req.headers['user-agent']);
   }
 
   @Post('change-password')
+  @ApiOperation({ summary: 'Change user password' })
+  @ApiResponse({ status: 200, description: 'Password changed successfully.' })
   changePassword(
-    @CurrentUser() user: AuthenticatedUser,
     @Body() dto: UserPasswordDto,
+    @Request() req: AuthenticatedRequest,
   ) {
-    if (!user) throw new UnauthorizedException('Authentication required');
-    // Default to the caller; a body-supplied userId is only honoured when it
-    // is the caller's own id or the caller is an admin.
-    const targetId = dto.userId ?? user.id;
-    assertSelfOrAdmin(user, targetId);
-    return this.userService.changePassword(targetId, dto);
+    dto.userId = req.user.id;
+    return this.userService.changePassword(
+      dto,
+      req.ip,
+      req.headers['user-agent'],
+    );
+  }
+
+  @Get()
+  @ApiOperation({ summary: 'Get all users (admin only)' })
+  @ApiResponse({ status: 200, description: 'Users fetched successfully.' })
+  @ApiResponse({ status: 403, description: 'Admin access required.' })
+  findAll(@Request() req: AuthenticatedRequest) {
+    this.assertAdmin(req);
+    return this.userService.findAll();
+  }
+
+  @Get('deletion-status')
+  @ApiOperation({ summary: 'Get account deletion status' })
+  @ApiResponse({
+    status: 200,
+    description: 'Deletion status fetched successfully.',
+  })
+  async getDeletionStatus(
+    @Request() req: AuthenticatedRequest,
+  ): Promise<unknown> {
+    return this.userService.getDeletionStatus(req.user.id);
   }
 
   @Get(':id')
+  @ApiOperation({ summary: 'Get a user by id' })
+  @ApiParam({ name: 'id', required: true, description: 'User id' })
+  @ApiResponse({ status: 200, description: 'User fetched successfully.' })
   findOne(
-    @CurrentUser() user: AuthenticatedUser,
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() req: AuthenticatedRequest,
   ) {
-    assertSelfOrAdmin(user, id);
+    this.assertSelfOrAdmin(id, req);
     return this.userService.findOne(id);
   }
 
   @Put(':id')
+  @ApiOperation({ summary: 'Update a user by id' })
+  @ApiParam({ name: 'id', required: true, description: 'User id' })
+  @ApiResponse({ status: 200, description: 'User updated successfully.' })
   update(
-    @CurrentUser() user: AuthenticatedUser,
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateUserDto,
+    @Request() req: AuthenticatedRequest,
   ) {
-    assertSelfOrAdmin(user, id);
-    return this.userService.update(id, dto);
+    this.assertSelfOrAdmin(id, req);
+    return this.userService.update(id, dto, req.ip, req.headers['user-agent']);
+  }
+
+  @Delete(':id/initiate')
+  @ApiOperation({ summary: 'Initiate account deletion' })
+  @ApiParam({ name: 'id', required: true, description: 'User id' })
+  @ApiResponse({ status: 200, description: 'Account deletion initiated.' })
+  initiateAccountDeletion(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    this.assertSelfOrAdmin(id, req);
+    return this.userService.initiateAccountDeletion(
+      id,
+      req.ip,
+      req.headers['user-agent'],
+    );
+  }
+
+  @Post(':id/cancel-deletion')
+  @ApiOperation({ summary: 'Cancel account deletion' })
+  @ApiParam({ name: 'id', required: true, description: 'User id' })
+  @ApiResponse({ status: 200, description: 'Account deletion canceled.' })
+  cancelAccountDeletion(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    this.assertSelfOrAdmin(id, req);
+    return this.userService.cancelAccountDeletion(
+      id,
+      req.ip,
+      req.headers['user-agent'],
+    );
   }
 
   @Delete(':id')
+  @ApiOperation({ summary: 'Delete a user by id' })
+  @ApiParam({ name: 'id', required: true, description: 'User id' })
+  @ApiResponse({ status: 200, description: 'User deleted successfully.' })
   remove(
-    @CurrentUser() user: AuthenticatedUser,
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() req: AuthenticatedRequest,
   ) {
-    assertSelfOrAdmin(user, id);
-    return this.userService.remove(id);
+    this.assertSelfOrAdmin(id, req);
+    return this.userService.remove(id, req.ip, req.headers['user-agent']);
   }
 }
