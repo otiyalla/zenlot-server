@@ -1,32 +1,54 @@
 import { Module } from '@nestjs/common';
+import { BullModule } from '@nestjs/bullmq';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtModule } from '@nestjs/jwt';
-import { jwtConstants } from './auth.constants';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { defaultExpiresIn, resolveExpiration } from './auth.constants';
 import { UserModule } from 'src/user/user.module';
 import { APP_GUARD } from '@nestjs/core';
 import { AuthGuard } from './auth.guard';
+import { EmailModule } from '../email/email.module';
+import { AnalyticsModule } from '../analytics/analytics.module';
+import { AuditModule } from '../audit/audit.module';
+import { SocketSessionModule } from './socket-session.module';
+import {
+  REFRESH_TOKEN_CLEANUP_QUEUE,
+  RefreshTokenCleanupProcessor,
+} from './refresh-token-cleanup.processor';
 
 @Module({
   imports: [
     UserModule,
-    JwtModule.register({ 
+    ConfigModule,
+    EmailModule,
+    AnalyticsModule,
+    AuditModule,
+    SocketSessionModule,
+    BullModule.registerQueue({ name: REFRESH_TOKEN_CLEANUP_QUEUE }),
+    JwtModule.registerAsync({
       global: true,
-      secret: jwtConstants.secret, 
-      signOptions: { 
-        expiresIn: jwtConstants.expiresIn 
-      } 
-    })
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        secret: config.get<string>('JWT_SECRET'),
+        signOptions: {
+          expiresIn: resolveExpiration(
+            config.get<string>('JWT_EXPIRES'),
+            defaultExpiresIn,
+          ),
+        },
+      }),
+    }),
   ],
   providers: [
     AuthService,
+    RefreshTokenCleanupProcessor,
     {
       provide: APP_GUARD,
       useClass: AuthGuard,
-    }
+    },
   ],
   controllers: [AuthController],
   exports: [AuthService],
 })
 export class AuthModule {}
-

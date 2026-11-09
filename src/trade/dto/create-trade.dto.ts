@@ -1,104 +1,157 @@
-import { IsArray, IsString, IsNumber, IsDate, IsJSON, IsOptional, IsObject, ValidateNested  } from 'class-validator';
+import {
+  IsArray,
+  IsBoolean,
+  IsNumber,
+  IsOptional,
+  IsPositive,
+  IsString,
+  IsIn,
+  IsUUID,
+  Matches,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 
 class ExitValue {
-    @IsNumber()
-    value: number;
+  @IsNumber()
+  @IsPositive()
+  value: number;
 
-    @IsNumber()
-    pips: number
-};
+  @IsNumber()
+  @IsPositive()
+  pips: number;
+}
 
 export class CreateTradeDto {
-/*
+  /*
     @IsNumber()
     @ApiProperty({ description: 'The unique identifier for the trade' })
     //id: number;
 */
-    @IsNumber()
-    @ApiProperty({ description: 'The trade user id' })
-    userId: number;
+  @IsUUID()
+  @ApiProperty({ description: 'The trade user id' })
+  userId: string;
 
-    @IsString()
-    @ApiProperty({ description: 'The instrument/currency of the trade entered' })
-    symbol: string;
+  @IsString()
+  @Matches(/^[A-Za-z]{6}$/)
+  @ApiProperty({ description: 'The instrument/currency of the trade entered' })
+  symbol: string;
 
-    @IsNumber()
-    @ApiProperty({ description: 'The trade entry value' })
-    entry: number;
+  @IsNumber()
+  @IsPositive()
+  @ApiProperty({ description: 'The trade entry value' })
+  entry: number;
 
-    @IsNumber()
-    @ApiProperty({ description: 'The trade lot size' })
-    lot: number;
+  @IsNumber()
+  @IsPositive()
+  @ApiProperty({ description: 'The trade lot size' })
+  lot: number;
 
-    @IsNumber()
-    @ApiProperty({ description: 'The trade pips value' })
-    pips: number;
+  @IsNumber()
+  @IsPositive()
+  @ApiProperty({ description: 'The trade pips value' })
+  pips: number;
 
-    @IsString()
-    @ApiProperty({ description: 'The trade execution, if it is a buy or sell' })
-    execution: string;
+  @IsString()
+  @IsIn(['buy', 'sell'])
+  @ApiProperty({ description: 'The trade execution, if it is a buy or sell' })
+  execution: string;
 
-    @IsString()
-    @ApiProperty({ description: 'The trade account currency' })
-    accountCurrency: string;
+  @IsString()
+  @Matches(/^[A-Za-z]{3}$/)
+  @ApiProperty({ description: 'The trade account currency' })
+  accountCurrency: string;
 
-    @IsNumber()
-    @ApiProperty({ description: 'The trade exchange rate' })
-    exchangeRate: number;
+  @IsNumber()
+  @IsPositive()
+  @ApiProperty({ description: 'The trade exchange rate' })
+  exchangeRate: number;
 
-    @ValidateNested()
-    @Type(() => ExitValue)
-    @ApiProperty({ type: ExitValue, description: 'The trade stop loss value' })
-    stopLoss: ExitValue;
+  @ValidateNested()
+  @Type(() => ExitValue)
+  @ApiProperty({ type: ExitValue, description: 'The trade stop loss value' })
+  stopLoss: ExitValue;
 
-    @ValidateNested()
-    @Type(() => ExitValue)
-    @ApiProperty({ type: ExitValue, description: 'The trade take profit value' })
-    takeProfit: ExitValue;
+  @ValidateNested()
+  @Type(() => ExitValue)
+  @ApiProperty({ type: ExitValue, description: 'The trade take profit value' })
+  takeProfit: ExitValue;
 
-    @IsString()
-    @IsOptional()
-    @ApiProperty({ description: 'The trade journal content in plain text' })
-    plainText: string | undefined | null;
+  @IsString()
+  @IsOptional()
+  @ApiProperty({ description: 'The trade journal content in plain text' })
+  plainText: string | undefined | null;
 
-    @IsString()
-    @IsOptional()
-    @ApiProperty({ description: 'The trade journal content in editor format' })
-    editorState: string | undefined | null;
+  @IsString()
+  @IsOptional()
+  @ApiProperty({ description: 'The trade journal content in editor format' })
+  editorState: string | undefined | null;
 
-    @IsString()
-    @ApiProperty({ description: 'The trade status' })
-    status: string;
+  @IsString()
+  @IsIn([
+    'open',
+    'close',
+    'closed',
+    'reached_tp',
+    'reached_sl',
+    'pending',
+    'closed_in_profit',
+    'closed_in_loss',
+  ])
+  @ApiProperty({ description: 'The trade status' })
+  status: string;
 
-    @IsNumber()
-    @IsOptional()
-    @ApiProperty({ description: 'Risk reward ratio'})
-    rr: number
+  @IsNumber()
+  @IsOptional()
+  @IsPositive()
+  @ApiProperty({ description: 'Risk reward ratio' })
+  rr: number;
 
-    @IsNumber()
-    @IsOptional()
-    @ApiProperty({ description: 'The trade risk'})
-    risk: number
+  @IsNumber()
+  @IsOptional()
+  @IsPositive()
+  @ApiProperty({ description: 'The trade risk' })
+  risk: number;
 
-    @IsNumber()
-    @IsOptional()
-    @ApiProperty({ description: 'The trade reward'})
-    reward: number
+  @IsNumber()
+  @IsOptional()
+  @IsPositive()
+  @ApiProperty({ description: 'The trade reward' })
+  reward: number;
 
-    @IsArray()
-    @IsOptional()
-    @ApiProperty({ description: 'The trade tags'})
-    tags: string[]
-/* 
-    @IsDate()
-    @ApiProperty({ type: Date, description: 'The date of the journal entry' })
-    createdAt: Date;
+  @IsArray()
+  @IsOptional()
+  @IsString({ each: true })
+  @ApiProperty({ description: 'The trade tags' })
+  tags: string[];
 
-    @IsDate()
-    @ApiProperty({ type: Date, description: 'The last updated date of the journal entry' })
-    updatedAt: Date;
- */
+  @IsBoolean()
+  @IsOptional()
+  @ApiProperty({ description: 'Whether the trade is auto closed' })
+  isAutoClosed: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  @ApiProperty({
+    description:
+      'Confirms logging despite blocking governance rules (simple override mode).',
+  })
+  acknowledged?: boolean;
+
+  @IsArray()
+  @IsOptional()
+  @IsString({ each: true })
+  @ApiProperty({
+    description:
+      'Rule keys explicitly acknowledged (detailed override mode), e.g. ["maxPortfolioExposure"].',
+  })
+  acknowledgedRules?: string[];
+
+  @IsString()
+  @IsOptional()
+  @ApiProperty({
+    description: 'Optional note explaining why the governance rule(s) are being overridden.',
+  })
+  overrideReason?: string;
 }
-
