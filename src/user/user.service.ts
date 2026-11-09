@@ -31,11 +31,16 @@ export class UserService {
       accountCurrency: accountCurrency,
       rules: user.rules ? JSON.parse(JSON.stringify(rules)) : undefined,
     };
-    const result = this.prisma.user.create({ data });
-    return {
-      ...result,
-      password: undefined
-    }
+    const created = await this.prisma.user.create({ data });
+    return this.omitPassword(created);
+  }
+
+  private omitPassword<T extends { password: string }>(
+    user: T,
+  ): Omit<T, 'password'> {
+    const safeUser: Partial<T> = { ...user };
+    delete safeUser.password;
+    return safeUser as Omit<T, 'password'>;
   }
 
   async validateUser(email: string, password: string): Promise<AuthenticatedUser | null>{
