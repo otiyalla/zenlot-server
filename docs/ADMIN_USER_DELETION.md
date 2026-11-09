@@ -82,7 +82,7 @@ Successful response (`200 OK`):
 {
   "id": "3f1c2a9e-5b7d-4c1e-9a2b-6d8e0f4a1b2c",
   "email": "e2e+signup@zenlot.com",
-  "deleted": { "journals": 3, "trades": 2, "refreshTokens": 1 },
+  "deleted": { "journals": 3, "trades": 2, "refreshTokens": 1, "feedback": 0 },
   "detachedJournals": 0
 }
 ```
@@ -106,7 +106,9 @@ In a single Prisma transaction (all-or-nothing):
 3. The `user` row is deleted. Every user-owned table (trades, journals, refresh
    tokens, push tokens, risk/drawdown state, trading plans, checklists,
    evaluations, reports, and so on) is removed by its `ON DELETE CASCADE`
-   foreign key. `auditLog` rows are kept with `userId = NULL`.
+   foreign key. `auditLog` rows are kept with `userId = NULL`. `feedback` has
+   no foreign key to `user`, so the user's feedback rows (which include their
+   email and message) are deleted explicitly just before the user row.
 
 After the transaction commits:
 

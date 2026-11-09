@@ -114,7 +114,7 @@ describe('AdminController (HTTP)', () => {
       const result = {
         id: TARGET_ID,
         email: 'e2e@zenlot.com',
-        deleted: { journals: 0, trades: 1, refreshTokens: 2 },
+        deleted: { journals: 0, trades: 1, refreshTokens: 2, feedback: 0 },
         detachedJournals: 0,
       };
       adminService.hardDeleteUser.mockResolvedValue(result);

@@ -31,6 +31,8 @@ export interface AdminDeleteUserResult {
     journals: number;
     trades: number;
     refreshTokens: number;
+    /** `feedback.userId` has no foreign key, so these are deleted explicitly. */
+    feedback: number;
   };
   /** Other users' journals whose link to one of the deleted trades was cleared. */
   detachedJournals: number;
@@ -85,7 +87,8 @@ export class AdminService {
    * role are checked inside the same transaction, so a concurrent promotion or
    * email change cannot slip in between the checks and the delete. Every
    * user-owned table cascades from the user row, except `auditLog`, which keeps
-   * its rows with `userId = NULL`. Another user's journal that links to one of
+   * its rows with `userId = NULL`, and `feedback`, whose `userId` has no foreign
+   * key, so it is deleted explicitly. Another user's journal that links to one of
    * the target's trades is detached (`tradeId = NULL`) first, so the
    * `journal.tradeId` cascade does not remove it.
    */
@@ -134,6 +137,9 @@ export class AdminService {
           tx.trade.count({ where: { userId: user.id } }),
           tx.refreshToken.count({ where: { userId: user.id } }),
         ]);
+        const feedback = await tx.feedback.deleteMany({
+          where: { userId: user.id },
+        });
         await tx.user.delete({ where: { id: user.id } });
 
         return {
@@ -141,7 +147,12 @@ export class AdminService {
           result: {
             id: user.id,
             email: user.email,
-            deleted: { journals, trades, refreshTokens },
+            deleted: {
+              journals,
+              trades,
+              refreshTokens,
+              feedback: feedback.count,
+            },
             detachedJournals: detachedJournals.count,
           } satisfies AdminDeleteUserResult,
         };
@@ -171,7 +182,7 @@ export class AdminService {
     this.logger.warn(
       `Admin ${actor.id} <${actor.email}> hard-deleted user ${result.id} <${result.email}> ` +
         `(journals=${result.deleted.journals}, trades=${result.deleted.trades}, ` +
-        `refreshTokens=${result.deleted.refreshTokens}, ` +
+        `refreshTokens=${result.deleted.refreshTokens}, feedback=${result.deleted.feedback}, ` +
         `detachedJournals=${result.detachedJournals})`,
     );
 

@@ -32,6 +32,7 @@ describe('AdminService', () => {
     journal: { updateMany: jest.Mock; count: jest.Mock };
     trade: { count: jest.Mock };
     refreshToken: { count: jest.Mock };
+    feedback: { deleteMany: jest.Mock };
     user: { delete: jest.Mock };
   };
   let prisma: { user: { findMany: jest.Mock }; $transaction: jest.Mock };
@@ -72,6 +73,9 @@ describe('AdminService', () => {
       },
       trade: { count: jest.fn(record('trade.count', 2)) },
       refreshToken: { count: jest.fn(record('refreshToken.count', 1)) },
+      feedback: {
+        deleteMany: jest.fn(record('feedback.deleteMany', { count: 2 })),
+      },
       user: { delete: jest.fn(record('user.delete', target)) },
     };
     prisma = {
@@ -121,7 +125,7 @@ describe('AdminService', () => {
       expect(result).toEqual({
         id: TARGET_ID,
         email: 'E2E+Signup@zenlot.com',
-        deleted: { journals: 3, trades: 2, refreshTokens: 1 },
+        deleted: { journals: 3, trades: 2, refreshTokens: 1, feedback: 2 },
         detachedJournals: 1,
       });
     });
@@ -133,6 +137,17 @@ describe('AdminService', () => {
         where: { userId: { not: TARGET_ID }, trade: { userId: TARGET_ID } },
         data: { tradeId: null },
       });
+    });
+
+    it("deletes the user's feedback before the user row, since feedback.userId has no foreign key", async () => {
+      await service.hardDeleteUser(TARGET_ID, target.email, admin);
+
+      expect(tx.feedback.deleteMany).toHaveBeenCalledWith({
+        where: { userId: TARGET_ID },
+      });
+      expect(calls.indexOf('feedback.deleteMany')).toBeLessThan(
+        calls.indexOf('user.delete'),
+      );
     });
 
     it('drops live sockets by advancing past the locked auth version', async () => {
