@@ -1,66 +1,105 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsBoolean, IsNumber, IsObject, IsOptional, IsArray, IsString, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsBoolean,
+  IsNumber,
+  IsObject,
+  IsOptional,
+  IsArray,
+  IsIn,
+  IsPositive,
+  IsString,
+  MaxLength,
+  MinLength,
+  ValidateNested,
+  Matches,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+
+class PipRuleDto {
+  @IsNumber()
+  @IsPositive()
+  pips: number;
+}
 
 class ForexRuleDto {
-    @IsArray()
-    takeProfit: {
-        pips: number;
-    }[];
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PipRuleDto)
+  take_profit: PipRuleDto[];
 
-    @IsArray()
-    stopLoss: {
-        pips: number;
-    }[];
-    @IsOptional()
-    @IsNumber()
-    lotSize?: number;
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PipRuleDto)
+  stop_loss: PipRuleDto[];
+
+  @IsOptional()
+  @IsNumber()
+  @IsPositive()
+  lot_size?: number;
 }
 
 export class RulesDto {
-    forex: ForexRuleDto;
+  @IsObject()
+  @ValidateNested()
+  @Type(() => ForexRuleDto)
+  forex: ForexRuleDto;
 }
 
 export class CreateUserDto {
-    @IsString()
-    fname: string;
-    
-    @IsString()
-    lname: string;
+  @IsString()
+  @MinLength(2)
+  @MaxLength(256)
+  fname: string;
 
-    @IsEmail()
-    email: string;
-    
-    @IsString()
-    language: string;
+  @IsString()
+  @MinLength(2)
+  @MaxLength(256)
+  lname: string;
 
-    @IsString()
-    @IsOptional()
-    role: string;
-    
-    @IsString()
-    accountCurrency: string;
+  @IsEmail()
+  @MaxLength(256)
+  email: string;
 
-    @IsString()
-    @IsOptional()
-    theme: string;
+  @IsString()
+  @IsIn(['en', 'fr', 'es'])
+  language: string;
 
-    @IsObject()
-    rules: RulesDto;
+  @IsString()
+  @IsOptional()
+  @IsIn(['user', 'free', 'trader'])
+  role: string;
 
-    @IsString()
-    @MinLength(8)
-    password: string;
+  @IsString()
+  @Matches(/^[A-Za-z]{3}$/)
+  accountCurrency: string;
 
-    @IsString()
-    @IsOptional()
-    timezone: string;
+  @IsString()
+  @IsOptional()
+  @IsIn(['light', 'dark', 'system'])
+  theme: string;
 
-    @IsBoolean()
-    @IsOptional()
-    togglePipValue: boolean;
+  @IsObject()
+  @ValidateNested()
+  @Type(() => RulesDto)
+  rules: RulesDto;
 
-    @IsArray()  
-    @IsOptional()
-    @ApiProperty({ description: 'The user tags'})
-    tags: string[];
+  @IsString()
+  @MinLength(8)
+  password: string;
+
+  @IsString()
+  @IsOptional()
+  @MinLength(1)
+  timezone: string;
+
+  @IsBoolean()
+  @IsOptional()
+  togglePipValue: boolean;
+
+  @IsArray()
+  @IsOptional()
+  @IsString({ each: true })
+  @ApiProperty({ description: 'The user tags' })
+  tags: string[];
 }

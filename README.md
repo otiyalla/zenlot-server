@@ -57,17 +57,9 @@ $ yarn run test:e2e
 $ yarn run test:cov
 ```
 
-### Unit tests
-
-`yarn test` only picks up `*.e2e-spec.ts` files (see `jest.config.js`). To run unit specs:
-
-```bash
-$ npx jest --testRegex='\.spec\.ts$' --testPathPattern='src/admin'
-```
-
 ## Admin operations
 
-Admins (users with `role = 'admin'`) can list users and immediately hard-delete a user and all of their data, e.g. to clean up e2e accounts created in production. See [ADMIN_USER_DELETION.md](./ADMIN_USER_DELETION.md) for endpoints, safeguards, and how to promote an admin.
+Admins (users with `role = 'admin'`) can list users and immediately hard-delete a user and all of their data, skipping the 30-day grace period of self-service deletion, e.g. to clean up e2e accounts created in production. See [ADMIN_USER_DELETION.md](./docs/ADMIN_USER_DELETION.md) for endpoints, safeguards, and how to promote an admin.
 
 ## Deployment
 
@@ -81,6 +73,30 @@ $ mau deploy
 ```
 
 With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+
+## Container image
+
+This service now includes a production `Dockerfile`.
+
+```bash
+docker build -t zenlot-server .
+docker run --rm -p 3000:3000 \
+  -e NODE_ENV=production \
+  -e DATABASE_URL=postgresql://... \
+  -e JWT_SECRET=... \
+  -e JWT_REFRESH_SECRET=... \
+  zenlot-server
+```
+
+Set `RUN_DB_MIGRATIONS=true` if you want the container entrypoint to run `prisma migrate deploy` before booting the app.
+
+The production package build command is:
+
+```bash
+yarn build:with:package
+```
+
+The current host mapping outside the container is `localhost:3000` behind Nginx, exposed publicly as `https://api.zenlot.net`.
 
 ## Resources
 

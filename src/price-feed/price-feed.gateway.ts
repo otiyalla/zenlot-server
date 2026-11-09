@@ -1,38 +1,115 @@
-import { WebSocketGateway, SubscribeMessage, MessageBody, WebSocketServer, ConnectedSocket } from '@nestjs/websockets';
-import { PriceFeedService } from './price-feed.service';
-import { CreatePriceFeedDto } from './dto/create-price-feed.dto';
-import { UpdatePriceFeedDto } from './dto/update-price-feed.dto';
+import { Logger, OnModuleInit } from '@nestjs/common';
+import { WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { OnModuleInit } from '@nestjs/common';
+import { getCorsOrigins } from '../config/cors.config';
+import { AuthService } from '../auth/auth.service';
+import {
+  isSocketSessionRevoked,
+  SocketSessionRegistry,
+} from '../auth/socket-session-registry.service';
 
-@WebSocketGateway({ 
-  //cros: true, 
-  cros: { 
-    //origin: '*', 
-    origin: ['http://localhost:8081', 'https://zenlot.com'], 
-    //methods: ['GET', 'POST'],
-    //allowedHeaders: ['Content-Type'],
-    //credentials: true 
+interface AuthUser {
+  id: string;
+  authVersion: number;
+}
+
+@WebSocketGateway({
+  cors: {
+    origin: getCorsOrigins(),
+    methods: ['GET', 'POST'],
+    credentials: true,
   },
-    //transports: ['websocket', 'polling'],
-  namespace: 'price-feed' 
+  namespace: 'price-feed',
 })
 export class PriceFeedGateway implements OnModuleInit {
+  private readonly logger = new Logger(PriceFeedGateway.name);
+
   @WebSocketServer()
   server: Server;
 
+  constructor(
+    private readonly authService: AuthService,
+    private readonly socketSessions: SocketSessionRegistry,
+  ) {}
+
+  private getUserRoom(userId: string): string {
+    return `user_${userId}`;
+  }
+
   onModuleInit() {
     // Handle client connections
-    this.server.on('connection', (socket: Socket) => {
-      console.log(`Price Feed Client connected: ${socket.id}`);
-      
-      // Join user to their personal room
-      socket.join(`user_${socket.id}`);
-      
-      socket.on('disconnect', () => {
-        console.log(`Price Feed Client disconnected: ${socket.id}`);
-      });
+    this.server.on('connection', async (socket: Socket) => {
+      try {
+        const accessToken = this.extractAccessToken(socket);
+        if (!accessToken) {
+          throw new Error('Missing access token');
+        }
+
+        const user = (await this.authService.verifyToken(
+          accessToken,
+        )) as AuthUser | null;
+        if (!user?.id || !Number.isInteger(user.authVersion)) {
+          throw new Error('Invalid socket identity');
+        }
+        if (
+          !this.socketSessions.register(
+            socket,
+            user.id,
+            user.authVersion,
+            '/price-feed',
+          )
+        ) {
+          return;
+        }
+
+        (socket as Socket & { user: typeof user }).user = user;
+        const userRoom = this.getUserRoom(user.id);
+        await socket.join(userRoom);
+        if (socket.disconnected || isSocketSessionRevoked(socket)) {
+          await socket.leave(userRoom);
+          throw new Error('Socket disconnected during room join');
+        }
+        this.logger.log(`Price Feed Client connected: ${socket.id}`);
+        socket.on('disconnect', () => {
+          this.logger.log(`Price Feed Client disconnected: ${socket.id}`);
+        });
+      } catch (_error) {
+        this.logger.warn(`Price feed socket auth/setup failed: ${socket.id}`);
+        try {
+          socket.disconnect(true);
+        } catch (disconnectError) {
+          this.logger.error(
+            'Failed to disconnect rejected socket',
+            disconnectError,
+          );
+        }
+      }
     });
+  }
+
+  private extractAccessToken(socket: Socket): string | undefined {
+    const authToken = (socket.handshake?.auth as Record<string, unknown>)?.[
+      'accessToken'
+    ];
+    if (typeof authToken === 'string' && authToken.trim()) {
+      return authToken.trim();
+    }
+
+    // Node normalizes incoming header names to lowercase.
+    const headerToken = socket.handshake?.headers?.['accesstoken'];
+    if (typeof headerToken === 'string' && headerToken.trim()) {
+      return headerToken.trim();
+    }
+
+    const authorization = socket.handshake?.headers?.authorization;
+    if (typeof authorization === 'string') {
+      const match = /^Bearer\s+(\S+)$/i.exec(authorization.trim());
+      if (match?.[1]) {
+        return match[1];
+      }
+    }
+
+    return undefined;
   }
 
   /*

@@ -1,0 +1,6 @@
+# Caddy obtains and renews the TLS certificate for $STAGING_DOMAIN on its own and
+# proxies WebSocket upgrades (Socket.IO) without extra config.
+{$STAGING_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy api:3000
+}

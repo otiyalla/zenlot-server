@@ -1,0 +1,105 @@
+name: deploy-staging
+
+# Builds the API image and deploys it to the staging VM on every push to `dev`.
+# One-time VM + GitHub setup is described in docs/STAGING.md.
+
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build:
+    name: Build image
+    # The GCP e2-micro staging VM is x86_64, so a plain amd64 build is enough.
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute image name
+        id: meta
+        run: |
+          repo="$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
+          echo "image=${REGISTRY}/${repo}:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64
+          tags: ${{ steps.meta.outputs.image }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to staging VM
+    needs: build
+    runs-on: ubuntu-latest
+    # Holds the STAGING_SSH_* secrets and the STAGING_URL variable.
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure SSH
+        env:
+          SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.STAGING_SSH_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_staging
+          chmod 600 ~/.ssh/id_staging
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Copy compose + Caddyfile
+        env:
+          SSH_TARGET: ${{ secrets.STAGING_SSH_USER }}@${{ secrets.STAGING_SSH_HOST }}
+        run: |
+          ssh -i ~/.ssh/id_staging "$SSH_TARGET" 'mkdir -p ~/zenlot-staging'
+          scp -i ~/.ssh/id_staging docker-compose.staging.yml "$SSH_TARGET:zenlot-staging/docker-compose.staging.yml"
+          scp -i ~/.ssh/id_staging deploy/staging/Caddyfile "$SSH_TARGET:zenlot-staging/Caddyfile"
+
+      - name: Pull image and restart
+        env:
+          SSH_TARGET: ${{ secrets.STAGING_SSH_USER }}@${{ secrets.STAGING_SSH_HOST }}
+          API_IMAGE: ${{ needs.build.outputs.image }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # The token is short-lived (this run only). It is the first stdin line, read into the
+          # remote environment, so it never appears in a command line; deploy.sh follows it.
+          { printf '%s\n' "$GHCR_TOKEN"; cat deploy/staging/deploy.sh; } | ssh -i ~/.ssh/id_staging "$SSH_TARGET" \
+            "read -r GHCR_TOKEN; export GHCR_TOKEN GHCR_USER='$GHCR_USER' API_IMAGE='$API_IMAGE'; bash -s"
+
+      - name: Wait for /health
+        env:
+          STAGING_URL: ${{ vars.STAGING_URL }}
+        run: |
+          test -n "$STAGING_URL" || { echo "Set the STAGING_URL environment variable" >&2; exit 1; }
+          # An e2-micro has a throttled CPU: image pull + Prisma migrate can take several minutes.
+          for i in $(seq 1 48); do
+            if curl -fsS "$STAGING_URL/health"; then echo; echo "healthy"; exit 0; fi
+            echo "waiting ($i/48)..."; sleep 10
+          done
+          echo "staging did not become healthy" >&2
+          exit 1
