@@ -52,8 +52,12 @@ every `role = 'admin'` to `trader`. Deploy in this order:
 
 1. Apply migrations (`npx prisma migrate deploy`) **before or together with**
    the release that adds the `/admin` routes.
-2. Confirm no admins remain:
+2. **After every old instance has stopped serving**, confirm no admins remain:
    `SELECT id, email FROM "user" WHERE role = 'admin';` should return no rows.
+   During a rolling deploy, old instances still accept a client-supplied
+   `role`, so one could write `admin` after the migration ran. If any rows
+   appear, re-run the migration's `UPDATE` (or drain old instances before
+   migrating).
 3. Promote the trusted admin account(s) with `scripts/promote-admin.sql`.
 
 ## Finding the users to delete
