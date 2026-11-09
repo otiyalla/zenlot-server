@@ -42,6 +42,20 @@ To demote, set `role` back to `'trader'`.
 > role. Without this, anyone could have signed up as `admin` and used these
 > endpoints.
 
+### Rollout
+
+Before this feature, signup and profile updates stored whatever `role` the
+client sent, so an existing row may already say `admin` without anyone having
+granted it. The migration
+`prisma/migrations/20261109090000_reset_client_assigned_admin_roles` resets
+every `role = 'admin'` to `trader`. Deploy in this order:
+
+1. Apply migrations (`npx prisma migrate deploy`) **before or together with**
+   the release that adds the `/admin` routes.
+2. Confirm no admins remain:
+   `SELECT id, email FROM "user" WHERE role = 'admin';` should return no rows.
+3. Promote the trusted admin account(s) with `scripts/promote-admin.sql`.
+
 ## Finding the users to delete
 
 ```bash
@@ -67,19 +81,29 @@ Successful response (`200 OK`):
 {
   "id": 42,
   "email": "e2e+signup@zenlot.com",
-  "deleted": { "journals": 3, "trades": 2, "refreshTokens": 1 }
+  "deleted": { "journals": 3, "trades": 2, "refreshTokens": 1 },
+  "detachedJournals": 0
 }
 ```
+
+`detachedJournals` counts other users' journals that pointed at one of the
+deleted trades and were kept (see below).
 
 ### What gets deleted
 
 In a single Prisma transaction (all-or-nothing), in this order:
 
-1. The user's `journal` rows
-2. The user's `trade` rows (any journal linked to those trades is removed by
-   the `journal.tradeId` cascade)
-3. The user's `RefreshToken` rows, which also signs them out everywhere
-4. The `user` row itself
+1. The target `user` row is locked with `SELECT ... FOR UPDATE`, and the email
+   confirmation and admin checks run against that locked row. A concurrent
+   promotion or email change either finishes first, and the checks see it, or
+   waits until the delete is done.
+2. **Other** users' journals that link to one of the target's trades get
+   `tradeId = NULL`. Without this step, the `journal.tradeId` cascade would
+   delete them.
+3. The user's `journal` rows
+4. The user's `trade` rows
+5. The user's `RefreshToken` rows, which also signs them out everywhere
+6. The `user` row itself
 
 **This cannot be undone.** Take a backup first if there is any doubt.
 
@@ -101,22 +125,23 @@ In a single Prisma transaction (all-or-nothing), in this order:
 Every successful deletion writes a `warn`-level log line from `AdminService`:
 
 ```
-Admin 1 <admin@zenlot.com> hard-deleted user 42 <e2e+signup@zenlot.com> (journals=3, trades=2, refreshTokens=1)
+Admin 1 <admin@zenlot.com> hard-deleted user 42 <e2e+signup@zenlot.com> (journals=3, trades=2, refreshTokens=1, detachedJournals=0)
 ```
 
 ## Code map
 
-| File                                             | Purpose                                       |
-| ------------------------------------------------ | --------------------------------------------- |
-| `src/admin/admin.module.ts`                      | Module registered in `AppModule`              |
-| `src/admin/admin.controller.ts`                  | `GET /admin/users`, `DELETE /admin/users/:id` |
-| `src/admin/admin.service.ts`                     | Lookup and transactional hard delete          |
-| `src/admin/dto/*.ts`                             | Request validation                            |
-| `src/auth/roles.constants.ts`                    | `UserRole` enum, `DEFAULT_USER_ROLE`          |
-| `src/auth/roles.decorator.ts`                    | `@Roles(...)` metadata decorator              |
-| `src/auth/roles.guard.ts`                        | `RolesGuard` enforcing `@Roles`               |
-| `src/custom_decorator/current-user.decorator.ts` | `@CurrentUser()` param decorator              |
-| `scripts/promote-admin.sql`                      | Promote an account to admin                   |
+| File                                                                 | Purpose                                        |
+| -------------------------------------------------------------------- | ---------------------------------------------- |
+| `src/admin/admin.module.ts`                                          | Module registered in `AppModule`               |
+| `src/admin/admin.controller.ts`                                      | `GET /admin/users`, `DELETE /admin/users/:id`  |
+| `src/admin/admin.service.ts`                                         | Lookup and transactional hard delete           |
+| `src/admin/dto/*.ts`                                                 | Request validation                             |
+| `src/auth/roles.constants.ts`                                        | `UserRole` enum, `DEFAULT_USER_ROLE`           |
+| `src/auth/roles.decorator.ts`                                        | `@Roles(...)` metadata decorator               |
+| `src/auth/roles.guard.ts`                                            | `RolesGuard` enforcing `@Roles`                |
+| `src/custom_decorator/current-user.decorator.ts`                     | `@CurrentUser()` param decorator               |
+| `scripts/promote-admin.sql`                                          | Promote an account to admin                    |
+| `prisma/migrations/20261109090000_reset_client_assigned_admin_roles` | Reset pre-existing self-assigned `admin` roles |
 
 ## Tests
 
@@ -124,8 +149,9 @@ Admin 1 <admin@zenlot.com> hard-deleted user 42 <e2e+signup@zenlot.com> (journal
 npx jest --testRegex='\.spec\.ts$' --testPathPattern='src/(admin|auth/roles|user/user\.service)'
 ```
 
-- `src/admin/admin.service.spec.ts`: transaction contents and order, the
-  safeguards, the audit log, and that lookups never select the password.
+- `src/admin/admin.service.spec.ts`: row lock, then step order inside the
+  transaction, detaching other users' journals, the safeguards, the audit log,
+  and that lookups never select the password.
 - `src/admin/admin.controller.spec.ts`: drives the real `AuthGuard` →
   `RolesGuard` → `ValidationPipe` chain over HTTP on the Fastify adapter used
   in production (401 / 403 / 400 / 200).

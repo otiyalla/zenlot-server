@@ -1,44 +1,71 @@
 import {
   BadRequestException,
   ForbiddenException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Logger } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { AdminService } from './admin.service';
 import { PrismaService } from '../prisma/prisma.service';
 
+type LockedUser = { id: number; email: string; role: string };
+
 describe('AdminService', () => {
   let service: AdminService;
   let warn: jest.SpyInstance;
-  let prisma: {
-    user: { findUnique: jest.Mock; findMany: jest.Mock; delete: jest.Mock };
-    journal: { deleteMany: jest.Mock };
+  let calls: string[];
+  let lockedRows: LockedUser[];
+  let tx: {
+    $queryRaw: jest.Mock;
+    journal: { updateMany: jest.Mock; deleteMany: jest.Mock };
     trade: { deleteMany: jest.Mock };
     refreshToken: { deleteMany: jest.Mock };
+    user: { delete: jest.Mock };
+  };
+  let prisma: {
+    user: { findMany: jest.Mock };
     $transaction: jest.Mock;
   };
 
   const admin = { id: 1, email: 'admin@zenlot.com' };
-  const target = { id: 42, email: 'E2E+Signup@zenlot.com', role: 'trader' };
+  const target: LockedUser = {
+    id: 42,
+    email: 'E2E+Signup@zenlot.com',
+    role: 'trader',
+  };
+
+  const record =
+    (name: string, value: unknown) =>
+    (..._args: unknown[]) => {
+      calls.push(name);
+      return Promise.resolve(value);
+    };
 
   afterEach(() => jest.restoreAllMocks());
 
   beforeEach(async () => {
-    prisma = {
-      user: {
-        findUnique: jest.fn(),
-        findMany: jest.fn(),
-        delete: jest.fn().mockReturnValue('user.delete'),
+    calls = [];
+    lockedRows = [target];
+    tx = {
+      $queryRaw: jest.fn(() => {
+        calls.push('lock');
+        return Promise.resolve(lockedRows);
+      }),
+      journal: {
+        updateMany: jest.fn(record('journal.detach', { count: 1 })),
+        deleteMany: jest.fn(record('journal.deleteMany', { count: 3 })),
       },
-      journal: { deleteMany: jest.fn().mockReturnValue('journal.deleteMany') },
-      trade: { deleteMany: jest.fn().mockReturnValue('trade.deleteMany') },
+      trade: { deleteMany: jest.fn(record('trade.deleteMany', { count: 2 })) },
       refreshToken: {
-        deleteMany: jest.fn().mockReturnValue('refreshToken.deleteMany'),
+        deleteMany: jest.fn(record('refreshToken.deleteMany', { count: 1 })),
       },
-      $transaction: jest
-        .fn()
-        .mockResolvedValue([{ count: 3 }, { count: 2 }, { count: 1 }, target]),
+      user: { delete: jest.fn(record('user.delete', target)) },
+    };
+    prisma = {
+      user: { findMany: jest.fn() },
+      $transaction: jest.fn((fn: (client: typeof tx) => Promise<unknown>) =>
+        fn(tx),
+      ),
     };
 
     const module = await Test.createTestingModule({
@@ -52,41 +79,52 @@ describe('AdminService', () => {
   });
 
   describe('hardDeleteUser', () => {
-    it('deletes the user and all dependent rows in one transaction', async () => {
-      prisma.user.findUnique.mockResolvedValue(target);
-
+    it('locks the target, then deletes all dependent rows before the user, in one transaction', async () => {
       const result = await service.hardDeleteUser(
         42,
         'e2e+signup@zenlot.com',
         admin,
       );
 
-      expect(prisma.journal.deleteMany).toHaveBeenCalledWith({
-        where: { userId: 42 },
-      });
-      expect(prisma.trade.deleteMany).toHaveBeenCalledWith({
-        where: { userId: 42 },
-      });
-      expect(prisma.refreshToken.deleteMany).toHaveBeenCalledWith({
-        where: { userId: 42 },
-      });
-      expect(prisma.user.delete).toHaveBeenCalledWith({ where: { id: 42 } });
-      // Dependents must be removed before the user row (trade FK is RESTRICT).
-      expect(prisma.$transaction).toHaveBeenCalledWith([
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(calls).toEqual([
+        'lock',
+        'journal.detach',
         'journal.deleteMany',
         'trade.deleteMany',
         'refreshToken.deleteMany',
         'user.delete',
       ]);
+      const [sql] = tx.$queryRaw.mock.calls[0] as [TemplateStringsArray];
+      expect(sql.join('?')).toMatch(/FOR UPDATE/);
+      expect(tx.journal.deleteMany).toHaveBeenCalledWith({
+        where: { userId: 42 },
+      });
+      expect(tx.trade.deleteMany).toHaveBeenCalledWith({
+        where: { userId: 42 },
+      });
+      expect(tx.refreshToken.deleteMany).toHaveBeenCalledWith({
+        where: { userId: 42 },
+      });
+      expect(tx.user.delete).toHaveBeenCalledWith({ where: { id: 42 } });
       expect(result).toEqual({
         id: 42,
         email: 'E2E+Signup@zenlot.com',
         deleted: { journals: 3, trades: 2, refreshTokens: 1 },
+        detachedJournals: 1,
+      });
+    });
+
+    it("detaches other users' journals from the target's trades instead of deleting them", async () => {
+      await service.hardDeleteUser(42, target.email, admin);
+
+      expect(tx.journal.updateMany).toHaveBeenCalledWith({
+        where: { userId: { not: 42 }, trade: { userId: 42 } },
+        data: { tradeId: null },
       });
     });
 
     it('writes an audit log entry naming the admin and the deleted user', async () => {
-      prisma.user.findUnique.mockResolvedValue(target);
       await service.hardDeleteUser(42, target.email, admin);
 
       expect(warn).toHaveBeenCalledWith(
@@ -97,42 +135,36 @@ describe('AdminService', () => {
     });
 
     it('throws NotFound when the user does not exist', async () => {
-      prisma.user.findUnique.mockResolvedValue(null);
+      lockedRows = [];
 
       await expect(
         service.hardDeleteUser(42, target.email, admin),
       ).rejects.toBeInstanceOf(NotFoundException);
-      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(calls).toEqual(['lock']);
     });
 
-    it('refuses when confirmEmail does not match the target user', async () => {
-      prisma.user.findUnique.mockResolvedValue(target);
-
+    it('refuses when confirmEmail does not match the locked row', async () => {
       await expect(
         service.hardDeleteUser(42, 'someone-else@zenlot.com', admin),
       ).rejects.toBeInstanceOf(BadRequestException);
-      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(calls).toEqual(['lock']);
+      expect(warn).not.toHaveBeenCalled();
     });
 
     it('refuses to let an admin delete their own account', async () => {
       await expect(
         service.hardDeleteUser(admin.id, admin.email, admin),
       ).rejects.toBeInstanceOf(BadRequestException);
-      expect(prisma.user.findUnique).not.toHaveBeenCalled();
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
-    it('refuses to delete another admin', async () => {
-      prisma.user.findUnique.mockResolvedValue({
-        id: 7,
-        email: 'other-admin@zenlot.com',
-        role: 'admin',
-      });
+    it('refuses to delete a user who is an admin at lock time', async () => {
+      lockedRows = [{ ...target, role: 'admin' }];
 
       await expect(
-        service.hardDeleteUser(7, 'other-admin@zenlot.com', admin),
+        service.hardDeleteUser(42, target.email, admin),
       ).rejects.toBeInstanceOf(ForbiddenException);
-      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(calls).toEqual(['lock']);
     });
   });
 

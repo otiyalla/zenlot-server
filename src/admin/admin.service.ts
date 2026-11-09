@@ -21,6 +21,8 @@ export interface AdminDeleteUserResult {
     trades: number;
     refreshTokens: number;
   };
+  /** Other users' journals whose link to one of the deleted trades was cleared. */
+  detachedJournals: number;
 }
 
 /** Fields safe to return from admin lookups (never the password hash). */
@@ -53,9 +55,14 @@ export class AdminService {
    * Immediately and permanently deletes a user and every row that belongs to
    * them (journals, trades, refresh tokens) in a single transaction.
    *
+   * The target row is locked with `SELECT ... FOR UPDATE` and its email and
+   * role are checked inside the same transaction, so a concurrent promotion or
+   * email change cannot slip in between the checks and the delete.
+   *
    * `trade.userId` is `ON DELETE RESTRICT`, so the user row cannot be removed
-   * until their trades are gone; all dependent rows are removed explicitly so
-   * the operation does not rely on database cascade rules.
+   * until their trades are gone; dependent rows are removed explicitly. Another
+   * user's journal that links to one of the target's trades is detached
+   * (`tradeId = NULL`) rather than lost to the `journal.tradeId` cascade.
    */
   async hardDeleteUser(
     targetId: number,
@@ -68,48 +75,59 @@ export class AdminService {
       );
     }
 
-    const user = await this.prisma.user.findUnique({
-      where: { id: targetId },
-      select: { id: true, email: true, role: true },
+    const result = await this.prisma.$transaction(async (tx) => {
+      const [user] = await tx.$queryRaw<
+        { id: number; email: string; role: string }[]
+      >`SELECT "id", "email", "role" FROM "user" WHERE "id" = ${targetId} FOR UPDATE`;
+
+      if (!user) {
+        throw new NotFoundException('User not found');
+      }
+
+      if (
+        user.email.trim().toLowerCase() !== confirmEmail.trim().toLowerCase()
+      ) {
+        throw new BadRequestException(
+          'confirmEmail does not match the email of the user being deleted',
+        );
+      }
+
+      if (user.role === (UserRole.ADMIN as string)) {
+        throw new ForbiddenException(
+          'Admin accounts cannot be deleted with this endpoint; demote them first',
+        );
+      }
+
+      const detachedJournals = await tx.journal.updateMany({
+        where: { userId: { not: user.id }, trade: { userId: user.id } },
+        data: { tradeId: null },
+      });
+      const journals = await tx.journal.deleteMany({
+        where: { userId: user.id },
+      });
+      const trades = await tx.trade.deleteMany({ where: { userId: user.id } });
+      const refreshTokens = await tx.refreshToken.deleteMany({
+        where: { userId: user.id },
+      });
+      await tx.user.delete({ where: { id: user.id } });
+
+      return {
+        id: user.id,
+        email: user.email,
+        deleted: {
+          journals: journals.count,
+          trades: trades.count,
+          refreshTokens: refreshTokens.count,
+        },
+        detachedJournals: detachedJournals.count,
+      } satisfies AdminDeleteUserResult;
     });
-
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
-
-    if (user.email.trim().toLowerCase() !== confirmEmail.trim().toLowerCase()) {
-      throw new BadRequestException(
-        'confirmEmail does not match the email of the user being deleted',
-      );
-    }
-
-    if (user.role === (UserRole.ADMIN as string)) {
-      throw new ForbiddenException(
-        'Admin accounts cannot be deleted with this endpoint; demote them first',
-      );
-    }
-
-    const [journals, trades, refreshTokens] = await this.prisma.$transaction([
-      this.prisma.journal.deleteMany({ where: { userId: user.id } }),
-      this.prisma.trade.deleteMany({ where: { userId: user.id } }),
-      this.prisma.refreshToken.deleteMany({ where: { userId: user.id } }),
-      this.prisma.user.delete({ where: { id: user.id } }),
-    ]);
-
-    const result: AdminDeleteUserResult = {
-      id: user.id,
-      email: user.email,
-      deleted: {
-        journals: journals.count,
-        trades: trades.count,
-        refreshTokens: refreshTokens.count,
-      },
-    };
 
     this.logger.warn(
       `Admin ${actor.id} <${actor.email}> hard-deleted user ${result.id} <${result.email}> ` +
         `(journals=${result.deleted.journals}, trades=${result.deleted.trades}, ` +
-        `refreshTokens=${result.deleted.refreshTokens})`,
+        `refreshTokens=${result.deleted.refreshTokens}, ` +
+        `detachedJournals=${result.detachedJournals})`,
     );
 
     return result;
