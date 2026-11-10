@@ -6,6 +6,7 @@ import Redis from 'ioredis';
 import axios from 'axios';
 import { Job } from 'bullmq';
 import { config } from 'src/config/config.constant';
+import { buildRedisOptions, reportRedisErrors } from 'src/config/redis.config';
 
 @Processor('price-feed')
 export class PriceFeedProcessor extends WorkerHost implements OnModuleDestroy {
@@ -14,36 +15,19 @@ export class PriceFeedProcessor extends WorkerHost implements OnModuleDestroy {
 
   constructor(private readonly configService: ConfigService) {
     super();
-    const host = this.configService.get<string>('REDIS_HOST');
-    const port = Number(this.configService.get<string>('REDIS_PORT') ?? 6379);
-    const username = this.configService.get<string>('REDIS_USERNAME');
-    const password = this.configService.get<string>('REDIS_PASSWORD');
-    const tlsEnabled = ['1', 'true', 'yes'].includes(
-      (this.configService.get<string>('REDIS_TLS') ?? '').toLowerCase(),
-    );
-    const rejectUnauthorized =
-      (
-        this.configService.get<string>('REDIS_TLS_REJECT_UNAUTHORIZED') ??
-        'true'
-      ).toLowerCase() !== 'false';
-
     this.publisher = new Redis({
-      host,
-      port,
-      username,
-      password,
-      ...(tlsEnabled ? { tls: { servername: host, rejectUnauthorized } } : {}),
+      ...buildRedisOptions(this.configService),
+      connectionName: 'zenlot:price-feed-publisher',
       keepAlive: 1000,
       lazyConnect: true,
       commandTimeout: 10000,
     });
 
-    this.publisher.on('error', (error) => {
-      this.logger.error('Redis publisher error', error);
-      Sentry.captureException(error, {
-        extra: { context: 'PriceFeedProcessor.publisher' },
-      });
-    });
+    reportRedisErrors(
+      this.publisher,
+      this.logger,
+      'PriceFeedProcessor.publisher',
+    );
   }
 
   async process(job: Job<{ symbol: string }>): Promise<unknown> {

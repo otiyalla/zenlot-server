@@ -15,12 +15,21 @@ import { EvaluationModule } from './evaluation/evaluation.module';
 import { QuoteModule } from './quote/quote.module';
 import { CandleModule } from './candle/candle.module';
 import { mapDatabaseUrl } from './config/database.config';
+import {
+  createBullMqConnections,
+  SharedConnectionWorker,
+} from './config/bullmq-connections';
+import { BullMqConnectionCloser } from './config/bullmq-connection.closer';
 import { FeedbackModule } from './feedback/feedback.module';
 import { AuditModule } from './audit/audit.module';
 import { EmailModule } from './email/email.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { SentryModule, SentryGlobalFilter } from '@sentry/nestjs/setup';
 import { APP_FILTER } from '@nestjs/core';
+
+// Run every @Processor on the shared worker connection (see
+// createBullMqConnections) instead of the queue connection.
+BullModule.workerClass = SharedConnectionWorker;
 
 function getEnvFilePath(): string[] {
   const nodeEnv = process.env.NODE_ENV?.toLowerCase();
@@ -70,27 +79,11 @@ function getEnvFilePath(): string[] {
     BullModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
-        const host = config.get<string>('REDIS_HOST');
-        const port = Number(config.get<string>('REDIS_PORT') ?? 6379);
-        const username = config.get<string>('REDIS_USERNAME');
-        const password = config.get<string>('REDIS_PASSWORD');
-        const tlsEnabled = ['1', 'true', 'yes'].includes(
-          (config.get<string>('REDIS_TLS') ?? '').toLowerCase(),
-        );
-        const rejectUnauthorized =
-          (
-            config.get<string>('REDIS_TLS_REJECT_UNAUTHORIZED') ?? 'true'
-          ).toLowerCase() !== 'false';
-
         return {
-          connection: {
-            host,
-            port,
-            ...{ password, username },
-            ...(tlsEnabled
-              ? { tls: { servername: host, rejectUnauthorized } }
-              : {}),
-          },
+          // Shared queue connection, with the shared worker connection
+          // attached; see createBullMqConnections. Closed by
+          // BullMqConnectionCloser.
+          connection: createBullMqConnections(config),
           defaultJobOptions: {
             attempts: 3,
             removeOnComplete: 1000,
@@ -111,6 +104,7 @@ function getEnvFilePath(): string[] {
   controllers: [AppController],
   providers: [
     AppService,
+    BullMqConnectionCloser,
     {
       provide: APP_FILTER,
       useClass: SentryGlobalFilter,
