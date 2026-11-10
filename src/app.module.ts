@@ -15,6 +15,8 @@ import { EvaluationModule } from './evaluation/evaluation.module';
 import { QuoteModule } from './quote/quote.module';
 import { CandleModule } from './candle/candle.module';
 import { mapDatabaseUrl } from './config/database.config';
+import { createBullMqConnection } from './config/redis.config';
+import { BullMqConnectionCloser } from './config/bullmq-connection.closer';
 import { FeedbackModule } from './feedback/feedback.module';
 import { AuditModule } from './audit/audit.module';
 import { EmailModule } from './email/email.module';
@@ -70,27 +72,10 @@ function getEnvFilePath(): string[] {
     BullModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
-        const host = config.get<string>('REDIS_HOST');
-        const port = Number(config.get<string>('REDIS_PORT') ?? 6379);
-        const username = config.get<string>('REDIS_USERNAME');
-        const password = config.get<string>('REDIS_PASSWORD');
-        const tlsEnabled = ['1', 'true', 'yes'].includes(
-          (config.get<string>('REDIS_TLS') ?? '').toLowerCase(),
-        );
-        const rejectUnauthorized =
-          (
-            config.get<string>('REDIS_TLS_REJECT_UNAUTHORIZED') ?? 'true'
-          ).toLowerCase() !== 'false';
-
         return {
-          connection: {
-            host,
-            port,
-            ...{ password, username },
-            ...(tlsEnabled
-              ? { tls: { servername: host, rejectUnauthorized } }
-              : {}),
-          },
+          // One shared connection for all queues and workers; see
+          // createBullMqConnection. Closed by BullMqConnectionCloser.
+          connection: createBullMqConnection(config),
           defaultJobOptions: {
             attempts: 3,
             removeOnComplete: 1000,
@@ -111,6 +96,7 @@ function getEnvFilePath(): string[] {
   controllers: [AppController],
   providers: [
     AppService,
+    BullMqConnectionCloser,
     {
       provide: APP_FILTER,
       useClass: SentryGlobalFilter,
