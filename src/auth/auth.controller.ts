@@ -17,6 +17,15 @@ import {
   VerifyTokenDto,
 } from './dto/auth.dto';
 import { AuthenticatedRequest } from '../user/interfaces/authenticated-request.interface';
+import { RouteConfig } from '@nestjs/platform-fastify';
+
+// Per-IP cap on the public password-reset routes, overriding the global
+// limiter (main.ts) for these routes only: each request can replace an
+// account's password, so they must not be callable at the general API rate.
+export const PASSWORD_RESET_RATE_LIMIT = {
+  max: 5,
+  timeWindow: '15 minutes',
+};
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -102,6 +111,7 @@ export class AuthController {
 
   @Public()
   @Post('resetpassword')
+  @RouteConfig({ rateLimit: PASSWORD_RESET_RATE_LIMIT })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Reset password with email' })
   @ApiResponse({ status: 200, description: 'Password reset initiated.' })
@@ -119,6 +129,7 @@ export class AuthController {
 
   @Post('forgotpassword')
   @Public()
+  @RouteConfig({ rateLimit: PASSWORD_RESET_RATE_LIMIT })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Send forgot password email' })
   @ApiResponse({ status: 200, description: 'Password recovery email sent.' })

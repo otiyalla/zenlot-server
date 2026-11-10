@@ -1,3 +1,4 @@
+import * as bcrypt from 'bcryptjs';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getQueueToken } from '@nestjs/bullmq';
 import { UserService } from './user.service';
@@ -27,6 +28,7 @@ describe('UserService', () => {
     prisma = {
       user: {
         findUnique: jest.fn(),
+        findFirst: jest.fn().mockResolvedValue(null),
         findUniqueOrThrow: jest.fn(),
         deleteMany: jest.fn(),
         update: jest.fn(),
@@ -533,5 +535,68 @@ describe('UserService', () => {
     expect(audit.log).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'ACCOUNT_DELETION_CANCELLED' }),
     );
+  });
+  describe('email lookups are case-insensitive', () => {
+    const stored = {
+      id: 'user-1',
+      email: 'Jane@Example.com',
+      password: bcrypt.hashSync('secret123', 4),
+      deletedAt: null,
+      rules: { forex: { take_profit: [], stop_loss: [] } },
+    };
+
+    it('uses the canonical form on the unique index first', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        ...stored,
+        email: 'jane@example.com',
+      });
+
+      await service.findByEmail('  JANE@example.COM ');
+
+      expect(prisma.user.findUnique).toHaveBeenCalledWith({
+        where: { email: 'jane@example.com' },
+      });
+      expect(prisma.user.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('falls back to a case-insensitive match for legacy mixed-case rows', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.user.findFirst.mockResolvedValue(stored);
+
+      await expect(service.findByEmail('jane@example.com')).resolves.toBe(
+        stored,
+      );
+      expect(prisma.user.findFirst).toHaveBeenCalledWith({
+        where: { email: { equals: 'jane@example.com', mode: 'insensitive' } },
+      });
+    });
+
+    it('signs in regardless of the casing typed at login', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.user.findFirst.mockResolvedValue(stored);
+
+      const user = await service.validateUser('JANE@EXAMPLE.COM', 'secret123');
+
+      expect(user).toMatchObject({ id: 'user-1' });
+      expect(user).not.toHaveProperty('password');
+    });
+
+    it("treats a re-cased address as the user's own when updating email", async () => {
+      prisma.user.findUnique.mockResolvedValue(stored);
+
+      await expect(
+        service.verifyEmailUpdate('user-1', 'jane@example.com'),
+      ).resolves.toBe(true);
+    });
+
+    it("rejects another account's email in a different case", async () => {
+      prisma.user.findUnique
+        .mockResolvedValueOnce(stored) // the user being updated (by id)
+        .mockResolvedValueOnce({ id: 'user-2', email: 'taken@example.com' });
+
+      await expect(
+        service.verifyEmailUpdate('user-1', 'Taken@Example.com'),
+      ).rejects.toThrow('Email already in use');
+    });
   });
 });

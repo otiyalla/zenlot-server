@@ -22,6 +22,10 @@ import { SocketSessionRegistry } from '../auth/socket-session-registry.service';
 import { isJournalReminderClaimActive } from '../notifications/journal-reminder-lease';
 import { localDateHour } from '../notifications/journal-reminder.service';
 
+// Emails are case-insensitive identifiers. New and updated addresses are
+// stored in this canonical form so lookups stay on the unique index.
+export const normalizeEmail = (email: string) => email.trim().toLowerCase();
+
 @Injectable()
 export class UserService {
   private readonly logger = new Logger(UserService.name);
@@ -74,7 +78,7 @@ export class UserService {
       togglePipValue,
       theme,
     } = user;
-    const userFound = await this.prisma.user.findUnique({ where: { email } });
+    const userFound = await this.findByEmail(email);
     if (userFound)
       throw new NotFoundException('User already exists with this email');
     const salt = await bcrypt.genSalt(10);
@@ -86,7 +90,7 @@ export class UserService {
     const data: Prisma.userCreateInput = {
       fname: fname,
       lname: lname,
-      email: email,
+      email: normalizeEmail(email),
       role: 'trader',
       language: language,
       password: hashed,
@@ -119,7 +123,7 @@ export class UserService {
     email: string,
     password: string,
   ): Promise<AuthenticatedUser | null> {
-    const user = await this.prisma.user.findUnique({ where: { email } });
+    const user = await this.findByEmail(email);
     if (!user) return null;
 
     // Prevent login if account is scheduled for deletion
@@ -229,8 +233,19 @@ export class UserService {
     return updated;
   }
 
+  /**
+   * Case-insensitive email lookup. Tries the canonical (lowercased) form on the
+   * unique index first, then falls back to a case-insensitive match for rows
+   * stored before emails were normalized (e.g. `Jane@Example.com`).
+   */
   async findByEmail(email: string) {
-    return this.prisma.user.findUnique({ where: { email } });
+    const canonical = normalizeEmail(email);
+    return (
+      (await this.prisma.user.findUnique({ where: { email: canonical } })) ??
+      (await this.prisma.user.findFirst({
+        where: { email: { equals: canonical, mode: 'insensitive' } },
+      }))
+    );
   }
 
   async findAll() {
@@ -263,9 +278,10 @@ export class UserService {
   async verifyEmailUpdate(id: string, email: string) {
     const user = await this.prisma.user.findUnique({ where: { id } });
     if (!user) throw new NotFoundException('User not found');
-    if (user.email === email) return true;
-    const userFound = await this.prisma.user.findUnique({ where: { email } });
-    if (userFound) throw new NotFoundException('Email already in use');
+    if (normalizeEmail(user.email) === normalizeEmail(email)) return true;
+    const userFound = await this.findByEmail(email);
+    if (userFound && userFound.id !== id)
+      throw new NotFoundException('Email already in use');
     return true;
   }
 
@@ -374,7 +390,7 @@ export class UserService {
 
     if (dto.fname !== undefined) allowedData.fname = dto.fname;
     if (dto.lname !== undefined) allowedData.lname = dto.lname;
-    if (dto.email !== undefined) allowedData.email = dto.email;
+    if (dto.email !== undefined) allowedData.email = normalizeEmail(dto.email);
     if (dto.language !== undefined) allowedData.language = dto.language;
     if (dto.accountCurrency !== undefined)
       allowedData.accountCurrency = dto.accountCurrency;

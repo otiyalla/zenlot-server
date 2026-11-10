@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-return, @typescript-eslint/require-await */
-import { AuthService } from './auth.service';
+import { AuthService, PASSWORD_RESET_COOLDOWN_MS } from './auth.service';
 import { JwtService, TokenExpiredError } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { UnauthorizedException } from '@nestjs/common';
@@ -777,5 +777,67 @@ describe('AuthService', () => {
       'Jane',
       'fr',
     );
+  });
+  describe('password reset hardening', () => {
+    const account = {
+      id: user.id,
+      email: user.email,
+      fname: 'Jane',
+      language: 'en',
+    };
+
+    beforeEach(() => {
+      userService.resetPassword.mockResolvedValue({ id: user.id });
+      emailService.sendPasswordResentEmail.mockResolvedValue(true);
+    });
+
+    it('answers an unknown email like a sent one, without resetting anything', async () => {
+      userService.findByEmail.mockResolvedValue(null);
+
+      await expect(service.resetPassword('nobody@example.com')).resolves.toBe(
+        true,
+      );
+      await expect(service.forgotPassword('nobody@example.com')).resolves.toBe(
+        true,
+      );
+      expect(userService.resetPassword).not.toHaveBeenCalled();
+      expect(emailService.sendPasswordResentEmail).not.toHaveBeenCalled();
+    });
+
+    it('generates the temporary password from a CSPRNG, not Math.random', async () => {
+      userService.findByEmail.mockResolvedValue(account);
+      const mathRandom = jest.spyOn(Math, 'random');
+
+      await service.resetPassword(user.email);
+
+      expect(mathRandom).not.toHaveBeenCalled();
+      const [, password] = userService.resetPassword.mock.calls[0];
+      expect(password).toMatch(/^tPass[A-Za-z0-9_-]{12}$/);
+      mathRandom.mockRestore();
+    });
+
+    it('resets one address at most once per cooldown, whatever its casing', async () => {
+      userService.findByEmail.mockResolvedValue(account);
+
+      await expect(service.resetPassword(user.email)).resolves.toBe(true);
+      await expect(
+        service.resetPassword(user.email.toUpperCase()),
+      ).resolves.toBe(true);
+
+      expect(userService.resetPassword).toHaveBeenCalledTimes(1);
+      expect(emailService.sendPasswordResentEmail).toHaveBeenCalledTimes(1);
+    });
+
+    it('allows another reset once the cooldown has passed', async () => {
+      jest.useFakeTimers({ now: new Date('2026-11-10T10:00:00Z') });
+      userService.findByEmail.mockResolvedValue(account);
+
+      await service.resetPassword(user.email);
+      jest.setSystemTime(Date.now() + PASSWORD_RESET_COOLDOWN_MS);
+      await service.resetPassword(user.email);
+
+      expect(userService.resetPassword).toHaveBeenCalledTimes(2);
+      jest.useRealTimers();
+    });
   });
 });

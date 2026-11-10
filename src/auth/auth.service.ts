@@ -8,7 +8,7 @@ import {
 import * as Sentry from '@sentry/nestjs';
 import { JsonWebTokenError, JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { UserService } from '../user/user.service';
+import { UserService, normalizeEmail } from '../user/user.service';
 import { EmailService } from '../email/email.service';
 import {
   defaultExpiresIn,
@@ -89,9 +89,15 @@ interface StoredUser {
   isAuthenticated?: boolean;
 }
 
+// A reset replaces the password and revokes every session, so one address can
+// only be reset this often (also bounding how fast a victim can be locked out).
+export const PASSWORD_RESET_COOLDOWN_MS = 15 * 60 * 1000;
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
+  // Canonical email -> last reset time. Per instance, like the IP rate limiter.
+  private readonly lastPasswordResetAt = new Map<string, number>();
 
   constructor(
     private readonly jwtService: JwtService,
@@ -465,14 +471,34 @@ export class AuthService {
     };
   }
 
+  // True while `email` was reset within the cooldown; otherwise records this
+  // reset. Expired entries are pruned so the map stays bounded.
+  private isPasswordResetCoolingDown(email: string): boolean {
+    const now = Date.now();
+    for (const [key, at] of this.lastPasswordResetAt) {
+      if (now - at >= PASSWORD_RESET_COOLDOWN_MS)
+        this.lastPasswordResetAt.delete(key);
+    }
+    if (this.lastPasswordResetAt.has(email)) return true;
+    this.lastPasswordResetAt.set(email, now);
+    return false;
+  }
+
+  /**
+   * Public endpoint: it answers `true` whether or not an account exists (or a
+   * reset is cooling down), so it cannot be used to discover registered emails.
+   */
   async resetPassword(email: string, ipAddress?: string, userAgent?: string) {
     const user = await this.userService.findByEmail(email);
-    if (!user) {
-      throw new NotFoundException('User not found');
+    if (!user) return true;
+    if (this.isPasswordResetCoolingDown(normalizeEmail(user.email))) {
+      this.logger.warn('Password reset skipped: cooldown active');
+      return true;
     }
 
-    const tempPassword = Math.random().toString(36).slice(-9);
-    const newPassword = `tPass${tempPassword}`;
+    // Cryptographically random: Math.random() output is predictable enough
+    // for an attacker resetting their own account to infer the next one.
+    const newPassword = `tPass${randomBytes(9).toString('base64url')}`;
     this.logger.log(`Password reset for ${email}`);
     const updatedUser = await this.userService.resetPassword(
       user.id,
@@ -501,9 +527,8 @@ export class AuthService {
 
   async forgotPassword(email: string, ipAddress?: string, userAgent?: string) {
     const user = await this.userService.findByEmail(email);
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
+    // Same answer as a real reset; see resetPassword.
+    if (!user) return true;
     // Here you would typically send an email with a reset link
     this.analytics.trackPasswordResetRequested(user.id);
     const res = await this.resetPassword(email, ipAddress, userAgent);
