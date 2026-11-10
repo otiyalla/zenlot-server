@@ -11,6 +11,7 @@ import { Public } from '../custom_decorator/public.decorator'; // Adjust the imp
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { CreateUserDto } from '../user/dto/create-user.dto';
 import {
+  ConfirmPasswordResetDto,
   EmailDto,
   RefreshTokenDto,
   SignInDto,
@@ -19,11 +20,18 @@ import {
 import { AuthenticatedRequest } from '../user/interfaces/authenticated-request.interface';
 import { RouteConfig } from '@nestjs/platform-fastify';
 
-// Per-IP cap on the public password-reset routes, overriding the global
-// limiter (main.ts) for these routes only: each request can replace an
-// account's password, so they must not be callable at the general API rate.
+// Per-IP cap on the public routes that email a reset link, overriding the
+// global limiter (main.ts) for these routes only: each request sends an email
+// to an arbitrary address, so they must not be callable at the general API rate.
 export const PASSWORD_RESET_RATE_LIMIT = {
   max: 5,
+  timeWindow: '15 minutes',
+};
+
+// Per-IP cap on redeeming reset links. Tokens are unguessable (256 bits); this
+// just keeps the public route from being hammered.
+export const PASSWORD_RESET_CONFIRM_RATE_LIMIT = {
+  max: 10,
   timeWindow: '15 minutes',
 };
 
@@ -113,15 +121,18 @@ export class AuthController {
   @Post('resetpassword')
   @RouteConfig({ rateLimit: PASSWORD_RESET_RATE_LIMIT })
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Reset password with email' })
-  @ApiResponse({ status: 200, description: 'Password reset initiated.' })
+  @ApiOperation({ summary: 'Email a password reset link' })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Always true: a reset link is emailed if an account exists for the address.',
+  })
   async resetPassword(
     @Body() body: EmailDto,
     @Request() req: AuthenticatedRequest,
   ) {
-    const email = body.email;
-    return this.authService.resetPassword(
-      email,
+    return this.authService.requestPasswordReset(
+      body.email,
       req.ip,
       req.headers['user-agent'],
     );
@@ -131,15 +142,43 @@ export class AuthController {
   @Public()
   @RouteConfig({ rateLimit: PASSWORD_RESET_RATE_LIMIT })
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Send forgot password email' })
-  @ApiResponse({ status: 200, description: 'Password recovery email sent.' })
+  @ApiOperation({ summary: 'Email a password reset link (alias)' })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Always true: a reset link is emailed if an account exists for the address.',
+  })
   async forgotPassword(
     @Body() body: EmailDto,
     @Request() req: AuthenticatedRequest,
   ) {
-    const { email } = body;
-    return this.authService.forgotPassword(
-      email,
+    return this.authService.requestPasswordReset(
+      body.email,
+      req.ip,
+      req.headers['user-agent'],
+    );
+  }
+
+  @Public()
+  @Post('resetpassword/confirm')
+  @RouteConfig({ rateLimit: PASSWORD_RESET_CONFIRM_RATE_LIMIT })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Set a new password with a reset link token' })
+  @ApiResponse({
+    status: 200,
+    description: 'Password changed; every session is signed out.',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'The link is invalid, already used, or expired.',
+  })
+  async confirmPasswordReset(
+    @Body() body: ConfirmPasswordResetDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.authService.confirmPasswordReset(
+      body.token,
+      body.password,
       req.ip,
       req.headers['user-agent'],
     );

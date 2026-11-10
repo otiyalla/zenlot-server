@@ -1,7 +1,7 @@
 import * as bcrypt from 'bcryptjs';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getQueueToken } from '@nestjs/bullmq';
-import { UserService } from './user.service';
+import { InvalidPasswordResetTokenError, UserService } from './user.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { UserGateway } from './user.gateway';
 import { AuditService } from '../audit/audit.service';
@@ -402,32 +402,94 @@ describe('UserService', () => {
     expect(prisma.notificationPreference.updateMany).not.toHaveBeenCalled();
   });
 
-  it('revokes existing refresh tokens after a password reset', async () => {
-    const prisma = {
-      user: {
-        update: jest.fn().mockResolvedValue({ id: 'user-1', authVersion: 4 }),
-      },
-      refreshToken: { updateMany: jest.fn().mockResolvedValue({ count: 2 }) },
-      $transaction: jest
-        .fn()
-        .mockImplementation(async (callback: any) => callback(prisma)),
+  describe('resetPassword', () => {
+    const buildPrisma = (resetTokenCount = 1) => {
+      const prisma = {
+        user: {
+          update: jest.fn().mockResolvedValue({ id: 'user-1', authVersion: 4 }),
+        },
+        refreshToken: {
+          updateMany: jest.fn().mockResolvedValue({ count: 2 }),
+        },
+        passwordResetToken: {
+          updateMany: jest
+            .fn()
+            .mockResolvedValueOnce({ count: resetTokenCount })
+            .mockResolvedValue({ count: 0 }),
+        },
+        $transaction: jest
+          .fn()
+          .mockImplementation(async (callback: any) => callback(prisma)),
+      };
+      (service as any).prisma = prisma;
+      return prisma;
     };
-    (service as any).prisma = prisma;
 
-    await service.resetPassword('user-1', 'new-password');
+    it('revokes existing refresh tokens and spends outstanding reset links', async () => {
+      const prisma = buildPrisma();
 
-    expect(prisma.user.update).toHaveBeenCalledWith({
-      where: { id: 'user-1' },
-      data: {
-        password: expect.any(String),
-        authVersion: { increment: 1 },
-      },
+      await service.resetPassword('user-1', 'new-password');
+
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'user-1' },
+        data: {
+          password: expect.any(String),
+          authVersion: { increment: 1 },
+        },
+      });
+      expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+        where: { userId: 'user-1', isRevoked: false },
+        data: { isRevoked: true, revokedAt: expect.any(Date) },
+      });
+      // Without a reset token, only the "spend every outstanding link" update.
+      expect(prisma.passwordResetToken.updateMany).toHaveBeenCalledTimes(1);
+      expect(prisma.passwordResetToken.updateMany).toHaveBeenCalledWith({
+        where: { userId: 'user-1', usedAt: null },
+        data: { usedAt: expect.any(Date) },
+      });
+      expect(socketSessions.advanceAuthVersion).toHaveBeenCalledWith(
+        'user-1',
+        4,
+      );
     });
-    expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
-      where: { userId: 'user-1', isRevoked: false },
-      data: { isRevoked: true, revokedAt: expect.any(Date) },
+
+    it('spends the given reset link before changing the password', async () => {
+      const prisma = buildPrisma(1);
+
+      await service.resetPassword('user-1', 'new-password', {
+        resetTokenHash: 'hash-1',
+      });
+
+      expect(prisma.passwordResetToken.updateMany).toHaveBeenNthCalledWith(1, {
+        where: {
+          tokenHash: 'hash-1',
+          userId: 'user-1',
+          usedAt: null,
+          expiresAt: { gt: expect.any(Date) },
+        },
+        data: { usedAt: expect.any(Date) },
+      });
+      expect(
+        prisma.passwordResetToken.updateMany.mock.invocationCallOrder[0],
+      ).toBeLessThan(prisma.user.update.mock.invocationCallOrder[0]);
+      expect(socketSessions.advanceAuthVersion).toHaveBeenCalledWith(
+        'user-1',
+        4,
+      );
     });
-    expect(socketSessions.advanceAuthVersion).toHaveBeenCalledWith('user-1', 4);
+
+    it('rejects a reset link that was already spent, without changing anything', async () => {
+      const prisma = buildPrisma(0);
+
+      await expect(
+        service.resetPassword('user-1', 'new-password', {
+          resetTokenHash: 'hash-1',
+        }),
+      ).rejects.toBeInstanceOf(InvalidPasswordResetTokenError);
+      expect(prisma.user.update).not.toHaveBeenCalled();
+      expect(prisma.refreshToken.updateMany).not.toHaveBeenCalled();
+      expect(socketSessions.advanceAuthVersion).not.toHaveBeenCalled();
+    });
   });
 
   it('fails the password reset when refresh-token revocation fails', async () => {
@@ -437,6 +499,7 @@ describe('UserService', () => {
       refreshToken: {
         updateMany: jest.fn().mockRejectedValue(revocationError),
       },
+      passwordResetToken: { updateMany: jest.fn() },
       $transaction: jest
         .fn()
         .mockImplementation(async (callback: any) => callback(prisma)),

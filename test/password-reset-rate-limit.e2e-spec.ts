@@ -5,6 +5,7 @@ import {
 } from '@nestjs/platform-fastify';
 import {
   AuthController,
+  PASSWORD_RESET_CONFIRM_RATE_LIMIT,
   PASSWORD_RESET_RATE_LIMIT,
 } from '../src/auth/auth.controller';
 import { AuthService } from '../src/auth/auth.service';
@@ -14,16 +15,16 @@ import { AuthService } from '../src/auth/auth.service';
 jest.mock('../src/auth/auth.service', () => ({ AuthService: class {} }));
 
 /**
- * The public password-reset routes replace an account's password, so they carry
- * a much stricter per-IP limit than the global limiter (src/main.ts), via
- * route-level config on the real AuthController. The service is stubbed: only
- * the routing + limiter wiring is under test.
+ * The public password-reset routes email arbitrary addresses (and redeem reset
+ * links), so they carry a much stricter per-IP limit than the global limiter
+ * (src/main.ts), via route-level config on the real AuthController. The service
+ * is stubbed: only the routing + limiter wiring is under test.
  */
 describe('Password reset rate limiting (e2e)', () => {
   let app: NestFastifyApplication;
   const authService = {
-    resetPassword: jest.fn().mockResolvedValue(true),
-    forgotPassword: jest.fn().mockResolvedValue(true),
+    requestPasswordReset: jest.fn().mockResolvedValue(true),
+    confirmPasswordReset: jest.fn().mockResolvedValue(true),
     signin: jest.fn().mockResolvedValue({ ok: true }),
   };
 
@@ -57,7 +58,7 @@ describe('Password reset rate limiting (e2e)', () => {
       method: 'POST',
       url,
       headers: { 'x-forwarded-for': ip },
-      payload: { email: 'jane@example.com', password: 'pw' },
+      payload: { email: 'jane@example.com', password: 'pw', token: 't' },
     });
 
   it.each(['/auth/resetpassword', '/auth/forgotpassword'])(
@@ -72,6 +73,15 @@ describe('Password reset rate limiting (e2e)', () => {
       expect((await post(url, '10.0.0.99')).statusCode).toBe(200);
     },
   );
+
+  it('caps reset link redemption per IP at its own limit', async () => {
+    const url = '/auth/resetpassword/confirm';
+    for (let i = 0; i < PASSWORD_RESET_CONFIRM_RATE_LIMIT.max; i += 1) {
+      expect((await post(url, '10.0.0.4')).statusCode).toBe(200);
+    }
+    expect((await post(url, '10.0.0.4')).statusCode).toBe(429);
+    expect((await post(url, '10.0.0.98')).statusCode).toBe(200);
+  });
 
   it('leaves other auth routes on the general limit', async () => {
     for (let i = 0; i < PASSWORD_RESET_RATE_LIMIT.max + 3; i += 1) {

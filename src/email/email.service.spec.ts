@@ -125,42 +125,105 @@ describe('EmailService', () => {
     expect(message.html).toContain('Welcome to Zenlot, John!');
   });
 
-  it('sendPasswordResentEmail sends Spanish content for es language', async () => {
-    const result = await service.sendPasswordResentEmail(
+  it('sendPasswordResetLinkEmail links to the app reset screen with the token', async () => {
+    const result = await service.sendPasswordResetLinkEmail(
       'user@example.com',
-      'tPass123456',
+      'tok_en-123',
       'John',
-      'es',
+      'en',
+      30,
     );
 
     expect(result).toBe(true);
     expect(transport.send).toHaveBeenCalledTimes(1);
-
     const message = transport.send.mock.calls[0][0];
-    expect(message.subject).toBe(
-      'Confirmación de restablecimiento de contraseña - Zenlot',
-    );
+    expect(message.to).toBe('user@example.com');
+    expect(message.subject).toBe('Reset your Zenlot password');
+    // APP_URL is unset: the zenlot:// custom scheme.
     expect(message.html).toContain(
-      'Tu contraseña se ha <strong>restablecido correctamente</strong>',
+      'href="zenlot://newpassword?token=tok_en-123"',
+    );
+    expect(message.html).toContain('expires in 30 minutes');
+    // No password ever goes out by email.
+    expect(message.html).not.toMatch(/tPass/);
+  });
+
+  it('sendPasswordResetLinkEmail joins an https APP_URL without a double slash', async () => {
+    (configService.get as jest.Mock).mockImplementation((key: string) =>
+      key === 'APP_URL'
+        ? 'https://zenlot.app/'
+        : key === 'EMAIL_FROM'
+          ? 'noreply@zenlot.app'
+          : undefined,
+    );
+
+    await service.sendPasswordResetLinkEmail(
+      'user@example.com',
+      'abc',
+      'John',
+      'en',
+      30,
+    );
+
+    expect(transport.send.mock.calls[0][0].html).toContain(
+      'href="https://zenlot.app/newpassword?token=abc"',
     );
   });
 
-  it('sendPasswordResentEmail falls back to English for unsupported language', async () => {
-    const result = await service.sendPasswordResentEmail(
+  it('sendPasswordResetLinkEmail sends Spanish content for es language', async () => {
+    await service.sendPasswordResetLinkEmail(
       'user@example.com',
-      'tPass123456',
+      'abc',
       'John',
-      'de',
+      'es',
+      30,
     );
-
-    expect(result).toBe(true);
-    expect(transport.send).toHaveBeenCalledTimes(1);
 
     const message = transport.send.mock.calls[0][0];
-    expect(message.subject).toBe('Password Reset Confirmation - Zenlot');
-    expect(message.html).toContain(
-      'Your password has been <strong>successfully reset</strong>',
+    expect(message.subject).toBe('Restablece tu contraseña de Zenlot');
+    expect(message.html).toContain('Elegir una nueva contraseña');
+  });
+
+  it('sendPasswordResetLinkEmail falls back to English for unsupported language', async () => {
+    await service.sendPasswordResetLinkEmail(
+      'user@example.com',
+      'abc',
+      'John',
+      'de',
+      30,
     );
+
+    expect(transport.send.mock.calls[0][0].subject).toBe(
+      'Reset your Zenlot password',
+    );
+  });
+
+  it('sendPasswordResetLinkEmail escapes the account name', async () => {
+    await service.sendPasswordResetLinkEmail(
+      'user@example.com',
+      'abc',
+      '<img src=x onerror=alert(1)>',
+      'en',
+      30,
+    );
+
+    const { html } = transport.send.mock.calls[0][0];
+    expect(html).not.toContain('<img');
+    expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');
+  });
+
+  it('sendPasswordResetLinkEmail reports a transport failure as false', async () => {
+    transport.send.mockRejectedValue(new Error('smtp down'));
+
+    await expect(
+      service.sendPasswordResetLinkEmail(
+        'user@example.com',
+        'abc',
+        'John',
+        'en',
+        30,
+      ),
+    ).resolves.toBe(false);
   });
 
   it('escapes untrusted feedback fields before inserting them into HTML', async () => {

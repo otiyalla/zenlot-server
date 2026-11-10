@@ -2,7 +2,8 @@ import { resolveSupportedEmailLanguage } from './language.util';
 
 type BuildPasswordResetTemplateParams = {
   fname: string;
-  password: string;
+  resetUrl: string;
+  expiresInMinutes: number;
   language: string;
   supportEmail: string;
 };
@@ -12,9 +13,26 @@ type PasswordResetTemplate = {
   html: string;
 };
 
+const HTML_ESCAPE_MAP: Record<string, string> = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+};
+
+const escapeHtml = (value: string) =>
+  value.replace(/[&<>"']/g, (character) => HTML_ESCAPE_MAP[character]);
+
+/**
+ * Emails a single-use link that opens the app's "set a new password" screen.
+ * Nothing about the account changes until the link is used, so the copy tells
+ * the recipient they can safely ignore an email they didn't ask for.
+ */
 export const buildPasswordResetTemplate = ({
   fname,
-  password,
+  resetUrl,
+  expiresInMinutes,
   language,
   supportEmail,
 }: BuildPasswordResetTemplateParams): PasswordResetTemplate => {
@@ -22,44 +40,51 @@ export const buildPasswordResetTemplate = ({
 
   const copyByLanguage = {
     en: {
-      subject: 'Password Reset Confirmation - Zenlot',
-      headline: '🔐 Password Reset',
+      subject: 'Reset your Zenlot password',
+      headline: '🔐 Reset your password',
       greeting: 'Hello',
       resetMessage:
-        'Your password has been <strong>successfully reset</strong>. Please use the temporary password below to sign in:',
-      recommendation:
-        'For your security, we strongly recommend you change this password as soon as you sign in.',
+        'We received a request to reset the password for your Zenlot account. Open the link below on the device where Zenlot is installed to choose a new password:',
+      button: 'Set a new password',
+      expiry: `This link expires in ${expiresInMinutes} minutes and can only be used once.`,
+      fallback: "If the button doesn't work, copy this link into your browser:",
       warning:
-        'If you did <strong>not</strong> request this password reset, please contact our support team immediately at',
+        "If you didn't request this, you can ignore this email: your password stays the same. If you keep receiving these emails, contact us at",
       footer: 'Thank you for choosing Zenlot.',
     },
     fr: {
-      subject: 'Confirmation de reinitialisation du mot de passe - Zenlot',
-      headline: '🔐 Reinitialisation du mot de passe',
+      subject: 'Réinitialisez votre mot de passe Zenlot',
+      headline: '🔐 Réinitialisez votre mot de passe',
       greeting: 'Bonjour',
       resetMessage:
-        'Votre mot de passe a ete <strong>reinitialise avec succes</strong>. Veuillez utiliser le mot de passe temporaire ci-dessous pour vous connecter :',
-      recommendation:
-        'Pour votre securite, nous vous recommandons fortement de changer ce mot de passe des votre connexion.',
+        'Nous avons reçu une demande de réinitialisation du mot de passe de votre compte Zenlot. Ouvrez le lien ci-dessous sur l’appareil où Zenlot est installé pour choisir un nouveau mot de passe :',
+      button: 'Choisir un nouveau mot de passe',
+      expiry: `Ce lien expire dans ${expiresInMinutes} minutes et ne peut être utilisé qu’une seule fois.`,
+      fallback:
+        'Si le bouton ne fonctionne pas, copiez ce lien dans votre navigateur :',
       warning:
-        "Si vous n'avez <strong>pas</strong> demande cette reinitialisation de mot de passe, veuillez contacter immediatement notre equipe support a",
-      footer: "Merci d'utiliser Zenlot.",
+        'Si vous n’êtes pas à l’origine de cette demande, ignorez cet e-mail : votre mot de passe reste inchangé. Si vous continuez à recevoir ces e-mails, contactez-nous à',
+      footer: 'Merci d’utiliser Zenlot.',
     },
     es: {
-      subject: 'Confirmación de restablecimiento de contraseña - Zenlot',
-      headline: '🔐 Restablecimiento de contraseña',
+      subject: 'Restablece tu contraseña de Zenlot',
+      headline: '🔐 Restablece tu contraseña',
       greeting: 'Hola',
       resetMessage:
-        'Tu contraseña se ha <strong>restablecido correctamente</strong>. Usa la contraseña temporal a continuación para iniciar sesión:',
-      recommendation:
-        'Por tu seguridad, te recomendamos encarecidamente cambiar esta contraseña en cuanto inicies sesión.',
+        'Recibimos una solicitud para restablecer la contraseña de tu cuenta de Zenlot. Abre el siguiente enlace en el dispositivo donde tienes instalado Zenlot para elegir una nueva contraseña:',
+      button: 'Elegir una nueva contraseña',
+      expiry: `Este enlace caduca en ${expiresInMinutes} minutos y solo se puede usar una vez.`,
+      fallback: 'Si el botón no funciona, copia este enlace en tu navegador:',
       warning:
-        'Si <strong>no</strong> solicitaste este restablecimiento de contraseña, contacta a nuestro equipo de soporte de inmediato en',
+        'Si no solicitaste esto, puedes ignorar este correo: tu contraseña no cambia. Si sigues recibiendo estos correos, contáctanos en',
       footer: 'Gracias por elegir Zenlot.',
     },
   };
 
   const copy = copyByLanguage[supportedLanguage];
+  const safeName = escapeHtml(fname);
+  const safeUrl = escapeHtml(resetUrl);
+  const safeSupport = escapeHtml(supportEmail);
 
   const html = `
       <!-- Header -->
@@ -72,37 +97,40 @@ export const buildPasswordResetTemplate = ({
           <!-- Body -->
           <div style="font-family:Arial, sans-serif; color:#444444; padding:24px; background-color:#ffffff; border-radius:8px; margin-top:16px;">
             <p style="font-size:16px; margin:0;">
-              ${copy.greeting} <strong>${fname}</strong>,
+              ${copy.greeting} <strong>${safeName}</strong>,
             </p>
 
             <p style="font-size:16px; margin-top:12px;">
               ${copy.resetMessage}
             </p>
 
-            <div style="margin:16px 0; text-align:center;">
-              <span style="
+            <div style="margin:24px 0; text-align:center;">
+              <a href="${safeUrl}" style="
                 display:inline-block;
-                background-color:#eef3fa;
-                color:#2a2a2a;
-                padding:12px 20px;
-                font-size:18px;
+                background-color:#1A73E8;
+                color:#ffffff;
+                padding:12px 24px;
+                font-size:16px;
                 font-weight:bold;
                 border-radius:6px;
-                letter-spacing:1px;
-              ">
-                ${password}
-              </span>
+                text-decoration:none;
+              ">${copy.button}</a>
             </div>
 
-            <p style="font-size:16px; margin-top:12px;">
-              ${copy.recommendation}
+            <p style="font-size:14px; margin-top:12px;">
+              ${copy.expiry}
+            </p>
+
+            <p style="font-size:13px; color:#666666; margin-top:12px; word-break:break-all;">
+              ${copy.fallback}<br />
+              <a href="${safeUrl}" style="color:#1A73E8;">${safeUrl}</a>
             </p>
 
             <hr style="border:none; border-top:1px solid #e0e0e0; margin:24px 0;" />
 
             <p style="font-size:14px; color:#888888;">
               ${copy.warning}
-              <a href="mailto:${supportEmail}" style="color:#1A73E8;">${supportEmail}</a>.
+              <a href="mailto:${safeSupport}" style="color:#1A73E8;">${safeSupport}</a>.
             </p>
           </div>
 

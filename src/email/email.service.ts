@@ -13,6 +13,9 @@ import {
   buildWelcomeTemplate,
 } from './templates';
 
+// App route (expo-router) that redeems a password-reset token.
+export const PASSWORD_RESET_APP_PATH = 'newpassword';
+
 const HTML_ESCAPE_MAP: Record<string, string> = {
   '&': '&amp;',
   '<': '&lt;',
@@ -348,22 +351,29 @@ export class EmailService {
     }
   }
 
-  async sendPasswordResentEmail(
+  /**
+   * Emails a single-use link to the app's "set a new password" screen
+   * (`<APP_URL>newpassword?token=…`). The token is the only credential in the
+   * link; nothing about the account changes until it is redeemed.
+   */
+  async sendPasswordResetLinkEmail(
     email: string,
-    password: string,
+    token: string,
     fname: string,
     language: string,
+    expiresInMinutes: number,
   ): Promise<boolean> {
-    const supportEmail = this.getSupportEmail();
     try {
+      const supportEmail = this.getSupportEmail();
       const template = buildPasswordResetTemplate({
         fname,
-        password,
+        resetUrl: this.buildAppLink(PASSWORD_RESET_APP_PATH, { token }),
+        expiresInMinutes,
         language,
         supportEmail,
       });
 
-      const emailOptions = {
+      const emailOptions: EmailMessage = {
         from: this.getFromEmail(),
         to: email,
         subject: template.subject,
@@ -371,14 +381,22 @@ export class EmailService {
       };
       await this.transport.send(emailOptions);
 
-      this.logger.log(`Password reset email sent to ${email}`);
+      this.logger.log('Password reset link email sent');
       return true;
     } catch (error) {
-      this.logger.error('Failed to send password reset email', error);
+      this.logger.error('Failed to send password reset link email', error);
       Sentry.captureException(error, {
-        extra: { email, context: 'sendPasswordResentEmail' },
+        extra: { context: 'sendPasswordResetLinkEmail' },
       });
       return false;
     }
+  }
+
+  /** `APP_URL` joined with an app route, e.g. `zenlot://newpassword?token=…`. */
+  private buildAppLink(path: string, params: Record<string, string>): string {
+    const base = this.getAppUrl();
+    const separator = base.endsWith('/') ? '' : '/';
+    const query = new URLSearchParams(params).toString();
+    return `${base}${separator}${path}?${query}`;
   }
 }

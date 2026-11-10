@@ -9,6 +9,9 @@ describe('RefreshTokenCleanupProcessor', () => {
   const setup = () => {
     const prisma = {
       refreshToken: { deleteMany: jest.fn().mockResolvedValue({ count: 4 }) },
+      passwordResetToken: {
+        deleteMany: jest.fn().mockResolvedValue({ count: 2 }),
+      },
     };
     const queue = { add: jest.fn().mockResolvedValue(undefined) };
     const processor = new RefreshTokenCleanupProcessor(
@@ -47,5 +50,20 @@ describe('RefreshTokenCleanupProcessor', () => {
     expect(Object.keys(where)).toEqual(['expiresAt']);
     expect(where.expiresAt.lt.getTime()).toBeGreaterThanOrEqual(before);
     expect(where.expiresAt.lt.getTime()).toBeLessThanOrEqual(Date.now());
+  });
+
+  it('also deletes only password reset links past their expiry', async () => {
+    const { prisma, processor } = setup();
+
+    await processor.process();
+
+    expect(prisma.passwordResetToken.deleteMany).toHaveBeenCalledTimes(1);
+    const [{ where }] = prisma.passwordResetToken.deleteMany.mock.calls[0] as [
+      { where: { expiresAt: { lt: Date } } },
+    ];
+    expect(Object.keys(where)).toEqual(['expiresAt']);
+    const [{ where: refreshWhere }] = prisma.refreshToken.deleteMany.mock
+      .calls[0] as [{ where: { expiresAt: { lt: Date } } }];
+    expect(where.expiresAt.lt).toBe(refreshWhere.expiresAt.lt);
   });
 });
