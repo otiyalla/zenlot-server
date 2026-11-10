@@ -15,7 +15,10 @@ import { EvaluationModule } from './evaluation/evaluation.module';
 import { QuoteModule } from './quote/quote.module';
 import { CandleModule } from './candle/candle.module';
 import { mapDatabaseUrl } from './config/database.config';
-import { createBullMqConnection } from './config/redis.config';
+import {
+  createBullMqConnections,
+  SharedConnectionWorker,
+} from './config/bullmq-connections';
 import { BullMqConnectionCloser } from './config/bullmq-connection.closer';
 import { FeedbackModule } from './feedback/feedback.module';
 import { AuditModule } from './audit/audit.module';
@@ -23,6 +26,10 @@ import { EmailModule } from './email/email.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { SentryModule, SentryGlobalFilter } from '@sentry/nestjs/setup';
 import { APP_FILTER } from '@nestjs/core';
+
+// Run every @Processor on the shared worker connection (see
+// createBullMqConnections) instead of the queue connection.
+BullModule.workerClass = SharedConnectionWorker;
 
 function getEnvFilePath(): string[] {
   const nodeEnv = process.env.NODE_ENV?.toLowerCase();
@@ -73,9 +80,10 @@ function getEnvFilePath(): string[] {
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
         return {
-          // One shared connection for all queues and workers; see
-          // createBullMqConnection. Closed by BullMqConnectionCloser.
-          connection: createBullMqConnection(config),
+          // Shared queue connection, with the shared worker connection
+          // attached; see createBullMqConnections. Closed by
+          // BullMqConnectionCloser.
+          connection: createBullMqConnections(config),
           defaultJobOptions: {
             attempts: 3,
             removeOnComplete: 1000,

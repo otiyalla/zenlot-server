@@ -3,11 +3,7 @@ import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as Sentry from '@sentry/nestjs';
 import Redis from 'ioredis';
-import {
-  buildRedisOptions,
-  createBullMqConnection,
-  reportRedisErrors,
-} from './redis.config';
+import { buildRedisOptions, reportRedisErrors } from './redis.config';
 
 jest.mock('@sentry/nestjs', () => ({ captureException: jest.fn() }));
 
@@ -79,21 +75,6 @@ describe('redis config', () => {
         servername: 'redis.example.com',
         rejectUnauthorized: false,
       });
-    });
-  });
-
-  describe('createBullMqConnection', () => {
-    it('returns a named ioredis instance that BullMQ workers can share', () => {
-      const connection = createBullMqConnection(
-        configWith({ REDIS_HOST: '127.0.0.1', REDIS_PORT: '1' }),
-      );
-      try {
-        expect(connection).toBeInstanceOf(Redis);
-        expect(connection.options.maxRetriesPerRequest).toBeNull();
-        expect(connection.options.connectionName).toBe('zenlot:bullmq');
-      } finally {
-        connection.disconnect();
-      }
     });
   });
 

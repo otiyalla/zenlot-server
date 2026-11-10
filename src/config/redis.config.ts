@@ -33,25 +33,6 @@ export function buildRedisOptions(config: ConfigService): RedisOptions {
 }
 
 /**
- * The single connection every BullMQ queue and worker shares.
- *
- * Without it each Queue opens its own connection and each Worker opens two,
- * which added up to more than the 30 connections the Redis Cloud plan allows.
- * Workers still open their own blocking connection (BullMQ duplicates this
- * one for that). BullMQ requires maxRetriesPerRequest: null on a connection
- * that workers use.
- */
-export function createBullMqConnection(config: ConfigService): Redis {
-  const connection = new Redis({
-    ...buildRedisOptions(config),
-    connectionName: 'zenlot:bullmq',
-    maxRetriesPerRequest: null,
-  });
-  reportRedisErrors(connection, new Logger('BullMQConnection'), 'BullMQ');
-  return connection;
-}
-
-/**
  * Reports a Redis client's errors to Sentry once per outage instead of once
  * per reconnect attempt. ioredis retries about every 2 seconds, so a refused
  * connection otherwise floods Sentry (NODE-NESTJS-2N logged 497 events in
