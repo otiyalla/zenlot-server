@@ -8,7 +8,11 @@ import {
 import * as Sentry from '@sentry/nestjs';
 import { JsonWebTokenError, JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { UserService } from '../user/user.service';
+import {
+  InvalidPasswordResetTokenError,
+  UserService,
+  normalizeEmail,
+} from '../user/user.service';
 import { EmailService } from '../email/email.service';
 import {
   defaultExpiresIn,
@@ -89,9 +93,23 @@ interface StoredUser {
   isAuthenticated?: boolean;
 }
 
+// One reset email per address per cooldown, so the public reset routes can't be
+// used to flood someone's inbox.
+export const PASSWORD_RESET_COOLDOWN_MS = 15 * 60 * 1000;
+
+// How long an emailed reset link stays redeemable.
+export const PASSWORD_RESET_TOKEN_TTL_MS = 30 * 60 * 1000;
+// 256 bits of entropy: the link is a bearer credential for the account.
+const PASSWORD_RESET_TOKEN_BYTES = 32;
+// Only the hash is stored, so the table can't be replayed into working links.
+export const hashPasswordResetToken = (token: string) =>
+  createHash('sha256').update(token).digest('hex');
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
+  // Canonical email -> last reset request. Per instance, like the IP limiter.
+  private readonly lastPasswordResetAt = new Map<string, number>();
 
   constructor(
     private readonly jwtService: JwtService,
@@ -465,49 +483,126 @@ export class AuthService {
     };
   }
 
-  async resetPassword(email: string, ipAddress?: string, userAgent?: string) {
+  // True while `email` was reset within the cooldown; otherwise records this
+  // reset. Expired entries are pruned so the map stays bounded.
+  private isPasswordResetCoolingDown(email: string): boolean {
+    const now = Date.now();
+    for (const [key, at] of this.lastPasswordResetAt) {
+      if (now - at >= PASSWORD_RESET_COOLDOWN_MS)
+        this.lastPasswordResetAt.delete(key);
+    }
+    if (this.lastPasswordResetAt.has(email)) return true;
+    this.lastPasswordResetAt.set(email, now);
+    return false;
+  }
+
+  /**
+   * Public endpoint (`auth/resetpassword`, `auth/forgotpassword`): emails a
+   * single-use reset link. Nothing about the account changes here: the current
+   * password and sessions stay valid until the link is redeemed.
+   *
+   * It answers `true` whether or not an account exists (or a reset is cooling
+   * down), so it cannot be used to discover registered emails. The email is
+   * sent in the background, after the token is stored, so the response time
+   * doesn't reveal it either.
+   */
+  async requestPasswordReset(
+    email: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<true> {
     const user = await this.userService.findByEmail(email);
-    if (!user) {
-      throw new NotFoundException('User not found');
+    if (!user) return true;
+    const cooldownKey = normalizeEmail(user.email);
+    if (this.isPasswordResetCoolingDown(cooldownKey)) {
+      this.logger.warn('Password reset skipped: cooldown active');
+      return true;
     }
 
-    const tempPassword = Math.random().toString(36).slice(-9);
-    const newPassword = `tPass${tempPassword}`;
-    this.logger.log(`Password reset for ${email}`);
-    const updatedUser = await this.userService.resetPassword(
-      user.id,
-      newPassword,
-    );
-    if (!updatedUser) {
-      throw new NotFoundException('Could not update password');
+    const token = randomBytes(PASSWORD_RESET_TOKEN_BYTES).toString('base64url');
+    const expiresAt = new Date(Date.now() + PASSWORD_RESET_TOKEN_TTL_MS);
+    try {
+      // One live link per account: a new request replaces older ones.
+      await this.prisma.$transaction(async (tx) => {
+        await tx.passwordResetToken.deleteMany({ where: { userId: user.id } });
+        await tx.passwordResetToken.create({
+          data: {
+            userId: user.id,
+            tokenHash: hashPasswordResetToken(token),
+            expiresAt,
+          },
+        });
+      });
+    } catch (error) {
+      this.lastPasswordResetAt.delete(cooldownKey);
+      throw error;
     }
-    this.analytics.trackPasswordReset(user.id);
-    const emailSent = await this.emailService.sendPasswordResentEmail(
-      email,
-      newPassword,
-      user.fname,
-      user.language,
-    );
+
+    this.analytics.trackPasswordResetRequested(user.id);
     void this.auditService.log({
       userId: user.id,
-      action: 'PASSWORD_RESET_SUCCESS',
+      action: 'PASSWORD_RESET_REQUESTED',
       resource: 'auth',
       resourceId: user.id,
       ipAddress,
       userAgent,
     });
-    return emailSent;
+    void this.emailService
+      .sendPasswordResetLinkEmail(
+        user.email,
+        token,
+        user.fname,
+        user.language,
+        PASSWORD_RESET_TOKEN_TTL_MS / 60_000,
+      )
+      .then((sent) => {
+        // Let the user ask again right away rather than wait out the cooldown
+        // for an email that never left.
+        if (!sent) this.lastPasswordResetAt.delete(cooldownKey);
+      });
+    return true;
   }
 
-  async forgotPassword(email: string, ipAddress?: string, userAgent?: string) {
-    const user = await this.userService.findByEmail(email);
-    if (!user) {
-      throw new NotFoundException('User not found');
+  /**
+   * Public endpoint (`auth/resetpassword/confirm`): redeems a reset link. Sets
+   * the new password, signs out every session (authVersion bump + refresh
+   * token revocation) and spends the link, atomically.
+   */
+  async confirmPasswordReset(
+    token: string,
+    newPassword: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<true> {
+    const tokenHash = hashPasswordResetToken(token);
+    const resetToken = await this.prisma.passwordResetToken.findUnique({
+      where: { tokenHash },
+      select: { userId: true, usedAt: true, expiresAt: true },
+    });
+    if (
+      !resetToken ||
+      resetToken.usedAt ||
+      resetToken.expiresAt.getTime() <= Date.now()
+    ) {
+      throw new InvalidPasswordResetTokenError();
     }
-    // Here you would typically send an email with a reset link
-    this.analytics.trackPasswordResetRequested(user.id);
-    const res = await this.resetPassword(email, ipAddress, userAgent);
-    return res;
+
+    // Re-checks the token inside the password-update transaction, so a link
+    // redeemed concurrently is only honoured once.
+    await this.userService.resetPassword(resetToken.userId, newPassword, {
+      resetTokenHash: tokenHash,
+    });
+
+    this.analytics.trackPasswordReset(resetToken.userId);
+    void this.auditService.log({
+      userId: resetToken.userId,
+      action: 'PASSWORD_RESET_SUCCESS',
+      resource: 'auth',
+      resourceId: resetToken.userId,
+      ipAddress,
+      userAgent,
+    });
+    return true;
   }
 
   async signout(userId: string, ipAddress?: string, userAgent?: string) {

@@ -1,4 +1,10 @@
-import { IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
 export class SignInDto {
   @IsEmail()
@@ -28,4 +34,17 @@ export class RefreshTokenDto {
 export class EmailDto {
   @IsEmail()
   email: string;
+}
+
+export class ConfirmPasswordResetDto {
+  /** The token from the emailed reset link. */
+  @IsString()
+  @MinLength(1)
+  @MaxLength(256)
+  token: string;
+
+  /** Same rule as sign-up and password change. */
+  @IsString()
+  @MinLength(8)
+  password: string;
 }

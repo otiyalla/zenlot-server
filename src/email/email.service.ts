@@ -13,6 +13,16 @@ import {
   buildWelcomeTemplate,
 } from './templates';
 
+// App route (expo-router) that redeems a password-reset token.
+export const PASSWORD_RESET_APP_PATH = 'newpassword';
+
+// Origin of the app's universal links (iOS associated domains / Android App
+// Links). zenlot.net serves the apple-app-site-association and assetlinks.json
+// files that let it open the app, and a fallback page when the app isn't
+// installed. Override with APP_LINK_URL (e.g. `zenlot://` for a local build
+// without the associated-domains entitlement).
+export const DEFAULT_APP_LINK_URL = 'https://zenlot.net/';
+
 const HTML_ESCAPE_MAP: Record<string, string> = {
   '&': '&amp;',
   '<': '&lt;',
@@ -54,9 +64,9 @@ export class EmailService {
   /**
    * App entry point for email call-to-action links. Defaults to the `zenlot://`
    * custom-scheme deep link, which opens the app at its root (the auth gate
-   * routes a signed-in user straight to Home). The app has no universal/https
-   * links configured yet, so a custom scheme is the way to open the app from an
-   * email. Override via APP_URL once universal links exist.
+   * routes a signed-in user straight to Home). Universal links only cover the
+   * routes zenlot.net claims (see `getAppLinkUrl`), so the root stays on the
+   * custom scheme. Override via APP_URL.
    */
   private getAppUrl(): string {
     return this.configService.get<string>('APP_URL') || 'zenlot://';
@@ -348,22 +358,29 @@ export class EmailService {
     }
   }
 
-  async sendPasswordResentEmail(
+  /**
+   * Emails a single-use link to the app's "set a new password" screen
+   * (`https://zenlot.net/newpassword?token=…`). The token is the only credential in the
+   * link; nothing about the account changes until it is redeemed.
+   */
+  async sendPasswordResetLinkEmail(
     email: string,
-    password: string,
+    token: string,
     fname: string,
     language: string,
+    expiresInMinutes: number,
   ): Promise<boolean> {
-    const supportEmail = this.getSupportEmail();
     try {
+      const supportEmail = this.getSupportEmail();
       const template = buildPasswordResetTemplate({
         fname,
-        password,
+        resetUrl: this.buildAppLink(PASSWORD_RESET_APP_PATH, { token }),
+        expiresInMinutes,
         language,
         supportEmail,
       });
 
-      const emailOptions = {
+      const emailOptions: EmailMessage = {
         from: this.getFromEmail(),
         to: email,
         subject: template.subject,
@@ -371,14 +388,29 @@ export class EmailService {
       };
       await this.transport.send(emailOptions);
 
-      this.logger.log(`Password reset email sent to ${email}`);
+      this.logger.log('Password reset link email sent');
       return true;
     } catch (error) {
-      this.logger.error('Failed to send password reset email', error);
+      this.logger.error('Failed to send password reset link email', error);
       Sentry.captureException(error, {
-        extra: { email, context: 'sendPasswordResentEmail' },
+        extra: { context: 'sendPasswordResetLinkEmail' },
       });
       return false;
     }
+  }
+
+  /** Universal-link origin for app routes zenlot.net claims. */
+  private getAppLinkUrl(): string {
+    return (
+      this.configService.get<string>('APP_LINK_URL') || DEFAULT_APP_LINK_URL
+    );
+  }
+
+  /** `APP_LINK_URL` joined with an app route, e.g. `https://zenlot.net/newpassword?token=…`. */
+  private buildAppLink(path: string, params: Record<string, string>): string {
+    const base = this.getAppLinkUrl();
+    const separator = base.endsWith('/') ? '' : '/';
+    const query = new URLSearchParams(params).toString();
+    return `${base}${separator}${path}?${query}`;
   }
 }

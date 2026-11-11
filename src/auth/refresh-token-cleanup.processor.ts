@@ -10,7 +10,8 @@ export const PURGE_EXPIRED_REFRESH_TOKENS_JOB = 'purge-expired-refresh-tokens';
  * Every refresh rotates the token and leaves the old row behind (revoked rows
  * are kept until they expire, for reuse detection), so the table otherwise
  * grows without bound. Daily, delete rows past their expiry: their JWTs have
- * expired too, so no request can ever match them again.
+ * expired too, so no request can ever match them again. Expired password-reset
+ * links are purged in the same pass: they can never be redeemed either.
  */
 @Processor(REFRESH_TOKEN_CLEANUP_QUEUE)
 export class RefreshTokenCleanupProcessor
@@ -38,9 +39,15 @@ export class RefreshTokenCleanupProcessor
   }
 
   async process(): Promise<void> {
+    const now = new Date();
     const { count } = await this.prisma.refreshToken.deleteMany({
-      where: { expiresAt: { lt: new Date() } },
+      where: { expiresAt: { lt: now } },
     });
     this.logger.log(`Purged ${count} expired refresh tokens`);
+    const { count: resetCount } =
+      await this.prisma.passwordResetToken.deleteMany({
+        where: { expiresAt: { lt: now } },
+      });
+    this.logger.log(`Purged ${resetCount} expired password reset links`);
   }
 }

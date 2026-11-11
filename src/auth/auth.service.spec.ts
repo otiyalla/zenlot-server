@@ -1,5 +1,11 @@
 /* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-return, @typescript-eslint/require-await */
-import { AuthService } from './auth.service';
+import {
+  AuthService,
+  PASSWORD_RESET_COOLDOWN_MS,
+  PASSWORD_RESET_TOKEN_TTL_MS,
+  hashPasswordResetToken,
+} from './auth.service';
+import { InvalidPasswordResetTokenError } from '../user/user.service';
 import { JwtService, TokenExpiredError } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { UnauthorizedException } from '@nestjs/common';
@@ -68,6 +74,11 @@ describe('AuthService', () => {
       pushToken: {
         deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
+      passwordResetToken: {
+        create: jest.fn().mockResolvedValue({}),
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+        findUnique: jest.fn(),
+      },
       $transaction: jest
         .fn()
         .mockImplementation(async (callback: any) => callback(prisma)),
@@ -79,7 +90,7 @@ describe('AuthService', () => {
       resetPassword: jest.fn(),
     };
     emailService = {
-      sendPasswordResentEmail: jest.fn(),
+      sendPasswordResetLinkEmail: jest.fn(),
     };
     configService = {
       get: jest.fn((key: string) => {
@@ -757,25 +768,223 @@ describe('AuthService', () => {
     });
   });
 
-  it('resetPassword passes user language to sendPasswordResentEmail', async () => {
-    userService.findByEmail.mockResolvedValue({
+  describe('password reset link', () => {
+    const account = {
       id: user.id,
       email: user.email,
       fname: 'Jane',
       language: 'fr',
+    };
+    // Lets the background email send (and its .then) settle.
+    const flush = () => new Promise((resolve) => setImmediate(resolve));
+
+    beforeEach(() => {
+      userService.resetPassword.mockResolvedValue({ id: user.id });
+      emailService.sendPasswordResetLinkEmail.mockResolvedValue(true);
     });
-    userService.resetPassword.mockResolvedValue({ id: user.id });
-    emailService.sendPasswordResentEmail.mockResolvedValue(true);
 
-    const result = await service.resetPassword(user.email);
+    afterEach(() => {
+      jest.useRealTimers();
+    });
 
-    expect(result).toBe(true);
+    describe('requestPasswordReset', () => {
+      it('stores a hashed, expiring token, then emails the raw token', async () => {
+        jest.useFakeTimers({
+          now: new Date('2026-11-10T10:00:00Z'),
+          doNotFake: ['setImmediate'],
+        });
+        userService.findByEmail.mockResolvedValue(account);
 
-    expect(emailService.sendPasswordResentEmail).toHaveBeenCalledWith(
-      user.email,
-      expect.stringMatching(/^tPass/),
-      'Jane',
-      'fr',
-    );
+        await expect(service.requestPasswordReset(user.email)).resolves.toBe(
+          true,
+        );
+        await flush();
+
+        // Older links for the account are replaced by the new one.
+        expect(prisma.passwordResetToken.deleteMany).toHaveBeenCalledWith({
+          where: { userId: user.id },
+        });
+        const [{ data }] = prisma.passwordResetToken.create.mock.calls[0];
+        expect(data.userId).toBe(user.id);
+        expect(data.expiresAt).toEqual(
+          new Date(Date.now() + PASSWORD_RESET_TOKEN_TTL_MS),
+        );
+
+        expect(emailService.sendPasswordResetLinkEmail).toHaveBeenCalledWith(
+          user.email,
+          expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
+          'Jane',
+          'fr',
+          PASSWORD_RESET_TOKEN_TTL_MS / 60_000,
+        );
+        const [, token] = emailService.sendPasswordResetLinkEmail.mock.calls[0];
+        // Only the hash is persisted.
+        expect(data.tokenHash).toBe(hashPasswordResetToken(token));
+        expect(data.tokenHash).not.toContain(token);
+        // The token is written before the email goes out.
+        expect(
+          prisma.passwordResetToken.create.mock.invocationCallOrder[0],
+        ).toBeLessThan(
+          emailService.sendPasswordResetLinkEmail.mock.invocationCallOrder[0],
+        );
+      });
+
+      it('changes nothing about the account at request time', async () => {
+        userService.findByEmail.mockResolvedValue(account);
+
+        await service.requestPasswordReset(user.email);
+        await flush();
+
+        // No password change, no session revocation.
+        expect(userService.resetPassword).not.toHaveBeenCalled();
+        expect(prisma.refreshToken.updateMany).not.toHaveBeenCalled();
+        expect(socketSessions.advanceAuthVersion).not.toHaveBeenCalled();
+      });
+
+      it('answers an unknown email like a sent one, without storing or sending anything', async () => {
+        userService.findByEmail.mockResolvedValue(null);
+
+        await expect(
+          service.requestPasswordReset('nobody@example.com'),
+        ).resolves.toBe(true);
+        await flush();
+
+        expect(prisma.passwordResetToken.create).not.toHaveBeenCalled();
+        expect(emailService.sendPasswordResetLinkEmail).not.toHaveBeenCalled();
+      });
+
+      it('does not wait for the email before answering', async () => {
+        userService.findByEmail.mockResolvedValue(account);
+        emailService.sendPasswordResetLinkEmail.mockReturnValue(
+          new Promise(() => {}),
+        );
+
+        await expect(service.requestPasswordReset(user.email)).resolves.toBe(
+          true,
+        );
+      });
+
+      it('sends one link per address per cooldown, whatever its casing', async () => {
+        userService.findByEmail.mockResolvedValue(account);
+
+        await service.requestPasswordReset(user.email);
+        await service.requestPasswordReset(user.email.toUpperCase());
+        await flush();
+
+        expect(prisma.passwordResetToken.create).toHaveBeenCalledTimes(1);
+        expect(emailService.sendPasswordResetLinkEmail).toHaveBeenCalledTimes(
+          1,
+        );
+      });
+
+      it('allows another link once the cooldown has passed', async () => {
+        jest.useFakeTimers({
+          now: new Date('2026-11-10T10:00:00Z'),
+          doNotFake: ['setImmediate'],
+        });
+        userService.findByEmail.mockResolvedValue(account);
+
+        await service.requestPasswordReset(user.email);
+        jest.setSystemTime(Date.now() + PASSWORD_RESET_COOLDOWN_MS);
+        await service.requestPasswordReset(user.email);
+        await flush();
+
+        expect(emailService.sendPasswordResetLinkEmail).toHaveBeenCalledTimes(
+          2,
+        );
+      });
+
+      it('lifts the cooldown when the email could not be sent', async () => {
+        userService.findByEmail.mockResolvedValue(account);
+        emailService.sendPasswordResetLinkEmail.mockResolvedValueOnce(false);
+
+        await service.requestPasswordReset(user.email);
+        await flush();
+        await service.requestPasswordReset(user.email);
+        await flush();
+
+        expect(emailService.sendPasswordResetLinkEmail).toHaveBeenCalledTimes(
+          2,
+        );
+      });
+
+      it('sends nothing and lifts the cooldown when the token cannot be stored', async () => {
+        userService.findByEmail.mockResolvedValue(account);
+        const dbError = new Error('db down');
+        prisma.passwordResetToken.create.mockRejectedValueOnce(dbError);
+
+        await expect(service.requestPasswordReset(user.email)).rejects.toBe(
+          dbError,
+        );
+        await flush();
+        expect(emailService.sendPasswordResetLinkEmail).not.toHaveBeenCalled();
+
+        await service.requestPasswordReset(user.email);
+        await flush();
+        expect(emailService.sendPasswordResetLinkEmail).toHaveBeenCalledTimes(
+          1,
+        );
+      });
+    });
+
+    describe('confirmPasswordReset', () => {
+      const token = 'emailed-token';
+      const validRow = () => ({
+        userId: user.id,
+        usedAt: null,
+        expiresAt: new Date(Date.now() + 60_000),
+      });
+
+      it('sets the password through the token-gated reset', async () => {
+        prisma.passwordResetToken.findUnique.mockResolvedValue(validRow());
+
+        await expect(
+          service.confirmPasswordReset(token, 'new-password-1'),
+        ).resolves.toBe(true);
+
+        expect(prisma.passwordResetToken.findUnique).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { tokenHash: hashPasswordResetToken(token) },
+          }),
+        );
+        expect(userService.resetPassword).toHaveBeenCalledWith(
+          user.id,
+          'new-password-1',
+          { resetTokenHash: hashPasswordResetToken(token) },
+        );
+        expect(analytics.trackPasswordReset).toHaveBeenCalledWith(user.id);
+        expect(auditService.log).toHaveBeenCalledWith(
+          expect.objectContaining({ action: 'PASSWORD_RESET_SUCCESS' }),
+        );
+      });
+
+      it.each([
+        ['unknown', null],
+        ['already used', { ...validRow(), usedAt: new Date() }],
+        ['expired', { ...validRow(), expiresAt: new Date(Date.now() - 1_000) }],
+      ])(
+        'rejects an %s token without touching the password',
+        async (_, row) => {
+          prisma.passwordResetToken.findUnique.mockResolvedValue(row);
+
+          await expect(
+            service.confirmPasswordReset(token, 'new-password-1'),
+          ).rejects.toBeInstanceOf(InvalidPasswordResetTokenError);
+          expect(userService.resetPassword).not.toHaveBeenCalled();
+        },
+      );
+
+      it('surfaces a token spent concurrently as invalid', async () => {
+        prisma.passwordResetToken.findUnique.mockResolvedValue(validRow());
+        userService.resetPassword.mockRejectedValue(
+          new InvalidPasswordResetTokenError(),
+        );
+
+        await expect(
+          service.confirmPasswordReset(token, 'new-password-1'),
+        ).rejects.toBeInstanceOf(InvalidPasswordResetTokenError);
+        expect(analytics.trackPasswordReset).not.toHaveBeenCalled();
+      });
+    });
   });
 });

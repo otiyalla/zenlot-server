@@ -22,6 +22,17 @@ import { SocketSessionRegistry } from '../auth/socket-session-registry.service';
 import { isJournalReminderClaimActive } from '../notifications/journal-reminder-lease';
 import { localDateHour } from '../notifications/journal-reminder.service';
 
+// Emails are case-insensitive identifiers. New and updated addresses are
+// stored in this canonical form so lookups stay on the unique index.
+export const normalizeEmail = (email: string) => email.trim().toLowerCase();
+
+/** The reset link was already used, has expired, or never existed. */
+export class InvalidPasswordResetTokenError extends BadRequestException {
+  constructor() {
+    super('This password reset link is invalid or has expired.');
+  }
+}
+
 @Injectable()
 export class UserService {
   private readonly logger = new Logger(UserService.name);
@@ -74,7 +85,7 @@ export class UserService {
       togglePipValue,
       theme,
     } = user;
-    const userFound = await this.prisma.user.findUnique({ where: { email } });
+    const userFound = await this.findByEmail(email);
     if (userFound)
       throw new NotFoundException('User already exists with this email');
     const salt = await bcrypt.genSalt(10);
@@ -86,7 +97,7 @@ export class UserService {
     const data: Prisma.userCreateInput = {
       fname: fname,
       lname: lname,
-      email: email,
+      email: normalizeEmail(email),
       role: 'trader',
       language: language,
       password: hashed,
@@ -119,7 +130,7 @@ export class UserService {
     email: string,
     password: string,
   ): Promise<AuthenticatedUser | null> {
-    const user = await this.prisma.user.findUnique({ where: { email } });
+    const user = await this.findByEmail(email);
     if (!user) return null;
 
     // Prevent login if account is scheduled for deletion
@@ -142,43 +153,6 @@ export class UserService {
               forex: { take_profit: [], stop_loss: [] },
             }) as AuthenticatedUser['rules'],
     };
-  }
-
-  async signin(user: CreateUserDto) {
-    const userFound = await this.prisma.user.findUnique({
-      where: { email: user.email },
-    });
-
-    if (!userFound) throw new NotFoundException('User not found');
-    // Prevent login if account is scheduled for deletion
-    if (userFound.deletedAt) {
-      throw new BadRequestException(
-        'Your account is scheduled for deletion. Please contact support to restore your account.',
-      );
-    }
-
-    try {
-      const isMatch = await bcrypt.compare(userFound.password, user.password);
-      if (!isMatch)
-        throw new NotFoundException('User information is incorrect');
-      const newUser = {
-        ...this.stripPassword(userFound),
-        rules: userFound.rules,
-      };
-      await this.auditService.log({
-        userId: newUser.id,
-        action: 'USER_SIGNED_IN',
-        resource: 'user',
-        resourceId: newUser.id,
-      });
-      return newUser;
-    } catch (error) {
-      this.logger.error('Error during signin', error);
-      Sentry.captureException(error, {
-        extra: { email: userFound?.email, context: 'signin' },
-      });
-      throw error;
-    }
   }
 
   async changePassword(
@@ -209,19 +183,49 @@ export class UserService {
     return !!success;
   }
 
-  async resetPassword(id: string, newPassword: string) {
+  /**
+   * Sets a new password, bumps `authVersion`, revokes every refresh token and
+   * spends any outstanding password-reset links, all in one transaction.
+   *
+   * With `resetTokenHash`, the password only changes if that reset link is
+   * still unspent and unexpired at commit time: two concurrent redemptions of
+   * one link can't both succeed.
+   */
+  async resetPassword(
+    id: string,
+    newPassword: string,
+    { resetTokenHash }: { resetTokenHash?: string } = {},
+  ) {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(newPassword, salt);
     // Keep the credential update and persisted refresh-token revocation atomic.
     // Live sockets are contained immediately after this transaction commits.
     const updated = await this.prisma.$transaction(async (tx) => {
+      const now = new Date();
+      if (resetTokenHash !== undefined) {
+        const { count } = await tx.passwordResetToken.updateMany({
+          where: {
+            tokenHash: resetTokenHash,
+            userId: id,
+            usedAt: null,
+            expiresAt: { gt: now },
+          },
+          data: { usedAt: now },
+        });
+        if (count !== 1) throw new InvalidPasswordResetTokenError();
+      }
       const updated = await tx.user.update({
         where: { id },
         data: { password: hashedPassword, authVersion: { increment: 1 } },
       });
       await tx.refreshToken.updateMany({
         where: { userId: id, isRevoked: false },
-        data: { isRevoked: true, revokedAt: new Date() },
+        data: { isRevoked: true, revokedAt: now },
+      });
+      // A link requested before this change must not undo it later.
+      await tx.passwordResetToken.updateMany({
+        where: { userId: id, usedAt: null },
+        data: { usedAt: now },
       });
       return updated;
     });
@@ -229,8 +233,19 @@ export class UserService {
     return updated;
   }
 
+  /**
+   * Case-insensitive email lookup. Tries the canonical (lowercased) form on the
+   * unique index first, then falls back to a case-insensitive match for rows
+   * stored before emails were normalized (e.g. `Jane@Example.com`).
+   */
   async findByEmail(email: string) {
-    return this.prisma.user.findUnique({ where: { email } });
+    const canonical = normalizeEmail(email);
+    return (
+      (await this.prisma.user.findUnique({ where: { email: canonical } })) ??
+      (await this.prisma.user.findFirst({
+        where: { email: { equals: canonical, mode: 'insensitive' } },
+      }))
+    );
   }
 
   async findAll() {
@@ -263,9 +278,10 @@ export class UserService {
   async verifyEmailUpdate(id: string, email: string) {
     const user = await this.prisma.user.findUnique({ where: { id } });
     if (!user) throw new NotFoundException('User not found');
-    if (user.email === email) return true;
-    const userFound = await this.prisma.user.findUnique({ where: { email } });
-    if (userFound) throw new NotFoundException('Email already in use');
+    if (normalizeEmail(user.email) === normalizeEmail(email)) return true;
+    const userFound = await this.findByEmail(email);
+    if (userFound && userFound.id !== id)
+      throw new NotFoundException('Email already in use');
     return true;
   }
 
@@ -374,7 +390,7 @@ export class UserService {
 
     if (dto.fname !== undefined) allowedData.fname = dto.fname;
     if (dto.lname !== undefined) allowedData.lname = dto.lname;
-    if (dto.email !== undefined) allowedData.email = dto.email;
+    if (dto.email !== undefined) allowedData.email = normalizeEmail(dto.email);
     if (dto.language !== undefined) allowedData.language = dto.language;
     if (dto.accountCurrency !== undefined)
       allowedData.accountCurrency = dto.accountCurrency;

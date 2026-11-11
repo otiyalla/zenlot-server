@@ -172,6 +172,7 @@ model user {
   timezone                     String                  @default("UTC")
   togglePipValue               Boolean                 @default(false)
   refreshTokens                RefreshToken[]
+  passwordResetTokens          PasswordResetToken[]
   auditLogs                    auditLog[]
   riskProfile                  riskProfile?
   drawdownState                drawdownState?
@@ -269,6 +270,23 @@ model RefreshToken {
   /// When the token was revoked. A token revoked by rotation stays redeemable
   /// for a short grace window (see REFRESH_TOKEN_REUSE_GRACE_MS).
   revokedAt DateTime?
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+/// A single-use password-reset link. Only the SHA-256 of the emailed token is
+/// stored, so a database leak can't be turned into working reset links. A row
+/// is spent (usedAt set) when the password is reset or a later password change
+/// makes it obsolete; expired rows are purged daily.
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String
+  user      user      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
 
   @@index([userId])
   @@index([expiresAt])
