@@ -139,19 +139,19 @@ describe('EmailService', () => {
     const message = transport.send.mock.calls[0][0];
     expect(message.to).toBe('user@example.com');
     expect(message.subject).toBe('Reset your Zenlot password');
-    // APP_URL is unset: the zenlot:// custom scheme.
+    // APP_LINK_URL is unset: the zenlot.net universal link.
     expect(message.html).toContain(
-      'href="zenlot://newpassword?token=tok_en-123"',
+      'href="https://zenlot.net/newpassword?token=tok_en-123"',
     );
     expect(message.html).toContain('expires in 30 minutes');
     // No password ever goes out by email.
     expect(message.html).not.toMatch(/tPass/);
   });
 
-  it('sendPasswordResetLinkEmail joins an https APP_URL without a double slash', async () => {
+  it('sendPasswordResetLinkEmail honours an APP_LINK_URL override', async () => {
     (configService.get as jest.Mock).mockImplementation((key: string) =>
-      key === 'APP_URL'
-        ? 'https://zenlot.app/'
+      key === 'APP_LINK_URL'
+        ? 'zenlot://'
         : key === 'EMAIL_FROM'
           ? 'noreply@zenlot.app'
           : undefined,
@@ -166,7 +166,7 @@ describe('EmailService', () => {
     );
 
     expect(transport.send.mock.calls[0][0].html).toContain(
-      'href="https://zenlot.app/newpassword?token=abc"',
+      'href="zenlot://newpassword?token=abc"',
     );
   });
 

@@ -16,6 +16,13 @@ import {
 // App route (expo-router) that redeems a password-reset token.
 export const PASSWORD_RESET_APP_PATH = 'newpassword';
 
+// Origin of the app's universal links (iOS associated domains / Android App
+// Links). zenlot.net serves the apple-app-site-association and assetlinks.json
+// files that let it open the app, and a fallback page when the app isn't
+// installed. Override with APP_LINK_URL (e.g. `zenlot://` for a local build
+// without the associated-domains entitlement).
+export const DEFAULT_APP_LINK_URL = 'https://zenlot.net/';
+
 const HTML_ESCAPE_MAP: Record<string, string> = {
   '&': '&amp;',
   '<': '&lt;',
@@ -57,9 +64,9 @@ export class EmailService {
   /**
    * App entry point for email call-to-action links. Defaults to the `zenlot://`
    * custom-scheme deep link, which opens the app at its root (the auth gate
-   * routes a signed-in user straight to Home). The app has no universal/https
-   * links configured yet, so a custom scheme is the way to open the app from an
-   * email. Override via APP_URL once universal links exist.
+   * routes a signed-in user straight to Home). Universal links only cover the
+   * routes zenlot.net claims (see `getAppLinkUrl`), so the root stays on the
+   * custom scheme. Override via APP_URL.
    */
   private getAppUrl(): string {
     return this.configService.get<string>('APP_URL') || 'zenlot://';
@@ -353,7 +360,7 @@ export class EmailService {
 
   /**
    * Emails a single-use link to the app's "set a new password" screen
-   * (`<APP_URL>newpassword?token=…`). The token is the only credential in the
+   * (`https://zenlot.net/newpassword?token=…`). The token is the only credential in the
    * link; nothing about the account changes until it is redeemed.
    */
   async sendPasswordResetLinkEmail(
@@ -392,9 +399,16 @@ export class EmailService {
     }
   }
 
-  /** `APP_URL` joined with an app route, e.g. `zenlot://newpassword?token=…`. */
+  /** Universal-link origin for app routes zenlot.net claims. */
+  private getAppLinkUrl(): string {
+    return (
+      this.configService.get<string>('APP_LINK_URL') || DEFAULT_APP_LINK_URL
+    );
+  }
+
+  /** `APP_LINK_URL` joined with an app route, e.g. `https://zenlot.net/newpassword?token=…`. */
   private buildAppLink(path: string, params: Record<string, string>): string {
-    const base = this.getAppUrl();
+    const base = this.getAppLinkUrl();
     const separator = base.endsWith('/') ? '' : '/';
     const query = new URLSearchParams(params).toString();
     return `${base}${separator}${path}?${query}`;
