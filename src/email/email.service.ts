@@ -12,18 +12,7 @@ import {
   buildPasswordResetTemplate,
   buildWelcomeTemplate,
 } from './templates';
-
-const HTML_ESCAPE_MAP: Record<string, string> = {
-  '&': '&amp;',
-  '<': '&lt;',
-  '>': '&gt;',
-  '"': '&quot;',
-  "'": '&#39;',
-};
-
-function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, (character) => HTML_ESCAPE_MAP[character]);
-}
+import { escapeHtml, toHtmlName } from './templates/name.util';
 
 @Injectable()
 export class EmailService {
@@ -162,7 +151,7 @@ export class EmailService {
           <div style="background-color:#ffffff; padding:24px; border-radius:8px; font-family:Arial, sans-serif; color:#444444; margin-top:16px;">
 
             <p style="font-size:16px; margin:0;">
-              Hi <strong>${userName}</strong>,
+              Hi <strong>${toHtmlName(userName)}</strong>,
             </p>
 
             <p style="font-size:16px; margin-top:12px;">

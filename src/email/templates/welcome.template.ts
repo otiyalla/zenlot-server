@@ -1,4 +1,5 @@
 import { resolveSupportedEmailLanguage } from './language.util';
+import { toHtmlName, toPlainName } from './name.util';
 
 const INSTAGRAM_URL = 'https://www.instagram.com/zenlot_app/';
 
@@ -24,13 +25,16 @@ export const buildWelcomeTemplate = ({
 }: BuildWelcomeTemplateParams): WelcomeTemplate => {
   const supportedLanguage = resolveSupportedEmailLanguage(language);
 
+  const plainName = toPlainName(fname);
+  const htmlName = toHtmlName(fname);
+
   const copyByLanguage = {
     en: {
-      subject: `Welcome to Zenlot, ${fname} — let's build your trading discipline`,
+      subject: `Welcome to Zenlot, ${plainName} — let's build your trading discipline`,
       heroAnimationUrl:
         'https://pub-61217234bef24505baffb476955a8686.r2.dev/zenlot_welcome_hero.gif',
       heroAlt: 'Trade with discipline, not emotion',
-      heading: `👋 Welcome to Zenlot, ${fname}!`,
+      heading: `👋 Welcome to Zenlot, ${htmlName}!`,
       intro:
         "Zenlot isn't a signal service or just another trade journal. It's your trading-discipline and risk-management OS — it grades how well you follow your own process, not your P&L. A trade that follows your rules and loses beats one that breaks them and wins.",
       milestoneIntro: 'Here is what Zenlot does for you from day one:',
@@ -54,11 +58,11 @@ export const buildWelcomeTemplate = ({
         "Process over outcome — let's build the discipline that compounds.",
     },
     fr: {
-      subject: `Bienvenue sur Zenlot, ${fname} — bâtissons votre discipline de trading`,
+      subject: `Bienvenue sur Zenlot, ${plainName} — bâtissons votre discipline de trading`,
       heroAnimationUrl:
         'https://pub-61217234bef24505baffb476955a8686.r2.dev/zenlot_welcome_hero.gif',
       heroAlt: 'Tradez avec discipline, pas avec émotion',
-      heading: `👋 Bienvenue sur Zenlot, ${fname}!`,
+      heading: `👋 Bienvenue sur Zenlot, ${htmlName}!`,
       intro:
         "Zenlot n'est ni un service de signaux ni un simple journal de trading. C'est votre système de discipline et de gestion du risque — il évalue la manière dont vous suivez votre propre processus, pas votre P&L. Un trade qui respecte vos règles et perd vaut mieux qu'un trade qui les enfreint et gagne.",
       milestoneIntro:
@@ -84,11 +88,11 @@ export const buildWelcomeTemplate = ({
         'Le processus avant le résultat — bâtissons la discipline qui se cumule.',
     },
     es: {
-      subject: `Te damos la bienvenida a Zenlot, ${fname} — construyamos tu disciplina de trading`,
+      subject: `Te damos la bienvenida a Zenlot, ${plainName} — construyamos tu disciplina de trading`,
       heroAnimationUrl:
         'https://pub-61217234bef24505baffb476955a8686.r2.dev/zenlot_welcome_hero.gif',
       heroAlt: 'Opera con disciplina, no con emoción',
-      heading: `👋 ¡Hola, ${fname}! Te damos la bienvenida a Zenlot`,
+      heading: `👋 ¡Hola, ${htmlName}! Te damos la bienvenida a Zenlot`,
       intro:
         'Zenlot no es un servicio de señales ni otro diario de trading más. Es tu sistema operativo de disciplina y gestión de riesgo: evalúa qué tan bien sigues tu propio proceso, no tu P&L. Una operación que sigue tus reglas y pierde es mejor que una que las rompe y gana.',
       milestoneIntro: 'Esto es lo que Zenlot hace por ti desde el primer día:',

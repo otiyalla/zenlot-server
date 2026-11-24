@@ -112,17 +112,96 @@ describe('EmailService', () => {
     },
   );
 
-  it('keeps the Instagram link out of password reset emails', async () => {
-    await service.sendPasswordResentEmail(
-      'user@example.com',
-      'temp',
-      'A',
-      'en',
-    );
+  const otherEmails: [string, (name: string) => Promise<boolean>][] = [
+    [
+      'password reset',
+      (name) =>
+        service.sendPasswordResentEmail('user@example.com', 'temp', name, 'en'),
+    ],
+    [
+      'deletion notice',
+      (name) =>
+        service.sendAccountDeletionNotice(
+          'user@example.com',
+          name,
+          'en',
+          30,
+          'UTC',
+        ),
+    ],
+    [
+      'deletion cancelled',
+      (name) =>
+        service.sendAccountDeletionCancelledNotice(
+          'user@example.com',
+          name,
+          'en',
+          'UTC',
+        ),
+    ],
+  ];
 
-    const { html } = transport.send.mock.calls[0][0];
-    expect(html).not.toContain('instagram.com');
-  });
+  it.each(otherEmails)(
+    'keeps the Instagram link out of %s emails',
+    async (_, send) => {
+      await send('Ana');
+
+      expect(JSON.stringify(transport.send.mock.calls[0][0])).not.toContain(
+        'instagram',
+      );
+    },
+  );
+
+  const hostileName = '<a href="https://evil.example">Verify now</a>';
+
+  it.each([
+    ...otherEmails,
+    [
+      'welcome',
+      (name: string) =>
+        service.sendWelcomeEmail('user@example.com', name, 'B', 'en'),
+    ],
+    [
+      'verification',
+      (name: string) =>
+        service.sendVerificationEmail('user@example.com', '123', name),
+    ],
+  ] as typeof otherEmails)(
+    'does not let a name add a link to %s emails',
+    async (_, send) => {
+      await send(hostileName);
+
+      const { html, subject } = transport.send.mock.calls[0][0];
+      expect(html).toContain('Verify now');
+      expect(`${subject} ${html}`).not.toMatch(/<a href="https:\/\/evil/);
+      expect(`${subject} ${html}`).not.toContain('evil.example');
+    },
+  );
+
+  it.each(['en', 'fr', 'es'])(
+    'does not let a name add a link to the welcome subject (%s)',
+    async (language) => {
+      await service.sendWelcomeEmail(
+        'user@example.com',
+        'Go to evil.com\r\nBcc: x@evil.com',
+        'B',
+        language,
+      );
+
+      const { subject, html } = transport.send.mock.calls[0][0];
+      expect(subject).not.toMatch(/evil\.com|[\r\n@]/);
+      expect(html).not.toContain('evil.com');
+    },
+  );
+
+  it.each(["O'Brien", 'José-María', 'J. R.', '李雷', 'Zoë'])(
+    'keeps the ordinary name %s readable in the welcome subject',
+    async (name) => {
+      await service.sendWelcomeEmail('user@example.com', name, 'B', 'en');
+
+      expect(transport.send.mock.calls[0][0].subject).toContain(`${name} —`);
+    },
+  );
 
   it('sendWelcomeEmail resolves a regional Spanish tag to Spanish', async () => {
     const result = await service.sendWelcomeEmail(

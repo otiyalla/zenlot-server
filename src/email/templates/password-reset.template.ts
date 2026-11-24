@@ -1,4 +1,5 @@
 import { resolveSupportedEmailLanguage } from './language.util';
+import { toHtmlName } from './name.util';
 
 type BuildPasswordResetTemplateParams = {
   fname: string;
@@ -72,7 +73,7 @@ export const buildPasswordResetTemplate = ({
           <!-- Body -->
           <div style="font-family:Arial, sans-serif; color:#444444; padding:24px; background-color:#ffffff; border-radius:8px; margin-top:16px;">
             <p style="font-size:16px; margin:0;">
-              ${copy.greeting} <strong>${fname}</strong>,
+              ${copy.greeting} <strong>${toHtmlName(fname)}</strong>,
             </p>
 
             <p style="font-size:16px; margin-top:12px;">
