@@ -16,6 +16,9 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
+// Names go into emails sent to unverified addresses: no markup, links or control characters.
+const NAME_PATTERN = /^(?!.*:\/\/)(?!.*www\.)[^<>\p{Cc}]+$/iu;
+
 class PipRuleDto {
   @IsNumber()
   @IsPositive()
@@ -50,11 +53,13 @@ export class CreateUserDto {
   @IsString()
   @MinLength(2)
   @MaxLength(256)
+  @Matches(NAME_PATTERN, { message: 'fname must not contain links or markup' })
   fname: string;
 
   @IsString()
   @MinLength(2)
   @MaxLength(256)
+  @Matches(NAME_PATTERN, { message: 'lname must not contain links or markup' })
   lname: string;
 
   @IsEmail()

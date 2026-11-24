@@ -2,6 +2,7 @@ import {
   getLocaleForLanguage,
   resolveSupportedEmailLanguage,
 } from './language.util';
+import { toHtmlName } from './name.util';
 
 type BuildAccountDeletionCancelledTemplateParams = {
   userName: string;
@@ -87,7 +88,7 @@ export const buildAccountDeletionCancelledTemplate = ({
         <div style="background-color:#ffffff; padding:24px; border-radius:8px; font-family:Arial, sans-serif; color:#444444; margin-top:16px;">
 
           <p style="font-size:16px; margin:0;">
-            ${copy.greeting} <strong>${userName}</strong>,
+            ${copy.greeting} <strong>${toHtmlName(userName)}</strong>,
           </p>
 
           <p style="font-size:16px; margin-top:12px;">
