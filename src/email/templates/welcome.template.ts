@@ -1,5 +1,7 @@
 import { resolveSupportedEmailLanguage } from './language.util';
 
+const INSTAGRAM_URL = 'https://www.instagram.com/zenlot_app/';
+
 type BuildWelcomeTemplateParams = {
   fname: string;
   language: string;
@@ -43,6 +45,9 @@ export const buildWelcomeTemplate = ({
       ctaIntro:
         'Start by setting your risk limits and defining your trading plan:',
       ctaLabel: 'Open Zenlot',
+      instagramMessage:
+        'Want more? We share risk maths, pre-trade checklists and journaling tips on Instagram:',
+      instagramSafety: 'We never DM you for money.',
       supportMessage:
         'Questions or feedback? Just reply to this email or reach us at',
       footer:
@@ -69,6 +74,10 @@ export const buildWelcomeTemplate = ({
       ctaIntro:
         'Commencez par définir vos limites de risque et votre plan de trading :',
       ctaLabel: 'Ouvrir Zenlot',
+      instagramMessage:
+        'Envie d’aller plus loin ? Nous partageons des calculs de risque, des checklists avant trade et des conseils de journal sur Instagram :',
+      instagramSafety:
+        'Nous ne vous demanderons jamais d’argent en message privé.',
       supportMessage:
         'Une question ou un retour ? Répondez simplement à cet email ou écrivez-nous à',
       footer:
@@ -94,6 +103,9 @@ export const buildWelcomeTemplate = ({
       ctaIntro:
         'Comienza estableciendo tus límites de riesgo y definiendo tu plan de trading:',
       ctaLabel: 'Abrir Zenlot',
+      instagramMessage:
+        '¿Quieres más? Compartimos cálculos de riesgo, listas de verificación y consejos para tu diario de trading en Instagram:',
+      instagramSafety: 'Nunca te pediremos dinero por mensaje directo.',
       supportMessage:
         '¿Preguntas o comentarios? Responde este correo o escríbenos a',
       footer:
@@ -145,6 +157,12 @@ export const buildWelcomeTemplate = ({
             ${copy.ctaLabel}
           </a>
         </div>
+
+        <p style="font-family:Arial, sans-serif; font-size:16px; color:#4A4A4A;">
+          ${copy.instagramMessage}
+          <a href="${INSTAGRAM_URL}" style="color:#1A73E8;">@zenlot_app</a>.
+          ${copy.instagramSafety}
+        </p>
 
         <p style="font-family:Arial, sans-serif; font-size:16px; color:#4A4A4A;">
           ${copy.supportMessage}

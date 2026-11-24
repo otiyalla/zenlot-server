@@ -96,6 +96,34 @@ describe('EmailService', () => {
     expect(message.html).not.toContain('Bienvenido');
   });
 
+  it.each([
+    ['en', 'on Instagram', 'We never DM you for money.'],
+    ['fr', 'sur Instagram', 'd’argent en message privé'],
+    ['es', 'en Instagram', 'Nunca te pediremos dinero'],
+  ])(
+    'sendWelcomeEmail links to Instagram with the safety line (%s)',
+    async (language, invite, safety) => {
+      await service.sendWelcomeEmail('user@example.com', 'A', 'B', language);
+
+      const { html } = transport.send.mock.calls[0][0];
+      expect(html).toContain('href="https://www.instagram.com/zenlot_app/"');
+      expect(html).toContain(invite);
+      expect(html).toContain(safety);
+    },
+  );
+
+  it('keeps the Instagram link out of password reset emails', async () => {
+    await service.sendPasswordResentEmail(
+      'user@example.com',
+      'temp',
+      'A',
+      'en',
+    );
+
+    const { html } = transport.send.mock.calls[0][0];
+    expect(html).not.toContain('instagram.com');
+  });
+
   it('sendWelcomeEmail resolves a regional Spanish tag to Spanish', async () => {
     const result = await service.sendWelcomeEmail(
       'user@example.com',
