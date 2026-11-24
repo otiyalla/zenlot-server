@@ -58,6 +58,7 @@ describe('AuthService', () => {
     prisma = {
       user: {
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        update: jest.fn().mockResolvedValue({ authVersion: 8 }),
       },
       refreshToken: {
         create: jest.fn(),
@@ -369,6 +370,34 @@ describe('AuthService', () => {
       'signout',
       'server_error',
     );
+  });
+
+  it('invalidates outstanding access tokens on sign-out', async () => {
+    const revokeAll = jest
+      .spyOn(service as any, 'revokeAllRefreshTokens')
+      .mockResolvedValue(undefined);
+
+    await service.signout(user.id);
+
+    // The bump verifyToken checks, in the same transaction as the revocation.
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: user.id },
+      data: { authVersion: { increment: 1 } },
+      select: { authVersion: true },
+    });
+    expect(revokeAll).toHaveBeenCalledWith(user.id, prisma);
+    expect(socketSessions.advanceAuthVersion).toHaveBeenCalledWith(user.id, 8);
+  });
+
+  it('does not report sign-out when the auth version cannot be bumped', async () => {
+    prisma.user.update.mockRejectedValue(new Error('database unavailable'));
+
+    await expect(service.signout(user.id)).rejects.toThrow(
+      'database unavailable',
+    );
+    expect(socketSessions.advanceAuthVersion).not.toHaveBeenCalled();
+    expect(prisma.pushToken.deleteMany).not.toHaveBeenCalled();
+    expect(analytics.trackUserSignedOut).not.toHaveBeenCalled();
   });
 
   it("removes the user's push tokens on sign-out", async () => {

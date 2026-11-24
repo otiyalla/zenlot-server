@@ -512,7 +512,7 @@ export class AuthService {
 
   async signout(userId: string, ipAddress?: string, userAgent?: string) {
     try {
-      await this.revokeAllRefreshTokens(userId);
+      await this.endAllSessions(userId);
       await this.removePushTokens(userId);
       await this.auditService.log({
         userId,
@@ -539,6 +539,24 @@ export class AuthService {
   }
 
   // Helper methods
+
+  // Ends every session for the user. Revoking refresh tokens alone left each
+  // device's access token accepted until it expired (up to JWT_EXPIRES), so
+  // also bump authVersion, which verifyToken checks on every request, the same
+  // way a password reset does. The user row is updated first, in the same
+  // transaction, matching the lock order rotation and password reset use.
+  private async endAllSessions(userId: string): Promise<void> {
+    const { authVersion } = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.user.update({
+        where: { id: userId },
+        data: { authVersion: { increment: 1 } },
+        select: { authVersion: true },
+      });
+      await this.revokeAllRefreshTokens(userId, tx);
+      return updated;
+    });
+    this.socketSessions.advanceAuthVersion(userId, authVersion);
+  }
 
   // Sign-out revokes every session for the user, so their devices must stop
   // receiving pushes too. The client's own push unregister is authenticated by

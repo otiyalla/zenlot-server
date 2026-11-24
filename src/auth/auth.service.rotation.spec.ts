@@ -69,6 +69,14 @@ const createPrisma = () => {
             ? 1
             : 0,
       })),
+      update: jest.fn(async ({ where, data }: any) => {
+        // Sign-out's bump. Not persisted: `user` is shared across tests, and
+        // these tests are about the refresh-token rows.
+        if (where.id !== user.id) throw new Error('user not found');
+        return {
+          authVersion: user.authVersion + (data.authVersion?.increment ?? 0),
+        };
+      }),
     },
     refreshToken: {
       create: jest.fn(async ({ data }: any) => {
@@ -139,7 +147,7 @@ describe('AuthService refresh-token rotation', () => {
         trackUserSignedOut: jest.fn(),
       } as unknown as AnalyticsService,
       auditService as unknown as AuditService,
-      {} as SocketSessionRegistry,
+      { advanceAuthVersion: jest.fn() } as unknown as SocketSessionRegistry,
     );
   });
 
